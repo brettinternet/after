@@ -26,11 +26,12 @@ tasks:
     cmd: lefthook run pre-commit
 
   check:
-    desc: Check all current tooling and documentation (Go checks arrive with AFTER-1)
+    desc: Check Go, tooling, documentation and secrets
     cmds:
       - task: check:tools
       - task: format:check
       - task: test
+      - task: check:go
       - task: secrets
 
   check:tools:
@@ -51,9 +52,35 @@ tasks:
     desc: Scan tracked content for secrets
     cmd: gitleaks git --redact --no-banner
 
-  test:
-    desc: Validate documentation links and the executable backlog graph
+  build:
+    desc: Build the native CLI (no runtime dependencies)
+    cmd: go build -trimpath -o bin/after ./cmd/after
+
+  test:go:
+    desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
+    cmd: go test -race ./...
+
+  format:go:
+    desc: Format Go sources
+    cmd: gofmt -w cmd internal
+
+  check:go:
+    desc: Build, race-test, vet and check Go formatting
     cmds:
+      - task: build
+      - task: test:go
+      - go vet ./...
+      - |
+        unformatted="$(gofmt -l cmd internal)"
+        if [ -n "$unformatted" ]; then
+          printf 'Run task format:go for:\n%s\n' "$unformatted"
+          exit 1
+        fi
+
+  test:
+    desc: Test Go, documentation links and the executable backlog graph
+    cmds:
+      - task: test:go
       - bun scripts/check-docs.mjs
       - bun scripts/check-backlog.mjs
 

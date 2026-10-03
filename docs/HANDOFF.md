@@ -4,9 +4,9 @@
 
 Read [the product proposal](README.md), [the behavior and evidence design](behavior-and-evidence.md), and [the competitive research](research.md).
 
-The concept migration is committed and pushed. The latest request authorized pushing this repository, adapting tooling from `../project`, and creating an autonomous implementation backlog for a robust CLI/TUI proof of concept. Tooling and planning are now in place; the engine itself is not implemented. The earlier no-push instruction was superseded for this bootstrap request, not permanent authorization for future agents.
+The concept migration is committed and pushed. The latest request authorized pushing this repository, adapting tooling from `../project`, and creating an autonomous implementation backlog for a robust CLI/TUI proof of concept. The Go help/version CLI and version-1 evidence records are implemented; capture, import, execution, comparison and TUI remain unimplemented. The earlier no-push instruction was superseded for this bootstrap request, not permanent authorization for future agents.
 
-**Next implementation entry point: [the implementation contract](IMPLEMENTATION.md), [repository agent workflow](../AGENTS.md), and `mise exec -- backlog task AFTER-1 --plain`.** Backlog.md is authoritative: 17 POC tasks in M1/M2, plus three explicitly gated follow-ups in M3. Claim ready work from primary `main` and reread before creating an implementation worktree. Do not treat the human study as an autonomous deliverable.
+**Next implementation entry point: [the implementation contract](IMPLEMENTATION.md), [record schema](SCHEMA.md), [repository agent workflow](../AGENTS.md), and the next dependency-ready unclaimed Backlog.md task.** Backlog.md is authoritative: 17 POC tasks in M1/M2, plus three explicitly gated follow-ups in M3. Claim ready work from primary `main` and reread before creating an implementation worktree. Do not treat the human study as an autonomous deliverable.
 
 **Latest direction: CLI + thin local TUI first, backed by a real paired-execution loop, with Go as the preferred implementation language. This supersedes the earlier browser-first recommendation. The browser presentation is a concept visualization, not the required first implementation.**
 
@@ -24,7 +24,7 @@ The concept migration is committed and pushed. The latest request authorized pus
 - Evidence applicability, execution outcome, and human acceptance are separate states. Missing, stale, incomparable, and unstable results remain visible.
 - The ordinary diff and unclassified-change inventory remain available when richer analysis fails.
 
-Go is the user's preferred implementation language. Bubble Tea remains a candidate to evaluate in AFTER-12, not a committed dependency. Keep language-specific analysis and test capture in existing tools rather than rewriting them in Go. The implementation contract now bounds the first adapter to stock Go test JSON, storage to versioned local JSON/content-addressed artifacts, and execution to explicitly authorized offline Docker isolation. AFTER-1 finalizes the schema; AFTER-6 must prove the sandbox mechanics and pin its image before the runner is built. Do not mistake the illustrative receipt in the design document for a finalized API.
+Go is the user's preferred implementation language. Bubble Tea remains a candidate to evaluate in AFTER-12, not a committed dependency. Keep language-specific analysis and test capture in existing tools rather than rewriting them in Go. The implementation contract now bounds the first adapter to stock Go test JSON, storage to versioned local JSON/content-addressed artifacts, and execution to explicitly authorized offline Docker isolation. AFTER-1 establishes the [initial schema and its trust limits](SCHEMA.md); AFTER-6 must prove the sandbox mechanics and pin its image before the runner is built. Do not mistake the illustrative receipt in the design document for a finalized API.
 
 ## Where the answers are documented
 
@@ -75,7 +75,7 @@ Then test generated boundary cases and counterexample reduction. Rich TypeScript
 | `../backlog/`              | CLI-managed milestones and 20 dependency-linked, acceptance-based tasks                                                                                              |
 | `HANDOFF.md`               | This continuation guide                                                                                                                                              |
 
-All payment data and evidence in the presentation are invented. No AFTER analysis or execution engine has been implemented.
+All payment data and evidence in the presentation are invented. The native CLI currently only prints help/version. The core record validators and tests establish structural contracts, not an analysis or execution engine.
 
 The destination presentation has now passed real Chromium checks for all twelve slides, keyboard navigation, slide 4's pin/edit/rerun and dialog interactions, slide 5's unexecuted-input state, 390px mobile layouts, no page errors or HTTP requests, and twelve PDF pages without measured print overflow. `scripts/check-presentation.mjs` reproduces the checks; outputs go to ignored `artifacts/presentation/`, and `task docs:render` updates the committed PDF/preview.
 
@@ -85,9 +85,9 @@ The original seven documentation artifacts were committed as `1337132` and pushe
 
 Run `mise trust && mise install && mise exec -- task init`. The template's mise/Task/Lefthook/Prettier/Gitleaks/Worktrunk conventions are adapted without its application, databases, secrets or service stack. Go and Backlog.md are pinned; Bun/Playwright are development-only documentation dependencies.
 
-Run `mise exec -- task test` for local links and task integrity, `task check:staged` before committing, and `task docs:check` for presentation changes. The current CI is tooling/documentation coverage, not evidence that AFTER works. AFTER-1 introduces Go checks; AFTER-15 introduces the adversarial POC gate.
+Run `mise exec -- task build` for the native CLI, `task check:go` for build/race tests/vet/gofmt, `task test` for Go tests plus local links and task integrity, `task check:staged` before committing, and `task docs:check` for presentation changes. CI checks the Go foundation on macOS/Linux as well as documentation. AFTER-15 introduces the adversarial POC gate; green foundation tests are not evidence that the full review loop works.
 
-The documentation migration checks and artifact regeneration are complete. Start the actual product at AFTER-1 when implementation is requested. Work through ready M1/M2 tasks; the final deliverable is a real repeatable payment demo, CLI, TUI review loop, security/negative tests, packaging and evaluation kit. M3 requires separate authorization and human participation.
+The documentation migration checks and artifact regeneration are complete. Continue from the next ready Backlog.md task when implementation is requested. Work through ready M1/M2 tasks; the final deliverable is a real repeatable payment demo, CLI, TUI review loop, security/negative tests, packaging and evaluation kit. M3 requires separate authorization and human participation.
 
 The original hunk-guide source worktree is retained. This bootstrap did not adopt its cleanup authority, inspect its active owner/panes or operate outside the current repository's shell scope. It is not needed to build AFTER. Its optional cleanup is a machine-local maintenance concern, not an implementation prerequisite.
 

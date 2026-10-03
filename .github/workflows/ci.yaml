@@ -8,6 +8,19 @@ on:
 permissions:
   contents: read
 jobs:
+  go:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          cache_key_prefix: mise-${{ runner.os }}-${{ hashFiles('mise.toml') }}
+      - run: mise exec -- task check:go
+      - run: ./bin/after --help
+      - run: ./bin/after --version
   tooling-and-docs:
     runs-on: ubuntu-latest
     steps:
