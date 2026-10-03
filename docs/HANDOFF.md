@@ -4,7 +4,7 @@
 
 Read [the product proposal](README.md), [the behavior and evidence design](behavior-and-evidence.md), and [the competitive research](research.md).
 
-The concept migration is committed and pushed. The latest request authorized pushing this repository, adapting tooling from `../project`, and creating an autonomous implementation backlog for a robust CLI/TUI proof of concept. The Go help/version CLI and version-1 evidence records are implemented; capture, import, execution, comparison and TUI remain unimplemented. The earlier no-push instruction was superseded for this bootstrap request, not permanent authorization for future agents.
+The concept migration is committed and pushed. The latest request authorized pushing this repository, adapting tooling from `../project`, and creating an autonomous implementation backlog for a robust CLI/TUI proof of concept. The Go help/version CLI, version-1 evidence records, private storage and local Git capture package are implemented; capture CLI wiring, import, execution, comparison and TUI remain unimplemented. The earlier no-push instruction was superseded for this bootstrap request, not permanent authorization for future agents.
 
 **Next implementation entry point: [the implementation contract](IMPLEMENTATION.md), [record schema](SCHEMA.md), [repository agent workflow](../AGENTS.md), and the next dependency-ready unclaimed Backlog.md task.** Backlog.md is authoritative: 17 POC tasks in M1/M2, plus three explicitly gated follow-ups in M3. Claim ready work from primary `main` and reread before creating an implementation worktree. Do not treat the human study as an autonomous deliverable.
 
@@ -75,7 +75,7 @@ Then test generated boundary cases and counterexample reduction. Rich TypeScript
 | `../backlog/`              | CLI-managed milestones and 20 dependency-linked, acceptance-based tasks                                                                                              |
 | `HANDOFF.md`               | This continuation guide                                                                                                                                              |
 
-All payment data and evidence in the presentation are invented. The native CLI currently only prints help/version. The core record validators and tests establish structural contracts, not an analysis or execution engine.
+All payment data and evidence in the presentation are invented. The native CLI currently only prints help/version. The core validators, private store and [Git capture package](CAPTURE.md) establish structural and source-capture contracts, not an analysis or execution engine.
 
 The destination presentation has now passed real Chromium checks for all twelve slides, keyboard navigation, slide 4's pin/edit/rerun and dialog interactions, slide 5's unexecuted-input state, 390px mobile layouts, no page errors or HTTP requests, and twelve PDF pages without measured print overflow. `scripts/check-presentation.mjs` reproduces the checks; outputs go to ignored `artifacts/presentation/`, and `task docs:render` updates the committed PDF/preview.
 

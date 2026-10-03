@@ -55,11 +55,14 @@ func (s Snapshot) Validate() error {
 	if err := header(s.SchemaVersion, s.ID); err != nil {
 		return err
 	}
-	if !oneOf(s.Source, Commit, WorkingTree, Index, MergeBase) || !commitID(s.Commit) || !digest(s.Diff) {
+	if !oneOf(s.Source, Commit, WorkingTree, Index, MergeBase) || (!s.Unborn && !commitID(s.Commit)) || (s.Unborn && (s.Commit != "" || s.Source == MergeBase)) || !digest(s.Diff) {
 		return errors.New("snapshot requires source, resolved commit and diff identity")
 	}
-	if (s.Source == MergeBase && !commitID(s.MergeBase)) || (s.Source != MergeBase && s.MergeBase != "") {
+	if (s.Source == MergeBase && (!commitID(s.MergeBase) || (s.BaseCommit != "" && !commitID(s.BaseCommit)))) || (s.Source != MergeBase && (s.MergeBase != "" || s.BaseCommit != "")) {
 		return errors.New("merge-base identity does not match source mode")
+	}
+	if s.IndexSnapshot != "" && (s.Source != WorkingTree || !digest(s.IndexSnapshot)) {
+		return errors.New("index association requires working-tree source and digest")
 	}
 	if !oneOf(s.Completeness, Complete, Incomplete) || (s.Completeness == Complete && len(s.Unsupported) > 0) || (s.Completeness == Incomplete && len(s.Limits) == 0 && len(s.Unsupported) == 0) {
 		return errors.New("invalid capture completeness or missing limitation")

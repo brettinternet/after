@@ -1,8 +1,8 @@
 # Evidence records, version 1
 
 AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
-[private storage](STORAGE.md); capture, report import, execution, comparison
-computation and review remain separate tasks. All test
+[private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
+Report import, execution, comparison computation and review remain separate tasks. All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -10,7 +10,12 @@ Their digests are placeholders, not measurements.
 
 Each record has `schema_version: 1` and an `id` formatted as
 `sha256:` plus 64 lowercase hex digits. Content references use the same format.
-Resolved Git commit identities are 40 or 64 lowercase hex digits. Branch names,
+Resolved Git commit identities are 40 or 64 lowercase hex digits. An unborn
+snapshot instead has `unborn: true` and an empty `commit` (never in merge-base mode).
+Merge-base captures additionally retain the resolved input `base_commit` alongside
+the target `commit` and `merge_base`. Working-tree snapshots may bind an
+`index_snapshot` digest; storage verifies that it is an index snapshot with the
+same commit/unborn basis. Branch names,
 timestamps and paths are not content identities. ID derivation and checking
 referenced bytes against digests belong to capture/storage, not this validator.
 Stored pin IDs identify immutable content versions; AFTER-11 owns stable review

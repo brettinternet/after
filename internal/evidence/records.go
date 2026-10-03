@@ -110,6 +110,9 @@ type Snapshot struct {
 	ID            Digest       `json:"id"`
 	Source        SourceMode   `json:"source"`
 	Commit        string       `json:"commit"`
+	Unborn        bool         `json:"unborn,omitempty"`
+	BaseCommit    string       `json:"base_commit,omitempty"`
+	IndexSnapshot Digest       `json:"index_snapshot,omitempty"`
 	MergeBase     string       `json:"merge_base,omitempty"`
 	Files         []File       `json:"files"`
 	Excluded      []Limitation `json:"excluded"`

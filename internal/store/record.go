@@ -186,6 +186,15 @@ func references[T Record](s *Store, record T) error {
 	var err error
 	switch r := any(record).(type) {
 	case evidence.Snapshot:
+		if r.IndexSnapshot != "" {
+			index, e := get[evidence.Snapshot](s, r.IndexSnapshot)
+			if e != nil {
+				return e
+			}
+			if index.Source != evidence.Index || index.Commit != r.Commit || index.Unborn != r.Unborn {
+				return errors.New("snapshot index association mismatch")
+			}
+		}
 		if _, err = s.blob(r.Diff); err != nil {
 			return fmt.Errorf("snapshot diff: %w", err)
 		}
