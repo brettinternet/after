@@ -1,7 +1,8 @@
 # Evidence records, version 1
 
-AFTER-1 provides Go types and validation in `internal/evidence`, not capture,
-storage, report import, execution, comparison or review implementations. All test
+AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
+[private storage](STORAGE.md); capture, report import, execution, comparison
+computation and review remain separate tasks. All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -12,9 +13,10 @@ Each record has `schema_version: 1` and an `id` formatted as
 Resolved Git commit identities are 40 or 64 lowercase hex digits. Branch names,
 timestamps and paths are not content identities. ID derivation and checking
 referenced bytes against digests belong to capture/storage, not this validator.
-Pin IDs identify a stable pin; changed history is not an immutable receipt.
+Stored pin IDs identify immutable content versions; AFTER-11 owns stable review
+selection and append-only history transitions.
 
-`Decode[Snapshot|Scenario|Receipt|Pin]` accepts one JSON object, at most 4 MiB,
+`Decode[Snapshot|Scenario|Receipt|Comparison|Pin]` accepts one JSON object, at most 4 MiB,
 rejects unknown fields, unsupported versions (including zero), trailing values
 and invalid records, and returns a zero record on failure. It never rewrites or
 migrates input. Strings are UTF-8 JSON; times use RFC 3339. The Go JSON decoder's
@@ -54,8 +56,11 @@ Artifacts contain a content digest (never an arbitrary path), channel, retained
 byte count, positive maximum byte count, completeness, redaction and truncation
 flags. A complete receipt requires at least one complete, unredacted, untruncated
 artifact. Storage must additionally enforce real byte limits and content hashes.
+Artifacts and receipts optionally carry `redaction_policy: literal-v1`; redacted
+records require it. Receipt-level `redacted` also forces incomplete evidence.
 The initial conservative contract permits conclusive comparisons only for complete
-receipts; channel-level witnesses and repetition records arrive in AFTER-9.
+receipts. A stored Comparison binds an outcome, completeness and scoped limits to
+a receipt; channel-level witnesses and repetition records arrive in AFTER-9.
 
 ## Independent state axes
 

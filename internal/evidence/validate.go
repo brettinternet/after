@@ -150,10 +150,16 @@ func (r Receipt) Validate() error {
 	} else if r.Bindings != nil || r.BaseEnvironment != nil || r.CandidateEnvironment != nil || r.Authorization != "" {
 		return errors.New("import cannot assert runner bindings or authorization")
 	}
-	complete := r.Completeness == Complete && len(r.Artifacts) > 0
+	if (r.Redacted && r.RedactionPolicy != "literal-v1") || (r.RedactionPolicy != "" && r.RedactionPolicy != "literal-v1") {
+		return errors.New("invalid receipt redaction policy")
+	}
+	complete := r.Completeness == Complete && len(r.Artifacts) > 0 && !r.Redacted
 	for _, a := range r.Artifacts {
 		if !digest(a.Content) || strings.TrimSpace(a.Channel) == "" || a.Bytes < 0 || a.MaxBytes <= 0 || a.Bytes > a.MaxBytes || !oneOf(a.Completeness, Complete, Incomplete) {
 			return errors.New("invalid artifact identity, channel, size or completeness")
+		}
+		if (a.Redacted && a.RedactionPolicy != "literal-v1") || (a.RedactionPolicy != "" && a.RedactionPolicy != "literal-v1") {
+			return errors.New("invalid artifact redaction policy")
 		}
 		if a.Redacted || a.Truncated || a.Completeness != Complete {
 			complete = false

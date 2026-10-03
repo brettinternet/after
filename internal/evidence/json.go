@@ -14,7 +14,7 @@ const MaxRecordBytes = 4 << 20
 // Decode checks shape and invariants, not provenance. Untrusted reports must be
 // converted to importer records, never decoded as trusted runner receipts.
 func Decode[T interface {
-	Snapshot | Scenario | Receipt | Pin
+	Snapshot | Scenario | Receipt | Comparison | Pin
 	Validate() error
 }](r io.Reader) (T, error) {
 	var zero T

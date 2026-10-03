@@ -154,13 +154,14 @@ type Environment struct {
 
 type Artifact struct {
 	// Content is the storage key, never a filesystem path.
-	Content      Digest       `json:"content"`
-	Channel      string       `json:"channel"`
-	Bytes        int64        `json:"bytes"`
-	MaxBytes     int64        `json:"max_bytes"`
-	Completeness Completeness `json:"completeness"`
-	Redacted     bool         `json:"redacted"`
-	Truncated    bool         `json:"truncated"`
+	Content         Digest       `json:"content"`
+	Channel         string       `json:"channel"`
+	Bytes           int64        `json:"bytes"`
+	MaxBytes        int64        `json:"max_bytes"`
+	Completeness    Completeness `json:"completeness"`
+	Redacted        bool         `json:"redacted"`
+	RedactionPolicy string       `json:"redaction_policy,omitempty"`
+	Truncated       bool         `json:"truncated"`
 }
 
 type Receipt struct {
@@ -176,6 +177,8 @@ type Receipt struct {
 	FinishedAt           time.Time     `json:"finished_at"`
 	Completeness         Completeness  `json:"completeness"`
 	Artifacts            []Artifact    `json:"artifacts"`
+	Redacted             bool          `json:"redacted,omitempty"`
+	RedactionPolicy      string        `json:"redaction_policy,omitempty"`
 	Limits               []string      `json:"limits"`
 }
 

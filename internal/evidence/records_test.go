@@ -29,7 +29,7 @@ func receipt() Receipt {
 		Bindings:        &Bindings{syntheticDigest, syntheticDigest, syntheticDigest, syntheticDigest, syntheticDigest},
 		BaseEnvironment: &e, CandidateEnvironment: &e, Authorization: syntheticDigest,
 		StartedAt: syntheticTime, FinishedAt: syntheticTime.Add(time.Second), Completeness: Complete,
-		Artifacts: []Artifact{{syntheticDigest, "synthetic-response", 2, 1024, Complete, false, false}},
+		Artifacts: []Artifact{{Content: syntheticDigest, Channel: "synthetic-response", Bytes: 2, MaxBytes: 1024, Completeness: Complete}},
 		Limits:    []string{"synthetic; no real execution"},
 	}
 }
