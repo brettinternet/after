@@ -17,6 +17,7 @@ tasks:
   setup:worktree:
     desc: Prepare a checkout without starting services or copying secrets
     cmds:
+      - task: check:tools
       - bun install --frozen-lockfile
       - lefthook install
 
@@ -27,9 +28,16 @@ tasks:
   check:
     desc: Check all current tooling and documentation (Go checks arrive with AFTER-1)
     cmds:
+      - task: check:tools
       - task: format:check
       - task: test
       - task: secrets
+
+  check:tools:
+    desc: Verify the Backlog and Worktrunk release binaries are executable
+    cmds:
+      - backlog --version
+      - wt --version
 
   format:check:
     desc: Check supported text formats

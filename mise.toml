@@ -1,5 +1,8 @@
 #:schema https://mise.en.dev/schema/mise.json
 # Adapted from ../project; pinned for reproducible agent/CI setup.
+[tool_alias]
+worktrunk = "aqua:max-sixty/worktrunk"
+
 [tools]
 go = "1.27.1"
 bun = "1.4.2"
@@ -8,7 +11,7 @@ gitleaks = "8.30.1"
 lefthook = "2.1.16"
 task = "3.54.0"
 worktrunk = "0.80.0"
-"github:MrLesk/Backlog.md" = "1.53.0"
+"github:MrLesk/Backlog.md" = { version = "1.53.0", bin = "backlog" }
 
 [settings]
 npm.package_manager = "bun"
