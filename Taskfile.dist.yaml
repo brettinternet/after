@@ -1,0 +1,62 @@
+---
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+tasks:
+  default:
+    silent: true
+    cmd: task -l
+
+  init:
+    desc: Install pinned tools, documentation dependencies, and Git hooks
+    cmds:
+      - mise trust
+      - mise install
+      - task: setup:worktree
+
+  setup:worktree:
+    desc: Prepare a checkout without starting services or copying secrets
+    cmds:
+      - bun install --frozen-lockfile
+      - lefthook install
+
+  check:staged:
+    desc: Check staged formatting and secrets before committing
+    cmd: lefthook run pre-commit
+
+  check:
+    desc: Check all current tooling and documentation (Go checks arrive with AFTER-1)
+    cmds:
+      - task: format:check
+      - task: test
+      - task: secrets
+
+  format:check:
+    desc: Check supported text formats
+    cmd: prettier --check .
+
+  format:
+    desc: Format supported text formats
+    cmd: prettier --write .
+
+  secrets:
+    desc: Scan tracked content for secrets
+    cmd: gitleaks git --redact --no-banner
+
+  test:
+    desc: Validate documentation links and the executable backlog graph
+    cmds:
+      - bun scripts/check-docs.mjs
+      - bun scripts/check-backlog.mjs
+
+  docs:check:
+    desc: Exercise the presentation in Chromium without modifying committed artifacts
+    cmd: bun scripts/check-presentation.mjs
+
+  docs:render:
+    desc: Check the presentation and regenerate its PDF and preview
+    cmd: bun scripts/check-presentation.mjs --render
+
+  docs:browser:install:
+    desc: Install the pinned Playwright Chromium browser
+    cmd: bunx --no-install playwright install chromium

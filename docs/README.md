@@ -9,8 +9,9 @@ Working name only. This is a researched concept, not an implemented review engin
 - [Open the interactive presentation](presentation.html). Download/open the HTML in a browser if your Markdown viewer displays its source. No server, account, or network connection is needed.
 - [How behavior is derived and evidence is observed](behavior-and-evidence.md), including a test-first, LLM-optional implementation plan.
 - [Read the research and competitive assessment](research.md).
-- [Read the presentation as a PDF](presentation.pdf). This copied edition still needs regeneration from the revised standalone HTML.
-- [Agent handoff](HANDOFF.md), including settled decisions and remaining validation, commit, and cleanup work.
+- [Read the presentation as a PDF](presentation.pdf), regenerated from the standalone HTML.
+- [Agent handoff](HANDOFF.md), including settled decisions and implementation entry point.
+- [Implementation contract and POC gates](IMPLEMENTATION.md), backed by the CLI-managed Backlog.md queue.
 
 Use the arrow keys or numbered navigation to move through the twelve slides. Slide 4 has the pin → edit → rerun simulation; slide 5 has the boundary explorer. Press `N` for presenter notes. The PDF is the static edition.
 

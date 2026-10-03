@@ -1,0 +1,9 @@
+---
+# Adapted from ../project/lefthook.yaml.
+pre-commit:
+  parallel: true
+  jobs:
+    - name: Check staged formatting
+      run: mise exec prettier -- prettier --check --ignore-unknown -- {staged_files}
+    - name: Check for secret leaks
+      run: mise exec gitleaks -- gitleaks git --pre-commit --redact --staged --no-banner

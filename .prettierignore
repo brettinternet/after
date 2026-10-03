@@ -1,0 +1,7 @@
+.worktrees/
+node_modules/
+.after/
+artifacts/
+bun.lock
+# Backlog.md owns task formatting; mutate through its CLI, not Prettier.
+backlog/

@@ -1,0 +1,26 @@
+---
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  tooling-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v3
+      - run: mise exec -- bun install --frozen-lockfile
+      - run: mise exec -- task check
+      - run: mise exec -- bunx --no-install playwright install --with-deps chromium
+      - run: mise exec -- task docs:check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: presentation-check
+          path: artifacts/presentation

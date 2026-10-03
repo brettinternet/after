@@ -1,0 +1,28 @@
+# Local environment and tool overrides
+.env
+.env.local
+.env.*.local
+/Taskfile.yaml
+/Taskfile.yml
+mise.local.toml
+mise.*.local.toml
+
+# Worktrees and local review/capture data (may contain source or sensitive output)
+/.worktrees/
+/.after/
+/artifacts/
+
+# Build and documentation tooling
+/node_modules/
+/bin/
+/dist/
+*.test
+coverage.out
+
+# Agent-local settings
+.claude/settings.local.json
+.opencode/
+CLAUDE.local.md
+GEMINI.local.md
+AGENTS.local.md
+.DS_Store

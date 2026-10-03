@@ -1,0 +1,14 @@
+#:schema https://mise.en.dev/schema/mise.json
+# Adapted from ../project; pinned for reproducible agent/CI setup.
+[tools]
+go = "1.27.1"
+bun = "1.4.2"
+prettier = "3.9.9"
+gitleaks = "8.30.1"
+lefthook = "2.1.16"
+task = "3.54.0"
+worktrunk = "0.80.0"
+"github:MrLesk/Backlog.md" = "1.53.0"
+
+[settings]
+npm.package_manager = "bun"

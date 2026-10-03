@@ -1,0 +1,10 @@
+# Ordered, blocking setup adapted from ../project.
+# Review these hooks before granting unattended Worktrunk approval.
+[[pre-start]]
+tools = "mise trust && mise install"
+
+[[pre-start]]
+setup = "mise exec -- task setup:worktree"
+
+# No ignored files are copied and no services start; no teardown is needed yet.
+# Add owned-service teardown here if a future task introduces persistent services.

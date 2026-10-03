@@ -28,13 +28,13 @@ An expectation is a separate object. It describes what a human or test author wa
 
 For example:
 
-| Part | Payment-retry scenario |
-| --- | --- |
-| Setup | Empty test database, fixed clock, isolated fake payment service |
-| Stimulus | Submit a payment, advance the clock twelve hours, submit the same key |
-| Observation | HTTP responses, recorded payment-service requests, persisted ledger rows |
-| Expectation | Exactly one payment creation for this selected sequence |
-| Limits | Sequential execution; fake provider; no production network or concurrency |
+| Part        | Payment-retry scenario                                                    |
+| ----------- | ------------------------------------------------------------------------- |
+| Setup       | Empty test database, fixed clock, isolated fake payment service           |
+| Stimulus    | Submit a payment, advance the clock twelve hours, submit the same key     |
+| Observation | HTTP responses, recorded payment-service requests, persisted ledger rows  |
+| Expectation | Exactly one payment creation for this selected sequence                   |
+| Limits      | Sequential execution; fake provider; no production network or concurrency |
 
 “Retry handling works” is not measurable enough. “This sequence made one provider request and one ledger entry” is.
 
@@ -46,17 +46,17 @@ AFTER should distinguish an **example**, a **general requirement**, and a **stru
 
 The order below reflects increasing setup and execution cost, not a universal ranking of reliability.
 
-| Source | What can be obtained without an LLM | What cannot be assumed |
-| --- | --- | --- |
-| Test reports | Test identity, pass/fail/skip, failures, duration, source locations when reported | Passing tests generally do not expose all inputs, returned values, or side effects |
-| Fixtures and snapshots | Existing requests, representative records, expected outputs, paired screenshots | An expected file is not an observed run; an updated snapshot may approve a regression |
-| API and type contracts | Added/removed endpoints, required fields, response shapes, exported signatures | A declared contract is not evidence the implementation follows it |
-| Captured browser tests | Actions, DOM states, screenshots, network traffic, selected attachments | A click trace does not automatically reveal backend behavior or all assertions |
-| Integration-test traces | Recorded calls, effects, timings, input/output payloads when captured | Instrumentation coverage can be partial; traces can contain secrets |
-| Static analysis | Changed symbols, exact values, imports, resolved calls, condition boundaries | Static reachability is not execution; dynamic dependencies may be missing |
-| Property-based tests | Generated cases, reproducible seeds, smaller counterexamples | A finite sample does not prove the property |
-| Runtime traffic recordings | Realistic inputs and recorded responses for replay | Production data is safe to copy, complete, deterministic, or available by default |
-| Model-based and metamorphic tests | Sequences and relationships such as encode/decode round trips | The model or relation is correct just because it was written as a test |
+| Source                            | What can be obtained without an LLM                                               | What cannot be assumed                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Test reports                      | Test identity, pass/fail/skip, failures, duration, source locations when reported | Passing tests generally do not expose all inputs, returned values, or side effects    |
+| Fixtures and snapshots            | Existing requests, representative records, expected outputs, paired screenshots   | An expected file is not an observed run; an updated snapshot may approve a regression |
+| API and type contracts            | Added/removed endpoints, required fields, response shapes, exported signatures    | A declared contract is not evidence the implementation follows it                     |
+| Captured browser tests            | Actions, DOM states, screenshots, network traffic, selected attachments           | A click trace does not automatically reveal backend behavior or all assertions        |
+| Integration-test traces           | Recorded calls, effects, timings, input/output payloads when captured             | Instrumentation coverage can be partial; traces can contain secrets                   |
+| Static analysis                   | Changed symbols, exact values, imports, resolved calls, condition boundaries      | Static reachability is not execution; dynamic dependencies may be missing             |
+| Property-based tests              | Generated cases, reproducible seeds, smaller counterexamples                      | A finite sample does not prove the property                                           |
+| Runtime traffic recordings        | Realistic inputs and recorded responses for replay                                | Production data is safe to copy, complete, deterministic, or available by default     |
+| Model-based and metamorphic tests | Sequences and relationships such as encode/decode round trips                     | The model or relation is correct just because it was written as a test                |
 
 ### What can be derived from tests today
 
@@ -177,19 +177,19 @@ This is illustrative data, not a proposed finalized schema or an observed run.
 
 ```json
 {
-  "scenario": "payment-key-retry-12h",
-  "producer": "after-paired-runner",
-  "code": { "base": "content-digest-A", "candidate": "content-digest-B" },
-  "driver": "driver-content-digest",
-  "input": "fixture-content-digest",
-  "observer": "http-and-fake-provider-v1",
-  "comparisonRules": "rules-content-digest",
-  "environment": { "base": "environment-A", "candidate": "environment-B" },
-  "result": {
-    "base": { "responseStatus": 200, "recordedProviderCalls": 1 },
-    "candidate": { "responseStatus": 200, "recordedProviderCalls": 2 }
-  },
-  "limits": ["fake provider", "sequential fixture", "no production execution"]
+    "scenario": "payment-key-retry-12h",
+    "producer": "after-paired-runner",
+    "code": { "base": "content-digest-A", "candidate": "content-digest-B" },
+    "driver": "driver-content-digest",
+    "input": "fixture-content-digest",
+    "observer": "http-and-fake-provider-v1",
+    "comparisonRules": "rules-content-digest",
+    "environment": { "base": "environment-A", "candidate": "environment-B" },
+    "result": {
+        "base": { "responseStatus": 200, "recordedProviderCalls": 1 },
+        "candidate": { "responseStatus": 200, "recordedProviderCalls": 2 }
+    },
+    "limits": ["fake provider", "sequential fixture", "no production execution"]
 }
 ```
 
@@ -219,9 +219,9 @@ A common AI failure mode is changing both the implementation and its test until 
 
 AFTER should make two different comparisons available.
 
-| Comparison | Question |
-| --- | --- |
-| Frozen scenario and observer on both versions | What changed under the same experiment? |
+| Comparison                                     | Question                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| Frozen scenario and observer on both versions  | What changed under the same experiment?                    |
 | Candidate's own tests, with test edits visible | What does the proposed suite now assert, and does it pass? |
 
 Neither replaces the other. Existing tests can depend on internal APIs that a valid refactor removes. If the old driver cannot run on the new implementation, show the incompatibility and inspect the public boundary instead. A failed test import is not a measured user-facing regression.

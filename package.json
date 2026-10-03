@@ -1,0 +1,9 @@
+{
+  "name": "after-docs",
+  "private": true,
+  "type": "module",
+  "description": "Development-only browser checks; AFTER itself will be a Go binary.",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

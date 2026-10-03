@@ -4,7 +4,9 @@
 
 Read [the product proposal](README.md), [the behavior and evidence design](behavior-and-evidence.md), and [the competitive research](research.md).
 
-The user asked to move the concept into this separate repository, document how it can work, and commit the documentation. The latest discussion selected a local TUI as the first experiment; the user requested that direction be documented for handoff. The current scope is documentation and migration completion, not permission to implement the entire product.
+The concept migration is committed and pushed. The latest request authorized pushing this repository, adapting tooling from `../project`, and creating an autonomous implementation backlog for a robust CLI/TUI proof of concept. Tooling and planning are now in place; the engine itself is not implemented. The earlier no-push instruction was superseded for this bootstrap request, not permanent authorization for future agents.
+
+**Next implementation entry point: [the implementation contract](IMPLEMENTATION.md), [repository agent workflow](../AGENTS.md), and `mise exec -- backlog task AFTER-1 --plain`.** Backlog.md is authoritative: 17 POC tasks in M1/M2, plus three explicitly gated follow-ups in M3. Claim ready work from primary `main` and reread before creating an implementation worktree. Do not treat the human study as an autonomous deliverable.
 
 **Latest direction: CLI + thin local TUI first, backed by a real paired-execution loop, with Go as the preferred implementation language. This supersedes the earlier browser-first recommendation. The browser presentation is a concept visualization, not the required first implementation.**
 
@@ -22,24 +24,24 @@ The user asked to move the concept into this separate repository, document how i
 - Evidence applicability, execution outcome, and human acceptance are separate states. Missing, stale, incomparable, and unstable results remain visible.
 - The ordinary diff and unclassified-change inventory remain available when richer analysis fails.
 
-Go is the user's preferred implementation language. Bubble Tea is a candidate to evaluate, not a committed dependency. Keep language-specific analysis and test capture in the appropriate existing tools rather than rewriting them in Go. The specific algorithms, supported adapter versions, storage format, sandbox implementation, and TUI libraries have not been chosen. Do not mistake the illustrative receipt in the design document for a finalized API.
+Go is the user's preferred implementation language. Bubble Tea remains a candidate to evaluate in AFTER-12, not a committed dependency. Keep language-specific analysis and test capture in existing tools rather than rewriting them in Go. The implementation contract now bounds the first adapter to stock Go test JSON, storage to versioned local JSON/content-addressed artifacts, and execution to explicitly authorized offline Docker isolation. AFTER-1 finalizes the schema; AFTER-6 must prove the sandbox mechanics and pin its image before the runner is built. Do not mistake the illustrative receipt in the design document for a finalized API.
 
 ## Where the answers are documented
 
-| Question | Location in `behavior-and-evidence.md` |
-| --- | --- |
-| What constitutes a behavior? | Section 1, setup + stimulus + observation, with expectation separate |
-| Can we derive it without an LLM? | Sections 2–3, tests, fixtures, contracts, static facts, traces, generated cases |
-| What does a test report actually establish? | Section 2, report import versus richer artifacts versus capture adapters |
-| How is evidence observed? | Section 4, paired execution, provenance, observers, isolation, and limitations |
-| What if the agent edits the tests too? | Section 5, frozen comparisons and candidate-owned oracles |
-| How do we make the demo real? | Section 6, fake-provider request counts, controlled clocks, threshold sampling |
-| How does review memory remain valid? | Section 7, conservative applicability and dependency tracking |
-| Where do LLMs help? | Section 8, optional interpretation and experiment proposals |
-| How does this scale to rapid changes? | Section 9, reuse, selection, grouping, explicit snapshots, instability |
-| What should we build first? | Section 10, the TUI screen, real paired-run loop, and ten acceptance checks |
-| What would prove the TUI useful? | Section 10, comparison against raw diffs and guided tours, including stale/missing evidence and unnecessary reruns |
-| Is Go appropriate, and what needs care? | Section 11, preferred language, candidate TUI framework, language adapters, Git semantics, process handling, rendering, packaging, and terminal safety |
+| Question                                    | Location in `behavior-and-evidence.md`                                                                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| What constitutes a behavior?                | Section 1, setup + stimulus + observation, with expectation separate                                                                                   |
+| Can we derive it without an LLM?            | Sections 2–3, tests, fixtures, contracts, static facts, traces, generated cases                                                                        |
+| What does a test report actually establish? | Section 2, report import versus richer artifacts versus capture adapters                                                                               |
+| How is evidence observed?                   | Section 4, paired execution, provenance, observers, isolation, and limitations                                                                         |
+| What if the agent edits the tests too?      | Section 5, frozen comparisons and candidate-owned oracles                                                                                              |
+| How do we make the demo real?               | Section 6, fake-provider request counts, controlled clocks, threshold sampling                                                                         |
+| How does review memory remain valid?        | Section 7, conservative applicability and dependency tracking                                                                                          |
+| Where do LLMs help?                         | Section 8, optional interpretation and experiment proposals                                                                                            |
+| How does this scale to rapid changes?       | Section 9, reuse, selection, grouping, explicit snapshots, instability                                                                                 |
+| What should we build first?                 | Section 10, the TUI screen, real paired-run loop, and ten acceptance checks                                                                            |
+| What would prove the TUI useful?            | Section 10, comparison against raw diffs and guided tours, including stale/missing evidence and unnecessary reruns                                     |
+| Is Go appropriate, and what needs care?     | Section 11, preferred language, candidate TUI framework, language adapters, Git semantics, process handling, rendering, packaging, and terminal safety |
 
 ## Recommended first implementation experiment
 
@@ -61,48 +63,36 @@ Then test generated boundary cases and counterexample reduction. Rich TypeScript
 
 ## Artifacts and current status
 
-| File | Status |
-| --- | --- |
-| `README.md` | Full proposal; independent project boundary, TUI-first plan, and Go preference |
-| `behavior-and-evidence.md` | Test-first, LLM-optional design, real TUI review loop, acceptance checks, and Go implementation cautions |
-| `research.md` | Sixteen primary-source comparisons; original local Hunk link replaced with a repository citation |
-| `presentation.html` | Twelve-slide interactive simulation; standalone concept with a TUI-first implementation slide and mechanism link; browser views illustrate possible later interfaces |
-| `presentation.pdf` | Copied from the earlier version; regenerate from the current HTML |
-| `preview.png` | Copied from the earlier version; regenerate from the current HTML |
-| `HANDOFF.md` | This continuation guide |
+| File                       | Status                                                                                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                | Full proposal; independent project boundary, TUI-first plan, and Go preference                                                                                       |
+| `behavior-and-evidence.md` | Test-first, LLM-optional design, real TUI review loop, acceptance checks, and Go implementation cautions                                                             |
+| `research.md`              | Sixteen primary-source comparisons; original local Hunk link replaced with a repository citation                                                                     |
+| `presentation.html`        | Twelve-slide interactive simulation; standalone concept with a TUI-first implementation slide and mechanism link; browser views illustrate possible later interfaces |
+| `presentation.pdf`         | Regenerated from the standalone HTML; twelve pages, no measured print overflow                                                                                       |
+| `preview.png`              | Regenerated from the standalone HTML in Chromium                                                                                                                     |
+| `IMPLEMENTATION.md`        | Bounded POC decisions, evidence contracts, CLI/TUI behavior and acceptance mapping                                                                                   |
+| `../backlog/`              | CLI-managed milestones and 20 dependency-linked, acceptance-based tasks                                                                                              |
+| `HANDOFF.md`               | This continuation guide                                                                                                                                              |
 
 All payment data and evidence in the presentation are invented. No AFTER analysis or execution engine has been implemented.
 
-The original presentation passed real Chromium interaction checks, desktop/mobile layout checks, zero-network checks, and a twelve-page PDF check before migration. The updated destination files have not received that final validation. Checks from the hunk-guide repository do not establish correctness of this independent project.
+The destination presentation has now passed real Chromium checks for all twelve slides, keyboard navigation, slide 4's pin/edit/rerun and dialog interactions, slide 5's unexecuted-input state, 390px mobile layouts, no page errors or HTTP requests, and twelve PDF pages without measured print overflow. `scripts/check-presentation.mjs` reproduces the checks; outputs go to ignored `artifacts/presentation/`, and `task docs:render` updates the committed PDF/preview.
 
-No documentation commit was created during this session. The destination was an existing empty Git repository on unborn `main` when inspected. Recheck its current state and preserve any work added by the user or another agent since then.
+The original seven documentation artifacts were committed as `1337132` and pushed to `origin/main`. This bootstrap adds pinned tools, hooks, CI, local link/backlog checks and implementation tasks. Recheck Git state before beginning implementation; preserve any intervening user or agent work.
 
-## Finish the documentation migration
+## Tooling and next action
 
-1. Work from `/Users/brett/dev/me/after` and read any current repository instructions first.
-2. Format and check the documents without importing Hunk's package manifest, runtime dependencies, or project configuration.
-3. Check local links and ensure the HTML/proposal still describe a standalone project.
-4. Exercise the presentation in an actual browser. Test slide navigation, slide 4's pin → edit → rerun sequence, slide 5's unexecuted-input state, and narrow layouts. Verify that no network calls occur during normal use.
-5. Regenerate `presentation.pdf` and `preview.png` from the current HTML. Check twelve PDF pages and no clipping. The HTML is self-contained and needs no server.
-6. Stage only the intended documentation and create the requested local documentation commit. Do not push or open a PR. Update this handoff's status when the pending work is done.
-7. Reconcile the original source worktree only after the destination artifacts are safely committed and ownership is verified. Cleanup need not prevent the documentation commit if access or ownership remains unavailable.
+Run `mise trust && mise install && mise exec -- task init`. The template's mise/Task/Lefthook/Prettier/Gitleaks/Worktrunk conventions are adapted without its application, databases, secrets or service stack. Go and Backlog.md are pinned; Bun/Playwright are development-only documentation dependencies.
 
-## Original worktree and continuation evidence
+Run `mise exec -- task test` for local links and task integrity, `task check:staged` before committing, and `task docs:check` for presentation changes. The current CI is tooling/documentation coverage, not evidence that AFTER works. AFTER-1 introduces Go checks; AFTER-15 introduces the adversarial POC gate.
 
-The original five artifacts are still retained in:
+The documentation migration checks and artifact regeneration are complete. Start the actual product at AFTER-1 when implementation is requested. Work through ready M1/M2 tasks; the final deliverable is a real repeatable payment demo, CLI, TUI review loop, security/negative tests, packaging and evaluation kit. M3 requires separate authorization and human participation.
 
-```text
-/Users/brett/dev/me/hunk-guide/.worktrees/after-concept/docs/after/
-```
+The original hunk-guide source worktree is retained. This bootstrap did not adopt its cleanup authority, inspect its active owner/panes or operate outside the current repository's shell scope. It is not needed to build AFTER. Its optional cleanup is a machine-local maintenance concern, not an implementation prerequisite.
 
-Machine-local continuation details, the original creation receipt, the previous validation-script path, and pending operations are preserved in:
+## Optional machine-local migration history
 
-```text
-/Users/brett/dev/me/after/.git/after-migration-continuation.json
-```
+The original workstation may retain `after-migration-continuation.json` inside this checkout's Git directory. It contains historical paths and the original source-worktree creation receipt; it is private continuation state, not a portable project dependency or authorization to act.
 
-That file is local continuation state, not a document to commit. Its previous browser script still targets the original worktree; change its artifact destination before reuse, or create an equivalent check here.
-
-Before adopting destructive cleanup authority, confirm task continuity, confirm the previous owner and delegated work are inactive, and match the stored receipt against the live checkout, branch, and Git-local receipt. Re-inspect the exact associated Herdr workspace and panes. If verified and permitted, remove the worktree and its branch together with Worktrunk from a surviving checkout, allowing teardown hooks to run, then verify the workspace disappeared. Never remove the primary hunk-guide checkout or the user's AFTER workspace. If ownership or tool access is unclear, retain the old checkout and report it.
-
-The prior session's shell remained rooted in `hunk-guide` even after the user ran `cd ../after`; it blocked shell navigation outside that root. File edits succeeded, but shell validation and commit did not. Do not bypass a scope restriction. Continue with an agent whose permitted workspace is this repository.
+Fresh clones should ignore that absent file and need no access to the source repository. Use the committed browser-check script here, not a historical external script. If the original operator separately requests source-worktree cleanup, first verify task continuity, inactive owners, the live receipt and exact checkout/panes under the applicable ownership rules. If any evidence or permission is unavailable, retain it. Never bypass a workspace scope restriction or infer cleanup authority from this document.
