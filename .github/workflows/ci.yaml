@@ -21,6 +21,29 @@ jobs:
       - run: mise exec -- task check:go
       - run: ./bin/after --help
       - run: ./bin/after --version
+  poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          cache_key_prefix: mise-poc-${{ hashFiles('mise.toml') }}
+      # Trusted CI setup, separate from AFTER execution. Runs never pull images.
+      - name: Provision the pinned offline toolchain
+        run: docker pull docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
+      - name: Execute every POC proof and negative control
+        shell: bash
+        run: |
+          mkdir -p artifacts/poc
+          export AFTER_DOCKER_BINARY="$(command -v docker)"
+          export AFTER_DOCKER_HOST=unix:///var/run/docker.sock
+          mise exec -- task test:poc 2>&1 | tee artifacts/poc/gate.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: poc-gate
+          path: artifacts/poc
   tooling-and-docs:
     runs-on: ubuntu-latest
     steps:

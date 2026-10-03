@@ -238,6 +238,15 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("exact execution preview")
 	p.send("y")
 	p.expect("Authorized run active")
+	responsive := time.Now()
+	p.send("?")
+	p.expect("AFTER review | help")
+	latency := time.Since(responsive)
+	t.Logf("real authorized fixture active: PTY help input-to-render=%s (warm UI, includes scheduling)", latency)
+	if latency > time.Second {
+		t.Fatal("active fixture blocked PTY navigation budget")
+	}
+	p.send("\x1b")
 	p.expect("Measured result attached")
 	p.send("\x1b[F")
 	p.expect("30s: provider requests base=[1] candidate=[1]")

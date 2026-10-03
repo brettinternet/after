@@ -60,6 +60,12 @@ tasks:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
     cmd: go test -race ./...
 
+  test:poc:
+    desc: Authorize the complete synthetic adversarial Docker/PTY gate and mutation controls (no skips)
+    env:
+      AFTER_POC_PROOF: "1"
+    cmd: go run ./internal/pocgate
+
   test:cli:
     desc: Run focused CLI, configuration, and native entry point tests
     cmd: go test -race ./internal/config ./internal/cli ./cmd/after

@@ -19,7 +19,7 @@ import (
 
 // Real Git capture, not an invented diff. All repository/process work completes
 // before any model timing. Fixed synthetic inputs contain no participant data.
-func capturedDiff(t testing.TB) []byte {
+func capturedDiff(t testing.TB, fileCount int) []byte {
 	t.Helper()
 	dir := t.TempDir()
 	git := func(args ...string) {
@@ -33,7 +33,7 @@ func capturedDiff(t testing.TB) []byte {
 	}
 	git("init", "-q", "--template=", "-b", "main")
 	write := func(side string) {
-		for file := 0; file < 50; file++ {
+		for file := 0; file < fileCount; file++ {
 			var b strings.Builder
 			for line := 0; line < 1000; line++ {
 				fmt.Fprintf(&b, "%s file=%02d line=%04d %s\n", side, file, line, strings.Repeat("x", 48))
@@ -52,13 +52,39 @@ func capturedDiff(t testing.TB) []byte {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	captureStart := time.Now()
 	captured, err := capture.Capture(context.Background(), dir, s, capture.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	captureTime := time.Since(captureStart)
+	start := time.Now()
 	v, err := rawdiff.Open(s, captured.Base, captured.Candidate)
 	if err != nil {
 		t.Fatal(err)
+	}
+	coldOpen := time.Since(start)
+	counts, err := v.Count(nil, nil)
+	if err != nil || !counts.Complete || counts.Total != fileCount || len(v.Inventory()) != fileCount {
+		t.Fatalf("dropped or incomplete inventory: %d/%d hunks=%+v limits=%v error=%v", len(v.Inventory()), fileCount, counts, v.Limits(), err)
+	}
+	t.Logf("coverage: %d/%d paths, %d/%d unclassified hunks; limits=%v", len(v.Inventory()), fileCount, counts.Unclassified, counts.Total, v.Limits())
+	start = time.Now()
+	v, err = rawdiff.Open(s, captured.Base, captured.Candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warmOpen := time.Since(start)
+	start = time.Now()
+	for i := 0; i < 1000; i++ {
+		if len(v.Inventory()) != fileCount {
+			t.Fatal("cached inventory lost paths")
+		}
+	}
+	listAverage := time.Since(start) / 1000
+	t.Logf("files=%d capture=%s raw first-open=%s warm-open=%s cached-list/iteration=%s; cold application view, OS file cache warm from capture (not dropped)", fileCount, captureTime, coldOpen, warmOpen, listAverage)
+	if warmOpen > time.Second || listAverage > 2*time.Second {
+		t.Fatal("raw/list evaluation budget exceeded")
 	}
 	var raw []byte
 	for offset := 0; ; {
@@ -76,7 +102,16 @@ func capturedDiff(t testing.TB) []byte {
 }
 
 func TestCapturedDiffBudget(t *testing.T) {
-	raw := capturedDiff(t)
+	for _, size := range []struct {
+		name  string
+		files int
+	}{{"medium", 10}, {"large", 50}} {
+		t.Run(size.name, func(t *testing.T) { capturedDiffBudget(t, size.files) })
+	}
+}
+
+func capturedDiffBudget(t *testing.T, files int) {
+	raw := capturedDiff(t, files)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -119,7 +154,7 @@ func TestCapturedDiffBudget(t *testing.T) {
 }
 
 func BenchmarkCapturedViewport(b *testing.B) {
-	raw := capturedDiff(b)
+	raw := capturedDiff(b, 50)
 	m := model(b, string(raw))
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	b.ReportAllocs()

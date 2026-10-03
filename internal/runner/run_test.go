@@ -327,7 +327,7 @@ func init(){
 	if _, err := store.Get[evidence.Receipt](s, result.Receipt.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"exited-parent", "refused-upstream", "real-502"} {
+	for _, mode := range []string{"build-failure", "exited-parent", "refused-upstream", "real-502"} {
 		t.Run(mode, func(t *testing.T) {
 			source := `package main
 import("fmt";"net";"net/http";"os";"os/exec";"io";"time")
@@ -347,6 +347,9 @@ func init(){
  http.Serve(l,http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){w.WriteHeader(502);fmt.Fprint(w,"application response")}))
 }
 `
+			if mode == "build-failure" {
+				source = "package main\nfunc broken(\n"
+			}
 			st, sp := captured(t, source)
 			plan := prepared(t, st, sp, 1)
 			_, approval := plan.Preview()

@@ -192,6 +192,21 @@ func TestDockerProof(t *testing.T) {
 			t.Fatalf("cancel not enforced: %v", e)
 		}
 	})
+	t.Run("workload-crash-and-descendants", func(t *testing.T) {
+		p := prepare(t, []string{"/bin/sh", "-c", "sleep 300 & printf 'CRASH CHILD READY\\n'; kill -KILL $$"}, 30, 4096)
+		r, e := execute(t, context.Background(), p)
+		if e == nil || r.ExitCode != 137 || !strings.Contains(r.Output, "CRASH CHILD READY") || !r.Cleaned {
+			t.Fatalf("workload crash not observed/cleaned: %+v %v", r, e)
+		}
+	})
+	t.Run("literal-argv", func(t *testing.T) {
+		payload := "$(touch /work/injected); `id` & | > /work/injected"
+		p := prepare(t, []string{"/usr/bin/printf", "%s", payload}, 30, 4096)
+		r, e := execute(t, context.Background(), p)
+		if e != nil || r.Output != payload {
+			t.Fatalf("argv interpreted: %+v %v", r, e)
+		}
+	})
 	t.Run("memory", func(t *testing.T) {
 		p := prepare(t, []string{"/usr/local/go/bin/go", "run", "/input/probe.go", "oom"}, 180, 4096)
 		r, e := execute(t, context.Background(), p)
