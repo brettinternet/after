@@ -109,4 +109,4 @@ CLI process restarts. It retains the original one-versus-two twelve-hour provide
 observations and unchanged thirty-second control, then reruns the original pair
 against itself. The new receipt is attached without accepting the expectation;
 only the following human-decision command accepts it. Ordinary checks never
-contact Docker. The TUI integration remains AFTER-14.
+contact Docker. The [TUI review loop](TUI.md) exposes finite-count pinning, deliberate snapshot selection, and exact-plan authorized reruns over the same immutable records.

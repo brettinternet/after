@@ -46,7 +46,7 @@ func reviewCommand(state *invocation) *ucli.Command {
 	return &ucli.Command{Name: "review", Usage: "browse captured evidence with --tui, or inspect/mutate a headless pin revision", ArgsUsage: "<pin-revision-id> OR --tui <candidate-id> --base <base-id>", Flags: append(commonFlags(),
 		&ucli.BoolFlag{Name: "tui", Usage: "browse immutable captures without execution (requires terminal)"},
 		&ucli.StringFlag{Name: "base", Usage: "matching captured base snapshot for --tui"},
-		&ucli.StringSliceFlag{Name: "evidence", Usage: "stored comparison, receipt or imported report ID for --tui (repeatable, maximum 32)"},
+		&ucli.StringSliceFlag{Name: "evidence", Usage: "stored comparison, receipt, imported report or pin revision ID for --tui (repeatable, maximum 32)"},
 		&ucli.StringFlag{Name: "import-file", Usage: "file read only when i is pressed in --tui"},
 		&ucli.StringFlag{Name: "producer", Usage: "caller provenance for the explicit TUI import action"},
 		&ucli.StringFlag{Name: "select", Usage: "explicitly select a captured candidate snapshot ID"},

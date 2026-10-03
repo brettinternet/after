@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/rawdiff"
+	"github.com/brettinternet/after/internal/review"
+	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/store"
 )
 
@@ -32,9 +35,11 @@ type Section struct {
 	Blob    evidence.Digest
 }
 type Entry struct {
-	Label    string // trusted state summary, never repository prose
-	Name     string // untrusted description
-	Sections []Section
+	Receipt     evidence.Digest
+	Expectation string
+	Label       string // trusted state summary, never repository prose
+	Name        string // untrusted description
+	Sections    []Section
 }
 type Data struct {
 	Selection Selection
@@ -87,6 +92,9 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		return nil, err
 	}
 	d := &Data{Selection: selected, Patch: Section{Name: "captured raw diff", Blob: candidate.Diff}, Limits: document("capture limits", raw.Limits())}
+	if base.Diff != candidate.Diff {
+		d.Patch = document("no shared captured patch; inspect inventory and both sources", raw.Limits())
+	}
 	for _, item := range raw.Inventory() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -114,6 +122,36 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 }
 
 func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair) ([]Entry, error) {
+	if pin, err := store.Get[evidence.Pin](s, id); err == nil {
+		v, err := review.Inspect(s, id)
+		if err != nil {
+			return nil, err
+		}
+		state := string(pin.Decision) + " | " + string(v.Applicability)
+		if v.MissingCurrentResult || pin.Scope == "" || pin.History[len(pin.History)-1].Review.Target.Snapshots != pair {
+			state += " | not run / missing current evidence"
+		}
+		e := Entry{Label: state, Name: pin.Expectation, Sections: []Section{document("pin revision / current evidence / exact reopening reason", v)}}
+		// Every prior observation remains reachable with its original snapshot scope.
+		seen := map[evidence.Digest]bool{}
+		for i := len(pin.History) - 1; i >= 0; i-- {
+			event := pin.History[i]
+			if event.Review == nil || event.Review.Receipt == "" || seen[event.Review.Receipt] {
+				continue
+			}
+			seen[event.Review.Receipt] = true
+			rows, err := loadEvidence(s, event.Review.Receipt, pair)
+			if err != nil {
+				return nil, err
+			}
+			for _, row := range rows {
+				e.Sections = append(e.Sections, row.Sections...)
+			}
+		}
+		return []Entry{e}, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	var comparison *evidence.Comparison
 	c, err := store.Get[evidence.Comparison](s, id)
 	if err == nil {
@@ -164,7 +202,47 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		for _, a := range r.Artifacts {
 			e.Sections = append(e.Sections, Section{Name: "artifact: " + a.Channel, Blob: a.Content})
 		}
-		return []Entry{e}, nil
+		rows := []Entry{}
+		if r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+			for _, sec := range []int64{43200, 30} {
+				counts := map[string][]int{}
+				for _, a := range r.Artifacts {
+					for _, side := range []string{"base", "candidate"} {
+						if strings.HasPrefix(a.Channel, fmt.Sprintf("%s/%d/", side, sec)) && strings.HasSuffix(a.Channel, "/observation") && a.Completeness == evidence.Complete && !a.Redacted && !a.Truncated {
+							raw, err := s.ReadBlob(a.Content)
+							if err != nil {
+								return nil, err
+							}
+							var o runner.Observation
+							if decode(raw, &o) != nil || o.Version != 1 || o.Seconds != sec || o.Calls == nil {
+								return nil, errors.New("invalid observation")
+							}
+							counts[side] = append(counts[side], len(o.Calls))
+						}
+					}
+				}
+				if len(counts["base"]) == 0 || len(counts["candidate"]) == 0 {
+					continue
+				}
+				summary := fmt.Sprintf("%ds: provider requests base=%v candidate=%v; finite recorded samples only", sec, counts["base"], counts["candidate"])
+				row := Entry{Label: e.Label, Name: summary, Sections: append([]Section{document("measured provider-request counts (original receipt scope)", summary)}, e.Sections...)}
+				same := true
+				for _, count := range counts["candidate"] {
+					if count != counts["candidate"][0] {
+						same = false
+					}
+				}
+				if same && r.Snapshots == pair {
+					row.Receipt = r.ID
+					row.Expectation = fmt.Sprintf("At %ds, expect %d provider request(s) for the frozen two same-key requests; finite example only", sec, counts["candidate"][0])
+				}
+				rows = append(rows, row)
+			}
+		}
+		if len(rows) == 0 {
+			rows = append(rows, e)
+		}
+		return rows, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err

@@ -351,8 +351,15 @@ func TestMissingArtifactsRedactionAndInvalidPair(t *testing.T) {
 		t.Fatal("missing diff is complete")
 	}
 	r.Candidate.Diff = evidence.Digest("sha256:" + strings.Repeat("a", 64))
-	if _, err := Open(s, r.Base, r.Candidate); err == nil {
-		t.Fatal("unrelated pair accepted")
+	v, err := Open(s, r.Base, r.Candidate)
+	if err != nil || len(v.Inventory()) != 1 || !strings.Contains(strings.Join(v.Limits(), " "), "do not share a captured diff") {
+		t.Fatal("cross-capture inventory unavailable", err)
+	}
+	if _, err := v.Raw(0, 10); !errors.Is(err, ErrDiff) {
+		t.Fatal("unrelated patch exposed", err)
+	}
+	if count, _ := v.Count(nil, nil); count.Complete {
+		t.Fatal("unrelated patch claimed complete")
 	}
 	r.Candidate = r.Base
 	r.Candidate.Files = []evidence.File{{Path: "../outside", Content: r.Base.Diff, Mode: "100644"}}

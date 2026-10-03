@@ -84,9 +84,6 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 	if err := candidate.Validate(); err != nil {
 		return nil, err
 	}
-	if base.Diff != candidate.Diff {
-		return nil, errors.New("snapshots do not share a captured diff")
-	}
 	v := &View{s: s, base: files(base), candidate: files(candidate), indexComplete: true}
 	v.limits = append(v.limits, base.Limits...)
 	v.limits = append(v.limits, candidate.Limits...)
@@ -140,6 +137,11 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 		v.entries = append(v.entries, e)
 	}
 	sort.Slice(v.entries, func(i, j int) bool { return v.entries[i].Path < v.entries[j].Path })
+	if base.Diff != candidate.Diff {
+		v.indexComplete = false
+		v.limits = append(v.limits, "snapshots do not share a captured diff; complete stored inventory and both sources remain available, but no patch is claimed for this pair")
+		return v, nil
+	}
 	var err error
 	v.raw, err = s.ReadBlob(candidate.Diff)
 	if err != nil {

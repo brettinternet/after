@@ -76,6 +76,12 @@ tasks:
     desc: Fuzz terminal-safe text and width bounds
     cmd: go test ./internal/terminal -run '^$' -fuzz FuzzLine -fuzztime 5s
 
+  tui:proof:
+    desc: Authorize the real payment pin-edit-reopen-rerun loop in a PTY (requires explicit AFTER_DOCKER_BINARY/HOST)
+    env:
+      AFTER_TUI_PROOF: "1"
+    cmd: go test -race -v -count=1 -timeout=15m ./internal/cli -run '^TestReviewLoopPTYProof$'
+
   cli:proof:
     desc: Authorize the real paired payment comparison through CLI subprocesses (requires pinned Docker image and explicit AFTER_DOCKER_BINARY/HOST)
     env:

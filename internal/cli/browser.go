@@ -1,13 +1,17 @@
 package cli
 
 import (
-	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/brettinternet/after/internal/browser"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/gotestreport"
+	"github.com/brettinternet/after/internal/sandbox"
+	"github.com/brettinternet/after/internal/store"
 	ucli "github.com/urfave/cli/v2"
 )
 
@@ -39,25 +43,39 @@ func browseCommand(state *invocation, ctx *ucli.Context) error {
 		return err
 	}
 	selection.Project = cfg.Project
-	// Reuse the exact headless capture/import contracts, including bounded JSON
-	// output and persistence. These callbacks run only on an explicit key action.
-	job := func(args []string) browser.Job {
-		return func(jobctx context.Context) (string, error) {
-			var out, diagnostic bytes.Buffer
-			code := run(jobctx, args, &out, &diagnostic, strings.NewReader(""), false)
-			if code != ExitOK {
-				return out.String(), errors.New("headless operation failed; " + diagnostic.String())
-			}
-			return out.String(), nil
-		}
-	}
-	jobs := browser.Jobs{Capture: job([]string{"capture", "--project", cfg.Project})}
+	actions := &browser.Actions{Project: cfg.Project, Repetitions: cfg.Repetitions, Limits: sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes}, Docker: sandbox.Docker{Binary: cfg.DockerBinary, Host: cfg.DockerHost}}
+	jobs := browser.Jobs{Actions: actions}
 	if ctx.IsSet("import-file") {
-		jobs.Import = job([]string{"import", "--project", cfg.Project, "--producer", ctx.String("producer"), "--snapshot", string(selection.Pair.Candidate), "--", ctx.String("import-file")})
+		file, producer := ctx.String("import-file"), ctx.String("producer")
+		jobs.Import = func(jobctx context.Context) (string, error) {
+			if err := jobctx.Err(); err != nil {
+				return "", err
+			}
+			input, err := openInput(file)
+			if err != nil {
+				return "", err
+			}
+			defer input.Close()
+			report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, Snapshot: selection.Pair.Candidate, ImportedAt: time.Now().UTC()})
+			if err != nil {
+				return "", err
+			}
+			raw, err := json.Marshal(report)
+			if err != nil {
+				return "", err
+			}
+			s, err := actions.Store()
+			if err != nil {
+				return "", err
+			}
+			artifact, err := s.PutArtifact(raw, "report", store.MaxBlobBytes)
+			return string(artifact.Content), err
+		}
 	}
 	m := browser.New(state.ctx, selection, jobs)
 	if err := browser.Run(m, state.reader, state.stdout); err != nil {
 		return operational("terminal review failed")
 	}
-	return nil
+	_, err = fmt.Fprintln(state.stdout, string(m.SessionJSON()))
+	return err
 }

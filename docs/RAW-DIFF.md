@@ -1,10 +1,10 @@
 # Captured raw review
 
 `internal/rawdiff.Open(store, result.Base, result.Candidate)` adds the shared
-read-only review surface for AFTER-5. Use a pair returned by
-[`capture.Capture`](CAPTURE.md), not arbitrary snapshots or the working-tree
-capture's auxiliary index snapshot. CLI commands remain AFTER-10; TUI rendering
-remains AFTER-13. This is not a behavior comparator or an execution engine.
+read-only review surface. A pair returned by [`capture.Capture`](CAPTURE.md)
+shares a captured patch. Cross-capture pairs used by persistent review retain
+inventory and both captured sources, but expose no patch or complete hunk count
+when their diff identities differ. CLI and TUI use this same fallback. This is not a behavior comparator or an execution engine.
 
 ```go
 v, err := rawdiff.Open(s, captured.Base, captured.Candidate)
@@ -74,8 +74,8 @@ opening it cannot replace a frozen driver, expectation or comparison policy.
 - Strict `store.Get` still rejects missing referenced artifacts. Inventory recovery
   described above requires already available validated manifests, such as the
   capture result or an already loaded pair; this is not a damaged-store recovery
-  loader. `Open` validates record shape and shared diff identity, not producer
-  honesty or arbitrary pair provenance.
+  loader. `Open` validates record shape and requires shared diff identity before
+  exposing patch bytes, not producer honesty or arbitrary pair provenance.
 
 Page bytes, paths, hints and limits are **untrusted**, not terminal-safe strings.
 Byte windows can split Unicode or lines. CLI/TUI renderers must decode across

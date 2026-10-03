@@ -15,7 +15,10 @@ import (
 // Job persists its own engine results before returning IDs. Cancellation or a
 // stale UI completion must never erase those records. No job runs on selection.
 type Job func(context.Context) (string, error)
-type Jobs struct{ Capture, Import Job }
+type Jobs struct {
+	Capture, Import Job
+	Actions         *Actions
+}
 type loaded struct {
 	request uint64
 	data    *Data
@@ -33,6 +36,7 @@ type finished struct {
 }
 
 type Model struct {
+	loopState
 	selected                                     Selection
 	data                                         *Data
 	jobs                                         Jobs
@@ -66,11 +70,18 @@ func (m *Model) spawn(work func() tea.Msg) tea.Cmd {
 	go func() { defer m.workers.Done(); ch <- work() }()
 	return func() tea.Msg { return <-ch }
 }
-func (m *Model) Close() { m.cancel(); m.workers.Wait() }
+func (m *Model) Close() {
+	m.cancel()
+	m.workers.Wait()
+	if m.jobs.Actions != nil {
+		m.jobs.Actions.Close()
+	}
+}
 func (m *Model) Init() tea.Cmd {
 	m.loadID++
 	id := m.loadID
-	return m.spawn(func() tea.Msg { d, err := Load(m.ctx, m.selected); return loaded{id, d, err} })
+	selected := m.selected
+	return m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })
 }
 func (m *Model) rows() int { return max(m.height-5, 1) }
 func (m *Model) entries() []Entry {
@@ -89,6 +100,9 @@ func (m *Model) cursor() *int {
 	return &m.index
 }
 func (m *Model) sections() []Section {
+	if m.screen == "plan" {
+		return []Section{{Name: "exact execution preview; y approve once / n deny", Content: m.preview}}
+	}
 	if m.data == nil {
 		return nil
 	}
@@ -136,6 +150,9 @@ func (m *Model) startJob(name string, job Job) tea.Cmd {
 	return m.spawn(func() tea.Msg { result, err := job(ctx); cancel(); return finished{id, result, err} })
 }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, handled := m.updateLoop(msg); handled {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = min(max(msg.Width, 1), 240)
@@ -228,7 +245,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.offset = 0
 				return m, m.loadPage()
 			}
-			if m.screen == "patch" || m.screen == "inspector" {
+			if m.screen == "patch" || m.screen == "inspector" || m.screen == "plan" {
 				count := len(m.sections())
 				if count == 0 {
 					return m, nil
@@ -242,7 +259,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.loadPage()
 			}
 		case "]", "[":
-			if m.screen == "patch" || m.screen == "inspector" {
+			if m.screen == "patch" || m.screen == "inspector" || m.screen == "plan" {
 				next := m.offset + PageBytes
 				if msg.String() == "[" {
 					next = max(0, m.offset-PageBytes)
@@ -318,7 +335,7 @@ func window(raw string, left, width int) string {
 	return terminal.Line(string(safe[left:]), width)
 }
 
-var helpLines = []string{"Enter inspect | Esc back | d complete inventory", "Inventory: Tab raw patch; Enter captured source", "Inspector/patch: Tab/Shift+Tab section; [ ] byte page", "Up/down j/k scroll | PgUp/PgDn | Home/End", "Left/right h/l pan clipped text | ? help", "c capture | i import configured file | x cancel job", "q/Ctrl-C quit and cancel/join owned jobs", "STATE is engine metadata; data | rows are untrusted", "No execution on open. Pin/authorized rerun: headless CLI", "Evidence is finite measured inputs/channels, not safety"}
+var helpLines = []string{"Enter inspect | Esc back | d complete inventory", "Inventory: Tab raw patch; Enter captured source", "Inspector/patch: Tab/Shift+Tab section; [ ] byte page", "Up/down j/k scroll | PgUp/PgDn | Home/End", "Left/right h/l pan clipped text | ? help", "c capture | i import configured file | x cancel job", "q/Ctrl-C quit and cancel/join owned jobs", "STATE is engine metadata; data | rows are untrusted", "p pin selected measured count | c capture | a accept snapshot", "r exact preview | y approve once | n deny | x cancel", "Resume using pin revision IDs shown in session details (s)", "Evidence is finite measured inputs/channels, not safety"}
 
 func (m *Model) View() string {
 	lines := []string{terminal.Line("AFTER review | "+m.screen, m.width)}
@@ -354,7 +371,7 @@ func (m *Model) View() string {
 				data(prefix + strconv.Itoa(n+1) + " " + strconv.Quote(entries[n].Name))
 			}
 		}
-	case "inspector", "patch":
+	case "inspector", "patch", "plan":
 		sections := m.sections()
 		if len(sections) > 0 {
 			add(fmt.Sprintf("Section %d/%d | bytes %d..%d/%d | pan %d", m.section+1, len(sections), m.page.Offset, m.page.Offset+len(m.page.Bytes), m.page.Total, m.left))
@@ -364,6 +381,9 @@ func (m *Model) View() string {
 				data(m.lines[n])
 			}
 		}
+	}
+	if m.pending != nil {
+		add("New captured snapshot available; a explicitly accepts; selection unchanged")
 	}
 	add(m.status)
 	add("Enter inspect | d diff | ? help | Esc back | q quit")

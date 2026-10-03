@@ -22,7 +22,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(data.Entries) != 1 || !strings.Contains(data.Entries[0].Label, "observed | current | completed | different") {
+	if len(data.Entries) != 2 || !strings.Contains(data.Entries[0].Label, "observed | current | completed | different") {
 		t.Fatal("real evidence label", data.Entries)
 	}
 	observations := 0
@@ -116,6 +116,8 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	}
 	expect("STATE observed | current | completed | different")
 	send("\r")
+	expect("measured provider-request counts")
+	send("\t")
 	expect("receipt: producer, bindings")
 	send("\t")
 	expect("frozen scenario")
