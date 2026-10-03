@@ -168,6 +168,7 @@ type Artifact struct {
 }
 
 type Receipt struct {
+	RequestID            Digest        `json:"request_id,omitempty"`
 	SchemaVersion        int           `json:"schema_version"`
 	ID                   Digest        `json:"id"`
 	State                EvidenceState `json:"state"`

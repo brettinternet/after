@@ -109,9 +109,9 @@ Separate processes establish an independent recording path for this known
 synthetic app, **not a security boundary against a malicious candidate**. The app
 and observer still share container UID, scratch and network namespace; an
 adversarial app could attack the observer or write misleading stderr. Such output
-is not authenticated evidence. AFTER-8 must protect the frozen observer, supervise
-untrusted processes and bind complete receipts before exposing a general paired
-runner. This fixture does not create product receipts, freshness badges,
+is not authenticated evidence. The [AFTER-8 paired runner](../../docs/RUNNER.md) now protects the frozen observer
+in a separate container and persists bound receipts for this payment ABI; it does
+not turn this original single-container fixture proof into a general runner. This fixture does not create product receipts, freshness badges,
 comparisons or human acceptance decisions. Normal cancellation uses sandbox
 cleanup; abrupt host/daemon loss has the recovery limits documented there.
 

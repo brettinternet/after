@@ -80,6 +80,14 @@ tasks:
       AFTER_PAYMENT_PROOF: "1"
     cmd: go test -v -count=1 -timeout=15m ./internal/paymentfixture -run TestPaymentProof
 
+  runner:proof:
+    desc: Authorize synthetic protected paired payment runs and lifecycle probes in offline Docker
+    env:
+      AFTER_RUNNER_PROOF: "1"
+    cmds:
+      - go test -v -count=1 -timeout=15m ./internal/runner -run TestRunnerProof
+      - go test -v -count=1 -timeout=5m ./internal/sandbox -run TestObservedProof
+
   sandbox:proof:
     desc: Authorize synthetic offline Docker isolation probes (requires separately provisioned image and explicit AFTER_DOCKER_BINARY/HOST)
     env:

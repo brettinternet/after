@@ -84,6 +84,8 @@ func TestRoundTrips(t *testing.T) {
 	roundTrip(t, reported())
 	roundTrip(t, pin())
 	r := receipt()
+	r.RequestID = syntheticDigest
+	roundTrip(t, r)
 	r.State.Applicability = Stale
 	roundTrip(t, r)
 	r.State.Kind, r.State.Execution, r.State.Comparison = NoEvidence, Failed, Incomparable
@@ -95,6 +97,8 @@ func TestRejectReceipt(t *testing.T) {
 	for name, change := range map[string]func(*Receipt){
 		"version":               func(r *Receipt) { r.SchemaVersion++ },
 		"identity":              func(r *Receipt) { r.ID = "branch-name" },
+		"request":               func(r *Receipt) { r.RequestID = "mutable-selection" },
+		"import-request":        func(r *Receipt) { *r = reported(); r.RequestID = syntheticDigest },
 		"snapshot":              func(r *Receipt) { r.Snapshots.Candidate = "" },
 		"base":                  func(r *Receipt) { r.Snapshots.Base = "" },
 		"bindings":              func(r *Receipt) { r.Bindings = nil },

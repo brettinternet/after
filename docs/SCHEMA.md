@@ -3,8 +3,8 @@
 AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
 [private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
 AFTER-4 adds [Go test report cards](GO-REPORTS.md), including incomplete cards
-with report status `none`. Execution, comparison computation and review remain
-separate tasks. All test
+with report status `none`. AFTER-8 adds [frozen paired execution](RUNNER.md);
+comparison computation and review remain separate tasks. All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -57,7 +57,12 @@ explicit argv. These are actual execution identities when a runner exists, not
 permission to execute. Runner receipts, including failed/cancelled runs, require
 the entire planned binding; unavailable actual environment evidence must not be
 fabricated to make a record validate. Pre-execution planning errors need not
-produce a run receipt.
+produce a run receipt. AFTER-8 receipts add optional `request_id` (a runner-only
+digest) to bind asynchronous submission through storage. Its failed/unstarted
+samples retain the frozen plan bindings but explicitly omit actual derived image
+identities when no container was prepared; they never claim observed execution.
+Per-side/case/repetition sample artifacts record actual images, completion,
+cleanup, timestamps and separate observation/diagnostic artifact references.
 
 Artifacts contain a content digest (never an arbitrary path), channel, retained
 byte count, positive maximum byte count, completeness, redaction and truncation

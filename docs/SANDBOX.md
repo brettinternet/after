@@ -1,7 +1,8 @@
 # Offline sandbox proof
 
-AFTER-6 supplies `internal/sandbox`, not the paired runner or a public `after run`
-command. Ordinary help, inspection and `task test` never contact Docker. The
+AFTER-6 supplies `internal/sandbox`; AFTER-8 adds its protected two-container
+experiment and the [paired payment runner](RUNNER.md). Neither is wired to a
+public `after run` command yet. Ordinary help, inspection and `task test` never contact Docker. The
 [implementation contract](IMPLEMENTATION.md) still governs future execution.
 
 ## Decision and supported boundary
@@ -40,9 +41,11 @@ changing the approved inputs.
 
 Only loopback networking exists. A standard-library HTTP client/server can run
 inside this namespace; external DNS, Internet and host gateways are unavailable.
-This is not yet isolation **between** an app and a trusted observer. AFTER-8 must
-protect the observer/driver from candidate tampering rather than treating a
-candidate's self-reported output as independent evidence.
+The original single-container `Execute` is not isolation **between** an app and
+a trusted observer. AFTER-8's `Observe` additionally uses separate app/observer
+PID, IPC, filesystem and scratch namespaces, sharing only offline loopback.
+Its combined consent preview binds both plans and this topology. See the
+[runner contract](RUNNER.md) for the bounded supported ABI and evidence path.
 
 | Resource                 | Fixed bound                                                          |
 | ------------------------ | -------------------------------------------------------------------- |

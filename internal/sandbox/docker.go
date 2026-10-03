@@ -124,7 +124,11 @@ func (d Docker) preflight(ctx context.Context, config, image string) error {
 // Execute starts nothing (not even a Docker query) without matching consent.
 // Callers must obtain approval from the operator, never a repository file/report.
 // Every error is incomplete execution, not an observation of equivalent behavior.
-func (d Docker) Execute(ctx context.Context, p *Plan, approved string) (result Result, err error) {
+func (d Docker) Execute(ctx context.Context, p *Plan, approved string) (Result, error) {
+	return d.execute(ctx, p, approved, "", nil)
+}
+
+func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error) (result Result, err error) {
 	result.ExitCode = -1
 	if p == nil {
 		return result, ErrConsent
@@ -198,12 +202,20 @@ func (d Docker) Execute(ctx context.Context, p *Plan, approved string) (result R
 		return result, errors.New("invalid committed image identity")
 	}
 	args := []string{"create", "--name", name, "--label", "after.owner=" + name}
-	args = append(args, p.spec.Policy...)
+	for _, flag := range p.spec.Policy {
+		if network != "" && flag == "--network=none" {
+			flag = "--network=container:" + network
+		}
+		args = append(args, flag)
+	}
 	args = append(args, result.InputImage, "-i")
 	args = append(args, p.spec.Environment...)
 	args = append(args, p.spec.Argv...)
 	if _, err = d.query(ctx, config, nil, args...); err != nil {
 		return result, err
+	}
+	if observe != nil {
+		return d.serve(ctx, config, name, p, result, observe)
 	}
 	return d.run(ctx, config, name, p, result)
 }

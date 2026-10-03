@@ -130,6 +130,9 @@ func environment(e *Environment) bool {
 }
 
 func (r Receipt) Validate() error {
+	if r.RequestID != "" && (r.State.Producer != Runner || !digest(r.RequestID)) {
+		return errors.New("request identity requires runner and digest")
+	}
 	if err := header(r.SchemaVersion, r.ID); err != nil {
 		return err
 	}
