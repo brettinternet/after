@@ -1,0 +1,3059 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>AFTER · Rethinking the diff</title>
+    <style>
+      :root {
+        --paper: #f4f2ec;
+        --ink: #252c2b;
+        --muted: #656d68;
+        --line: #d7dad1;
+        --white: #fffef9;
+        --accent: #b8462e;
+        --accent-soft: #f9e5dc;
+        --green: #2e6454;
+        --green-soft: #e4eee5;
+        --blue: #375d80;
+        --blue-soft: #e6edf3;
+        --gold: #795a20;
+        --gold-soft: #f2ead7;
+        --serif: Georgia, "Times New Roman", serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+      body {
+        font-size: 16px;
+      }
+      button,
+      a {
+        touch-action: manipulation;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      a {
+        color: inherit;
+        text-underline-offset: 4px;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--blue);
+        outline-offset: 4px;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+      button {
+        color: inherit;
+      }
+      ::selection {
+        background: #efbdaa;
+      }
+      .topbar {
+        height: 66px;
+        position: fixed;
+        inset: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 36px;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+        z-index: 5;
+      }
+      .brand {
+        font-size: 25px;
+        font-weight: 780;
+        letter-spacing: -1.5px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand-mark {
+        display: inline-block;
+        width: 25px;
+        height: 24px;
+        position: relative;
+        background: var(--accent);
+        clip-path: polygon(0 0, 70% 0, 100% 100%, 72% 100%, 51% 29%, 29% 100%, 0 100%, 34% 0);
+      }
+      .edition {
+        font: 11px var(--mono);
+        letter-spacing: 1.4px;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .toplinks {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        font-size: 12px;
+      }
+      .toplinks a {
+        color: var(--muted);
+      }
+      .concept-label {
+        color: var(--accent);
+        font: 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .rail {
+        position: fixed;
+        top: 66px;
+        bottom: 54px;
+        left: 0;
+        width: 78px;
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        z-index: 4;
+      }
+      .rail a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 27px;
+        text-decoration: none;
+        font: 11px var(--mono);
+        color: var(--muted);
+        border-radius: 4px;
+      }
+      .rail a[aria-current="true"] {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .bottom {
+        position: fixed;
+        inset: auto 0 0;
+        height: 54px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 36px 0 106px;
+        background: var(--paper);
+        z-index: 5;
+      }
+      .bottom .caption {
+        font: 11px var(--mono);
+        color: var(--muted);
+      }
+      .bottom-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .plain {
+        border: 0;
+        background: none;
+        font-size: 12px;
+        padding: 7px 10px;
+      }
+      .navbtn {
+        width: 36px;
+        height: 30px;
+        border: 1px solid var(--line);
+        background: none;
+        border-radius: 4px;
+        font-size: 17px;
+      }
+      .progress {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: var(--accent);
+        z-index: 8;
+        transition: width 0.2s;
+      }
+      main {
+        margin: 66px 0 54px 78px;
+        height: calc(100dvh - 120px);
+      }
+      .slide {
+        min-height: 100%;
+        height: 100%;
+        max-width: 1600px;
+        margin: auto;
+        padding: 38px clamp(28px, 4.5vw, 78px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        overflow-y: auto;
+        gap: 24px;
+      }
+      .slide[hidden] {
+        display: none;
+      }
+      .eyebrow {
+        font: 11px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 1.8px;
+        color: var(--accent);
+        margin: 0 0 14px;
+      }
+      .kicker {
+        font: 11px var(--mono);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(54px, 5.4vw, 88px);
+        line-height: 1.02;
+        letter-spacing: -4px;
+        font-weight: 550;
+      }
+      h1 em,
+      h2 em {
+        font-family: var(--serif);
+        font-weight: 400;
+        color: var(--accent);
+      }
+      h2 {
+        font-size: clamp(34px, 3.5vw, 57px);
+        line-height: 1.07;
+        letter-spacing: -2px;
+        font-weight: 540;
+      }
+      h3 {
+        font-size: 19px;
+        letter-spacing: -0.35px;
+        font-weight: 620;
+      }
+      .lead {
+        font-size: clamp(16px, 1.45vw, 22px);
+        line-height: 1.55;
+        color: var(--muted);
+        max-width: 700px;
+      }
+      .small {
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .fine {
+        font: 11px/1.6 var(--mono);
+        color: var(--muted);
+      }
+      .intro {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 25px;
+      }
+      .intro .small {
+        max-width: 320px;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: clamp(32px, 6vw, 90px);
+        align-items: center;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+      .rule {
+        height: 1px;
+        background: var(--line);
+        width: 100%;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        padding: 4px 9px;
+        font: 10px var(--mono);
+        white-space: nowrap;
+      }
+      .pill.green {
+        background: var(--green-soft);
+        color: var(--green);
+        border-color: #c8d9cb;
+      }
+      .pill.orange {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-color: #e6bbae;
+      }
+      .pill.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+        border-color: #cad8e5;
+      }
+      .pill.gold {
+        background: var(--gold-soft);
+        color: var(--gold);
+        border-color: #d7cba8;
+      }
+      .pill.gray {
+        color: var(--muted);
+        background: #eeeeea;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 11px 17px;
+        font-size: 12px;
+        border: 1px solid var(--ink);
+        border-radius: 5px;
+        background: var(--ink);
+        color: var(--white);
+        text-decoration: none;
+        font-weight: 550;
+      }
+      .btn.secondary {
+        background: transparent;
+        color: var(--ink);
+        border-color: #bbc1b7;
+      }
+      .btn.accent {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .btn.smallbtn {
+        padding: 8px 12px;
+        font-size: 11px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .paper {
+        background: var(--white);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        box-shadow: 0 12px 35px #29312106;
+      }
+      .paper-head {
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .paper-body {
+        padding: 24px;
+      }
+      .hero-card {
+        transform: rotate(2deg);
+        position: relative;
+        margin-top: 22px;
+      }
+      .hero-card:before {
+        content: "";
+        position: absolute;
+        inset: 12px -10px -12px 10px;
+        border: 1px solid var(--line);
+        background: #eeece5;
+        z-index: -1;
+        border-radius: 9px;
+      }
+      .hero-card h3 {
+        font-size: 21px;
+        line-height: 1.35;
+        margin: 15px 0 26px;
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 26px 1fr;
+        gap: 16px;
+        align-items: center;
+      }
+      .comp-half {
+        border: 1px solid var(--line);
+        padding: 20px;
+        border-radius: 6px;
+      }
+      .comp-half.after {
+        background: var(--accent-soft);
+        border-color: #e9c6b9;
+      }
+      .comp-half.before {
+        background: #f1f4ee;
+      }
+      .big-number {
+        font-family: var(--serif);
+        font-size: 65px;
+        line-height: 1.1;
+        font-weight: 400;
+        margin: 7px 0;
+      }
+      .comp-arrow {
+        font-size: 25px;
+        color: var(--muted);
+      }
+      .tape {
+        font: 10px var(--mono);
+        letter-spacing: 1.2px;
+        color: var(--muted);
+        margin-top: 30px;
+        display: flex;
+        gap: 25px;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        display: inline-block;
+      }
+      .research-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 36px;
+      }
+      .research-row {
+        padding: 17px 0;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        gap: 12px;
+      }
+      .research-row .number {
+        font: 12px var(--mono);
+        color: var(--accent);
+        padding-top: 4px;
+      }
+      .research-row h3 {
+        font-size: 17px;
+        margin-bottom: 5px;
+      }
+      .research-row p {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .statement {
+        padding: 20px 24px;
+        background: var(--ink);
+        color: var(--paper);
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .statement p {
+        font-size: 20px;
+        letter-spacing: -0.35px;
+      }
+      .statement .fine {
+        color: #c4ccc4;
+      }
+      .anatomy {
+        display: grid;
+        grid-template-columns: 1.3fr 0.8fr;
+        gap: 40px;
+        align-items: center;
+      }
+      .annotations {
+        display: flex;
+        flex-direction: column;
+        gap: 23px;
+      }
+      .annotation {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 12px;
+      }
+      .annotation .num {
+        width: 23px;
+        height: 23px;
+        border: 1px solid #b8c1b6;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 10px var(--mono);
+      }
+      .annotation h3 {
+        font-size: 16px;
+        margin-bottom: 6px;
+      }
+      .annotation p {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .source-row {
+        border-top: 1px solid var(--line);
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font: 11px var(--mono);
+      }
+      .source-row span {
+        color: var(--muted);
+      }
+      .code {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.8;
+      }
+      .badge-line {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .demo-slide {
+        gap: 18px;
+        padding-top: 25px;
+        padding-bottom: 25px;
+      }
+      .demo-slide h2 {
+        font-size: 38px;
+      }
+      .workbench {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-height: 360px;
+      }
+      .wb-top {
+        background: #eceee7;
+        padding: 12px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+        gap: 12px;
+      }
+      .wb-top strong {
+        font-size: 13px;
+      }
+      .tabs {
+        display: flex;
+        gap: 3px;
+        padding: 9px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #fafaf5;
+      }
+      .tab {
+        border: 0;
+        background: none;
+        color: var(--muted);
+        font-size: 12px;
+        border-radius: 4px;
+        padding: 7px 14px;
+      }
+      .tab[aria-selected="true"] {
+        background: var(--ink);
+        color: var(--white);
+      }
+      .wb-content {
+        padding: 18px;
+        min-height: 257px;
+      }
+      .demo-pane[hidden] {
+        display: none;
+      }
+      .glance-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 23px;
+      }
+      .group-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 12px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .group-row.chosen {
+        background: #eaf0e7;
+        border: 1px solid #c2d0bb;
+        border-radius: 5px;
+      }
+      .group-row strong {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 4px;
+        font-weight: 570;
+      }
+      .group-row .sub {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .demo-card {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .demo-card h3 {
+        font-size: 18px;
+      }
+      .mini-comparison {
+        display: grid;
+        grid-template-columns: 1fr 22px 1fr;
+        gap: 12px;
+        align-items: center;
+      }
+      .mini-value {
+        font-family: var(--serif);
+        font-size: 37px;
+        line-height: 1.15;
+        margin-top: 5px;
+      }
+      .danger-text {
+        color: var(--accent);
+      }
+      .wb-status {
+        padding: 12px 18px;
+        background: #f2f3ed;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 54px;
+      }
+      .wb-status .small {
+        font-size: 11px;
+      }
+      .demo-controls {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .demo-controls .fine {
+        margin-left: auto;
+      }
+      .grid-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .grid-table th {
+        text-align: left;
+        font: 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--muted);
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .grid-table td {
+        padding: 15px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .grid-table tr:last-child td {
+        border-bottom: 0;
+      }
+      .highlight-row {
+        background: var(--accent-soft);
+      }
+      .inventory {
+        display: grid;
+        grid-template-columns: 66fr 54fr 17fr;
+        gap: 3px;
+        height: 12px;
+        border-radius: 3px;
+        overflow: hidden;
+        margin: 14px 0 10px;
+      }
+      .inventory div:nth-child(1) {
+        background: var(--green);
+      }
+      .inventory div:nth-child(2) {
+        background: #b8c2b2;
+      }
+      .inventory div:nth-child(3) {
+        background: repeating-linear-gradient(
+          120deg,
+          #ecc9a8,
+          #ecc9a8 3px,
+          #f8eee1 3px,
+          #f8eee1 7px
+        );
+      }
+      .inventory-labels {
+        display: flex;
+        justify-content: space-between;
+        font: 10px var(--mono);
+        color: var(--muted);
+        gap: 12px;
+      }
+      .boundary-layout {
+        display: grid;
+        grid-template-columns: 1fr 1.05fr;
+        gap: 40px;
+        align-items: start;
+      }
+      .scenario-choices {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 20px 0;
+      }
+      .choice {
+        background: none;
+        border: 1px solid #bcc5b8;
+        border-radius: 5px;
+        padding: 10px 13px;
+        font-size: 12px;
+      }
+      .choice[aria-pressed="true"] {
+        color: var(--white);
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .range-axis {
+        position: relative;
+        height: 132px;
+        margin-top: 25px;
+      }
+      .axis-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 70px;
+        height: 1px;
+        background: #9ba895;
+      }
+      .region {
+        position: absolute;
+        left: 19%;
+        right: 21%;
+        top: 37px;
+        height: 66px;
+        background: repeating-linear-gradient(
+          130deg,
+          #f6dfd1,
+          #f6dfd1 3px,
+          #faede3 3px,
+          #faede3 8px
+        );
+        border-left: 1px dashed var(--accent);
+        border-right: 1px dashed var(--accent);
+      }
+      .axis-point {
+        position: absolute;
+        top: 63px;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: var(--white);
+        border: 2px solid var(--green);
+      }
+      .axis-point.p1 {
+        left: 5%;
+      }
+      .axis-point.p2 {
+        left: 57%;
+        border-color: var(--accent);
+        background: var(--accent);
+      }
+      .axis-point.p3 {
+        right: 2%;
+      }
+      .axis-label {
+        position: absolute;
+        font: 10px var(--mono);
+        color: var(--muted);
+        top: 112px;
+      }
+      .axis-label.l1 {
+        left: 0;
+      }
+      .axis-label.l2 {
+        left: 54%;
+      }
+      .axis-label.l3 {
+        right: 0;
+      }
+      .threshold {
+        position: absolute;
+        top: 13px;
+        font: 10px var(--mono);
+        color: var(--accent);
+      }
+      .threshold.t1 {
+        left: 15%;
+      }
+      .threshold.t2 {
+        right: 16%;
+      }
+      .timeline {
+        display: grid;
+        grid-template-columns: 1fr 36px 1fr 36px 1fr;
+        gap: 12px;
+        align-items: center;
+      }
+      .timeline-card {
+        padding: 22px;
+        min-height: 227px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--white);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .timeline-card.current {
+        border-color: #debaaa;
+        background: #fbede4;
+      }
+      .timeline-card h3 {
+        font-size: 19px;
+        line-height: 1.3;
+      }
+      .timeline-card p {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .timeline-arrow {
+        font-size: 28px;
+        color: #8e988b;
+        text-align: center;
+      }
+      .time-label {
+        font: 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--muted);
+      }
+      .carry-row {
+        display: flex;
+        gap: 35px;
+        align-items: start;
+        padding-top: 15px;
+      }
+      .carry-row > div {
+        flex: 1;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+      .carry-row strong {
+        font-family: var(--serif);
+        font-size: 30px;
+        font-weight: 400;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .flow {
+        display: grid;
+        grid-template-columns: 1fr 50px 1fr 50px 1fr;
+        align-items: center;
+        gap: 10px;
+      }
+      .node {
+        background: var(--white);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 23px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        min-height: 159px;
+      }
+      .node.modified {
+        border: 1px solid #ddad9d;
+        background: #fbe9df;
+      }
+      .node h3 {
+        font: 15px var(--mono);
+      }
+      .edge {
+        height: 1px;
+        background: #7f9689;
+        position: relative;
+      }
+      .edge:after {
+        content: "›";
+        position: absolute;
+        right: -1px;
+        top: -13px;
+        font-size: 24px;
+        color: #7f9689;
+      }
+      .edge.dashed {
+        background: none;
+        border-top: 1px dashed #7f9689;
+      }
+      .edge-label {
+        font: 9px var(--mono);
+        color: var(--muted);
+        text-align: center;
+        margin-top: 18px;
+        white-space: nowrap;
+      }
+      .code-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-top: 10px;
+      }
+      .code-block {
+        padding: 18px 22px;
+        background: #e9ece5;
+        border-radius: 5px;
+        font: 12px/1.9 var(--mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .code-block .removed {
+        color: #8f4635;
+      }
+      .code-block .added {
+        color: #27604b;
+      }
+      .trust-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+      }
+      .trust-card {
+        background: var(--white);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 19px;
+        min-height: 150px;
+      }
+      .trust-card h3 {
+        font-size: 16px;
+        margin: 13px 0 7px;
+      }
+      .trust-card p {
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .two-doors {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .door {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--white);
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .terminal {
+        font: 13px/2 var(--mono);
+        padding: 20px;
+        background: var(--ink);
+        color: #e0e8dd;
+        border-radius: 5px;
+      }
+      .terminal .dim {
+        color: #aebdab;
+      }
+      .terminal .prompt {
+        color: #baddaf;
+      }
+      .door ol {
+        margin: 0;
+        padding-left: 19px;
+        font-size: 14px;
+        line-height: 2;
+        color: var(--muted);
+      }
+      .join-line {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        text-align: center;
+        font: 12px var(--mono);
+        color: var(--green);
+      }
+      .join-line:before,
+      .join-line:after {
+        content: "";
+        height: 1px;
+        background: #a4b59e;
+        flex: 1;
+      }
+      .build-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+      }
+      .build-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-top: 10px;
+      }
+      .build-item {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .build-item .step {
+        font: 12px var(--mono);
+        color: var(--accent);
+      }
+      .build-item h3 {
+        font-size: 16px;
+        margin-bottom: 5px;
+      }
+      .build-item p {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .no-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .no-list span {
+        font-size: 12px;
+        padding: 9px 11px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        color: var(--muted);
+      }
+      .small-diagram {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 15px;
+      }
+      .small-diagram > span {
+        font: 11px var(--mono);
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: var(--white);
+        text-align: center;
+      }
+      .wedge-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .wedge-table th {
+        font: 10px var(--mono);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .wedge-table td {
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .wedge-table td:first-child {
+        font-weight: 650;
+        white-space: nowrap;
+      }
+      .wedge-table tr:last-child {
+        background: var(--green-soft);
+      }
+      .closing {
+        display: grid;
+        grid-template-columns: 1.3fr 0.85fr;
+        gap: 65px;
+        align-items: start;
+      }
+      .closing h2 {
+        font-size: clamp(43px, 4.3vw, 70px);
+      }
+      .verdict {
+        padding: 25px;
+        background: var(--ink);
+        color: var(--paper);
+        border-radius: 7px;
+        display: flex;
+        flex-direction: column;
+        gap: 17px;
+      }
+      .verdict .small {
+        color: #c9d0c8;
+      }
+      .verdict h3 {
+        font-size: 21px;
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      .source-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 15px;
+        margin-top: 12px;
+      }
+      .source-links a {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .footer-note {
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+        font: 10px/1.7 var(--mono);
+        color: var(--muted);
+      }
+      .notes {
+        position: fixed;
+        bottom: 67px;
+        right: 28px;
+        width: min(520px, calc(100vw - 40px));
+        padding: 25px;
+        z-index: 10;
+        border: 1px solid #bac4b5;
+        border-radius: 7px;
+        background: var(--white);
+        box-shadow: 0 10px 60px #14211825;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .notes[hidden] {
+        display: none;
+      }
+      .notes h3 {
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+      .notes p {
+        color: var(--muted);
+      }
+      .notes .close {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
+      .dialog {
+        max-width: 620px;
+        width: calc(100vw - 40px);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 30px;
+        background: var(--white);
+        color: var(--ink);
+      }
+      .dialog::backdrop {
+        background: #14201b66;
+      }
+      .dialog h3 {
+        font-size: 24px;
+        margin-bottom: 14px;
+      }
+      .dialog p {
+        font-size: 14px;
+        line-height: 1.65;
+        color: var(--muted);
+        margin-bottom: 15px;
+      }
+      .dialog .grid-table {
+        margin-bottom: 20px;
+      }
+      .sr-only {
+        position: absolute;
+        left: -10000px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
+      .mobile-hint {
+        display: none;
+      }
+      @media (min-width: 1500px) {
+        .slide {
+          gap: 30px;
+        }
+        .workbench {
+          min-height: 430px;
+        }
+        .wb-content {
+          min-height: 307px;
+        }
+        .group-row {
+          padding: 17px 13px;
+        }
+        .demo-card {
+          padding: 25px;
+          gap: 18px;
+        }
+        .mini-value {
+          font-size: 43px;
+        }
+      }
+      @media (max-height: 790px) and (min-width: 901px) {
+        .slide {
+          padding-top: 22px;
+          padding-bottom: 22px;
+          gap: 18px;
+        }
+        h1 {
+          font-size: 68px;
+        }
+        h2 {
+          font-size: 42px;
+        }
+        .hero-card .paper-body {
+          padding: 20px;
+        }
+        .research-row {
+          padding: 12px 0;
+        }
+        .trust-card {
+          min-height: 136px;
+          padding: 15px;
+        }
+        .workbench {
+          min-height: 330px;
+        }
+        .wb-content {
+          min-height: 227px;
+          padding: 14px;
+        }
+        .demo-card {
+          gap: 9px;
+          padding: 15px;
+        }
+        .group-row {
+          padding: 10px;
+        }
+        .demo-slide h2 {
+          font-size: 34px;
+        }
+        .timeline-card {
+          min-height: 213px;
+        }
+        .closing h2 {
+          font-size: 56px;
+        }
+        .big-number {
+          font-size: 55px;
+        }
+      }
+      @media (max-width: 1000px) {
+        .rail {
+          width: 52px;
+        }
+        .bottom {
+          padding-left: 73px;
+        }
+        .slide {
+          padding-left: 30px;
+          padding-right: 30px;
+        }
+        main {
+          margin-left: 52px;
+        }
+        .topbar {
+          padding: 0 24px;
+        }
+        .split {
+          gap: 30px;
+        }
+        h1 {
+          font-size: 61px;
+          letter-spacing: -3px;
+        }
+        .boundary-layout,
+        .closing {
+          gap: 28px;
+        }
+        .edition {
+          display: none;
+        }
+        .flow {
+          gap: 5px;
+          grid-template-columns: 1fr 25px 1fr 25px 1fr;
+        }
+        .node {
+          padding: 18px 13px;
+        }
+        .node h3 {
+          font-size: 12px;
+        }
+        .timeline {
+          gap: 6px;
+          grid-template-columns: 1fr 22px 1fr 22px 1fr;
+        }
+        .timeline-card {
+          padding: 17px;
+        }
+        .intro .small {
+          max-width: 260px;
+        }
+        .wb-top .fine {
+          font-size: 9px;
+        }
+      }
+      @media (max-width: 760px) {
+        .topbar {
+          height: 58px;
+          padding: 0 18px;
+        }
+        .toplinks {
+          gap: 12px;
+        }
+        .toplinks a {
+          display: none;
+        }
+        .concept-label {
+          font-size: 9px;
+        }
+        .rail {
+          display: none;
+        }
+        main {
+          height: auto;
+          margin: 58px 0 65px;
+        }
+        .slide {
+          height: auto;
+          min-height: calc(100dvh - 123px);
+          overflow: visible;
+          padding: 30px 22px;
+          gap: 24px;
+        }
+        .bottom {
+          height: 65px;
+          padding: 0 15px;
+        }
+        .bottom .caption {
+          max-width: 145px;
+          line-height: 1.5;
+          font-size: 10px;
+        }
+        .bottom-actions {
+          gap: 4px;
+        }
+        .bottom .plain {
+          font-size: 11px;
+          padding: 6px;
+        }
+        .split,
+        .anatomy,
+        .boundary-layout,
+        .closing,
+        .build-grid,
+        .two-doors,
+        .code-panel {
+          grid-template-columns: 1fr;
+          gap: 26px;
+        }
+        h1 {
+          font-size: 57px;
+        }
+        h2 {
+          font-size: 38px;
+        }
+        .hero-card {
+          transform: none;
+          margin-top: 0;
+        }
+        .hero-card:before {
+          display: none;
+        }
+        .intro {
+          display: block;
+        }
+        .intro .small {
+          margin-top: 14px;
+          max-width: none;
+        }
+        .lead {
+          font-size: 17px;
+        }
+        .research-grid {
+          grid-template-columns: 1fr;
+        }
+        .research-row {
+          padding: 12px 0;
+        }
+        .statement {
+          display: block;
+        }
+        .statement .fine {
+          margin-top: 12px;
+        }
+        .statement p {
+          font-size: 18px;
+        }
+        .annotations {
+          gap: 16px;
+        }
+        .glance-grid {
+          grid-template-columns: 1fr;
+          gap: 15px;
+        }
+        .wb-top {
+          align-items: start;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .tabs {
+          padding: 8px;
+          gap: 0;
+        }
+        .tab {
+          padding: 7px 10px;
+          font-size: 11px;
+        }
+        .wb-content {
+          padding: 13px;
+        }
+        .wb-status {
+          align-items: start;
+          flex-direction: column;
+        }
+        .demo-controls .fine {
+          margin-left: 0;
+        }
+        .demo-controls .btn {
+          padding: 9px 11px;
+        }
+        .grid-table {
+          font-size: 11px;
+        }
+        .grid-table th {
+          font-size: 9px;
+          padding: 9px 6px;
+        }
+        .grid-table td {
+          padding: 11px 6px;
+        }
+        .pill {
+          font-size: 9px;
+          padding: 4px 7px;
+        }
+        .timeline {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        .timeline-arrow {
+          transform: rotate(90deg);
+          font-size: 20px;
+        }
+        .timeline-card {
+          min-height: 0;
+          padding: 20px;
+        }
+        .carry-row {
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+        .carry-row > div {
+          min-width: 135px;
+        }
+        .flow {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        .edge-wrap {
+          height: 30px;
+          width: 80px;
+          margin: auto;
+          transform: rotate(90deg);
+        }
+        .edge-label {
+          display: none;
+        }
+        .node {
+          min-height: 120px;
+          padding: 22px;
+        }
+        .node h3 {
+          font-size: 15px;
+        }
+        .trust-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .trust-card {
+          padding: 14px;
+          min-height: 150px;
+        }
+        .trust-card h3 {
+          font-size: 14px;
+        }
+        .wedge-table td {
+          padding: 12px 7px;
+          font-size: 11px;
+        }
+        .wedge-table th {
+          padding: 8px 7px;
+          font-size: 9px;
+        }
+        .wedge-table td:first-child {
+          white-space: normal;
+        }
+        .closing h2 {
+          font-size: 46px;
+        }
+        .small-diagram {
+          gap: 4px;
+        }
+        .small-diagram > span {
+          padding: 11px;
+          font-size: 10px;
+        }
+        .source-links {
+          gap: 10px 14px;
+        }
+        .inventory-labels {
+          font-size: 9px;
+          flex-wrap: wrap;
+        }
+        .tape {
+          gap: 18px;
+          font-size: 9px;
+        }
+        .notes {
+          right: 15px;
+          bottom: 76px;
+        }
+        .mobile-hint {
+          display: block;
+        }
+        .paper-body {
+          padding: 20px;
+        }
+        .comp-half {
+          padding: 16px;
+        }
+        .big-number {
+          font-size: 55px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      @page {
+        size: 16in 9in;
+        margin: 0;
+      }
+      @media print {
+        html,
+        body {
+          width: 16in;
+          background: var(--paper);
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
+        body {
+          font-size: 16px;
+        }
+        .topbar,
+        .rail,
+        .bottom,
+        .progress,
+        .notes,
+        .dialog,
+        .demo-controls,
+        .print-hide,
+        .sr-only {
+          display: none !important;
+        }
+        main {
+          margin: 0;
+          height: auto;
+        }
+        .slide,
+        .slide[hidden] {
+          display: flex !important;
+          width: 16in;
+          max-width: none;
+          height: 9in;
+          min-height: 9in;
+          padding: 48px 70px;
+          overflow: hidden;
+          break-after: page;
+          page-break-after: always;
+          gap: 28px;
+          position: relative;
+        }
+        .slide:last-child {
+          break-after: auto;
+          page-break-after: auto;
+        }
+        .slide:after {
+          content: attr(data-number)
+            " / 12     ·     AFTER · PRODUCT CONCEPT · ALL DEMO DATA SIMULATED";
+          position: absolute;
+          bottom: 20px;
+          left: 70px;
+          font: 10px var(--mono);
+          color: var(--muted);
+        }
+        h1 {
+          font-size: 83px;
+        }
+        h2 {
+          font-size: 55px;
+        }
+        .lead {
+          font-size: 21px;
+        }
+        .split {
+          gap: 80px;
+        }
+        .workbench {
+          min-height: 400px;
+        }
+        .wb-content {
+          min-height: 285px;
+        }
+        .demo-slide h2 {
+          font-size: 46px;
+        }
+        .demo-pane[hidden] {
+          display: none !important;
+        }
+        .closing h2 {
+          font-size: 68px;
+        }
+        .btn {
+          color: var(--ink);
+          background: transparent;
+        }
+        .choice[aria-pressed="true"] {
+          background: var(--ink);
+          color: var(--white);
+        }
+        .hero-card {
+          transform: rotate(2deg);
+        }
+        .trust-card {
+          min-height: 150px;
+        }
+        .research-row {
+          padding: 17px 0;
+        }
+        .timeline-card {
+          min-height: 227px;
+        }
+        .footer-note {
+          font-size: 11px;
+        }
+        a {
+          text-decoration: none;
+        }
+        .print-only {
+          display: block !important;
+        }
+      }
+      .print-only {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>after<span
+          class="edition"
+          style="margin-left: 22px"
+          >Field notes / 001</span
+        >
+      </div>
+      <div class="toplinks">
+        <span class="concept-label">Product concept · simulated data</span
+        ><a href="README.md">Full proposal ↗</a
+        ><a href="behavior-and-evidence.md">How it works ↗</a
+        ><a href="research.md">Research ↗</a>
+      </div>
+    </header>
+    <nav class="rail" aria-label="Slides">
+      <a href="#1" aria-label="Slide 1, The idea">01</a
+      ><a href="#2" aria-label="Slide 2, The landscape">02</a
+      ><a href="#3" aria-label="Slide 3, The new review object">03</a
+      ><a href="#4" aria-label="Slide 4, Interactive prototype">04</a
+      ><a href="#5" aria-label="Slide 5, Explore the boundary">05</a
+      ><a href="#6" aria-label="Slide 6, Review memory">06</a
+      ><a href="#7" aria-label="Slide 7, Follow the cause">07</a
+      ><a href="#8" aria-label="Slide 8, Evidence and limits">08</a
+      ><a href="#9" aria-label="Slide 9, Local and GitHub">09</a
+      ><a href="#10" aria-label="Slide 10, The first product">10</a
+      ><a href="#11" aria-label="Slide 11, The wedge">11</a
+      ><a href="#12" aria-label="Slide 12, The recommendation">12</a>
+    </nav>
+    <main id="deck">
+      <section
+        class="slide"
+        id="slide-1"
+        data-number="01"
+        data-title="The idea"
+        data-note="The proposal is an example-first diff browser, not an automatic safety verdict. The presentation uses invented payment-service fixtures. The distinctive hypothesis is the whole interaction: browse a concrete contrast, pin a specific expectation, and return to it when its supporting state changes. AFTER is a working name, not a cleared brand."
+      >
+        <div class="split">
+          <div class="stack">
+            <p class="eyebrow">Rethinking the diff</p>
+            <h1>See what the code will do <em>differently.</em></h1>
+            <p class="lead">
+              A local tool for the moment your agent finishes.<br />And the next time it finishes.
+            </p>
+            <div class="actions">
+              <a class="btn accent" href="#4"
+                >Try the interaction <span aria-hidden="true">↗</span></a
+              ><a class="plain" href="#2">Start with the research →</a>
+            </div>
+            <div class="tape"><span>LOCAL GIT + GITHUB</span><span>EXAMPLES, THEN CODE</span></div>
+          </div>
+          <div class="paper hero-card">
+            <div class="paper-head">
+              <span class="kicker">A consequence, not a file</span
+              ><span class="pill orange">Reopened</span>
+            </div>
+            <div class="paper-body">
+              <span class="fine">SAME PAYMENT KEY · RETRY AFTER 12 HOURS</span>
+              <h3>A tiny retention edit.<br />A second charge.</h3>
+              <div class="comparison">
+                <div class="comp-half before">
+                  <span class="kicker">Reviewed</span>
+                  <div class="big-number">1</div>
+                  <span class="small">charge</span>
+                </div>
+                <span class="comp-arrow">→</span>
+                <div class="comp-half after">
+                  <span class="kicker">Latest</span>
+                  <div class="big-number danger-text">2</div>
+                  <span class="small">charges</span>
+                </div>
+              </div>
+            </div>
+            <div class="source-row">
+              <span>Observed in one fixture</span><span>Inspect input + code ↗</span>
+            </div>
+          </div>
+        </div>
+        <p class="fine">
+          A researched product proposal. Not an implemented verifier. All examples in this deck are
+          simulated.
+        </p>
+      </section>
+      <section
+        class="slide"
+        id="slide-2"
+        data-number="02"
+        data-title="The landscape"
+        data-note="Sixteen primary sources were inspected. These are documentation-based comparisons, not installed-product evaluations. The obvious feature ideas already exist, including evidence freshness. Critique and Proof are especially strong prior art for that model. Limn is particularly close to the local review experience. Sources and limitations are in research.md."
+      >
+        <div class="intro">
+          <div>
+            <p class="eyebrow">01 / What already exists</p>
+            <h2>The obvious ideas<br />are <em>already here.</em></h2>
+          </div>
+          <p class="small">
+            Keep the strengths of modern review tools. Do not mistake a new arrangement of familiar
+            features for an invention.
+          </p>
+        </div>
+        <div class="research-grid">
+          <div class="research-row">
+            <span class="number">01</span>
+            <div>
+              <h3>Explain the change</h3>
+              <p>Linear Guides · Graphite Code Tours · CodeRabbit Change Stack</p>
+            </div>
+          </div>
+          <div class="research-row">
+            <span class="number">02</span>
+            <div>
+              <h3>Organize local agent work</h3>
+              <p>hunk-guide · Limn · Differential · Agent Diff Visualizer</p>
+            </div>
+          </div>
+          <div class="research-row">
+            <span class="number">03</span>
+            <div>
+              <h3>Reduce noise, map the flow</h3>
+              <p>SemanticDiff · Diffcore</p>
+            </div>
+          </div>
+          <div class="research-row">
+            <span class="number">04</span>
+            <div>
+              <h3>Preserve how it happened</h3>
+              <p>Entire Checkpoints</p>
+            </div>
+          </div>
+          <div class="research-row">
+            <span class="number">05</span>
+            <div>
+              <h3>Compare real behavior</h3>
+              <p>HyperTest · ReGrade · decades of differential verification</p>
+            </div>
+          </div>
+          <div class="research-row">
+            <span class="number">06</span>
+            <div>
+              <h3>Bind evidence, withdraw stale conclusions</h3>
+              <p>Critique · Proof · Semctx</p>
+            </div>
+          </div>
+        </div>
+        <div class="statement">
+          <p>The opening is a better <em>human interaction.</em></p>
+          <span class="fine">Not another summary.<br />Not another agent verdict.</span>
+        </div>
+      </section>
+      <section
+        class="slide"
+        id="slide-3"
+        data-number="03"
+        data-title="The review object"
+        data-note="The card is a bounded comparison. Observed means a captured run for these exact inputs and snapshot, not a universal behavior claim. Pins default to the specific example, not a broad inferred requirement. The evidence record and the human decision are independent. Runtime examples are optional: structural facts and conventional code remain usable."
+      >
+        <div>
+          <p class="eyebrow">02 / A different unit of review</p>
+          <h2>One condition.<br /><em>Two outcomes.</em> A way to inspect.</h2>
+        </div>
+        <div class="anatomy">
+          <div class="paper">
+            <div class="paper-head">
+              <span class="kicker">Duplicate-payment protection</span
+              ><span class="pill green">Observed · fixture</span>
+            </div>
+            <div class="paper-body stack">
+              <div>
+                <span class="fine">INPUT</span>
+                <h3 style="margin-top: 9px">Key pay_123 · retry delay 12h</h3>
+              </div>
+              <div class="comparison">
+                <div class="comp-half before">
+                  <span class="kicker">Reviewed v1</span>
+                  <div class="big-number">1</div>
+                  <span class="small">charge recorded</span>
+                </div>
+                <span class="comp-arrow">→</span>
+                <div class="comp-half after">
+                  <span class="kicker">Candidate v2</span>
+                  <div class="big-number danger-text">2</div>
+                  <span class="small">charges recorded</span>
+                </div>
+              </div>
+              <p class="small">
+                Limit of this observation<br /><strong
+                  >Sequential requests. Concurrency not tested.</strong
+                >
+              </p>
+            </div>
+            <div class="source-row">
+              <span>Input · outputs · environment · source</span><strong>Pin expectation ◇</strong>
+            </div>
+          </div>
+          <div class="annotations">
+            <div class="annotation">
+              <span class="num">1</span>
+              <div>
+                <h3>Understand the difference</h3>
+                <p>An example is more specific than “improves retry handling.”</p>
+              </div>
+            </div>
+            <div class="annotation">
+              <span class="num">2</span>
+              <div>
+                <h3>Know why to believe it</h3>
+                <p>Keep the observation, its provenance, and its limits together.</p>
+              </div>
+            </div>
+            <div class="annotation">
+              <span class="num">3</span>
+              <div>
+                <h3>Keep the implementation close</h3>
+                <p>Exact hunks and relevant unchanged code stay one action away.</p>
+              </div>
+            </div>
+            <div class="annotation">
+              <span class="num">4</span>
+              <div>
+                <h3>Remember what matters</h3>
+                <p>
+                  Pin “one charge for this example.” A broader guarantee needs broader evidence.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section
+        class="slide demo-slide"
+        id="slide-4"
+        data-number="04"
+        data-title="Try the prototype"
+        data-note="Use the three controls below the prototype in order. Pin saves a simulated expectation. Simulate agent edit reopens it but does not invent a new result. Simulate paired run supplies an illustrative new observation. The tabs show four views of the same example. The inventory dialog makes the unmapped remainder visible. This HTML runs no repository code and makes no network requests."
+      >
+        <div class="intro">
+          <div>
+            <p class="eyebrow">03 / Interactive concept</p>
+            <h2>Glance. Inspect. <em>Keep your place.</em></h2>
+          </div>
+          <p class="small">
+            Try the three steps below.<br />No commands run. No repository is read.
+          </p>
+        </div>
+        <div class="paper workbench">
+          <div class="wb-top">
+            <strong
+              >after
+              <span style="font-weight: 400; color: var(--muted)"
+                >/ payments / resilient-retries</span
+              ></strong
+            ><span class="fine" id="snapshot-label">Inspected v1 → latest v1 · demo</span>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Review lens">
+            <button
+              class="tab"
+              id="tab-glance"
+              role="tab"
+              aria-selected="true"
+              aria-controls="pane-glance"
+              data-tab="glance"
+            >
+              Contact sheet</button
+            ><button
+              class="tab"
+              id="tab-outcomes"
+              role="tab"
+              aria-selected="false"
+              aria-controls="pane-outcomes"
+              tabindex="-1"
+              data-tab="outcomes"
+            >
+              Examples</button
+            ><button
+              class="tab"
+              id="tab-cause"
+              role="tab"
+              aria-selected="false"
+              aria-controls="pane-cause"
+              tabindex="-1"
+              data-tab="cause"
+            >
+              Source</button
+            ><button
+              class="tab"
+              id="tab-memory"
+              role="tab"
+              aria-selected="false"
+              aria-controls="pane-memory"
+              tabindex="-1"
+              data-tab="memory"
+            >
+              Review memory
+            </button>
+          </div>
+          <div class="wb-content">
+            <div class="demo-pane" id="pane-glance" role="tabpanel" aria-labelledby="tab-glance">
+              <div class="glance-grid">
+                <div>
+                  <p class="fine" style="margin-bottom: 10px">
+                    3 SAMPLE GROUPS OF 8 · NOT A COMPLETENESS CLAIM
+                  </p>
+                  <div class="group-row chosen">
+                    <div>
+                      <strong>Duplicate-payment protection</strong
+                      ><span class="sub" id="group-status">One captured example agrees</span>
+                    </div>
+                    <span class="pill green" id="group-badge">Observed</span>
+                  </div>
+                  <div class="group-row">
+                    <div>
+                      <strong>Timeout recovery</strong
+                      ><span class="sub">Error → retry with a safe key</span>
+                    </div>
+                    <span class="pill green">Observed</span>
+                  </div>
+                  <div class="group-row">
+                    <div>
+                      <strong>Out-of-order webhooks</strong
+                      ><span class="sub">No paired result available</span>
+                    </div>
+                    <span class="pill gold">Not checked</span>
+                  </div>
+                </div>
+                <div class="demo-card">
+                  <div class="badge-line">
+                    <span class="pill gray" id="pin-badge">Not pinned</span
+                    ><span class="fine">SAME KEY · RETRY AFTER 12H</span>
+                  </div>
+                  <h3 id="demo-title">This example still produces one charge.</h3>
+                  <div class="mini-comparison">
+                    <div>
+                      <span class="fine">INSPECTED v1</span>
+                      <div class="mini-value">1 charge</div>
+                    </div>
+                    <span class="comp-arrow">→</span>
+                    <div>
+                      <span class="fine" id="candidate-version">LATEST v1</span>
+                      <div class="mini-value" id="latest-value">1 charge</div>
+                    </div>
+                  </div>
+                  <p class="fine" id="evidence-caption">
+                    Captured fixture · sequential requests only
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              class="demo-pane"
+              id="pane-outcomes"
+              role="tabpanel"
+              aria-labelledby="tab-outcomes"
+              hidden
+            >
+              <table class="grid-table">
+                <thead>
+                  <tr>
+                    <th>Same key, retry after</th>
+                    <th>Inspected v1</th>
+                    <th>Latest candidate</th>
+                    <th>Current evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>30 seconds</td>
+                    <td>1 charge</td>
+                    <td id="row-fast">1 charge</td>
+                    <td class="current-evidence">Observed</td>
+                  </tr>
+                  <tr id="row-delayed">
+                    <td><strong>12 hours · selected pin</strong></td>
+                    <td>1 charge</td>
+                    <td id="row-mid">1 charge</td>
+                    <td class="current-evidence">Observed</td>
+                  </tr>
+                  <tr>
+                    <td>48 hours</td>
+                    <td>2 charges</td>
+                    <td id="row-expired">2 charges</td>
+                    <td class="current-evidence">Observed</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="fine" style="margin-top: 14px">
+                A changed dependency makes all three old results stale. Only the selected 12h case
+                is rerun in this demo.
+              </p>
+            </div>
+            <div
+              class="demo-pane"
+              id="pane-cause"
+              role="tabpanel"
+              aria-labelledby="tab-cause"
+              hidden
+            >
+              <div class="code-panel">
+                <div>
+                  <span class="kicker">config/payments.ts · exact value comparison</span>
+                  <pre class="code-block" id="source-diff">
+  export const KEY_RETENTION = hours(24);
+
+  // No newer candidate captured.</pre>
+                </div>
+                <div class="stack" style="gap: 15px">
+                  <span class="pill blue" style="align-self: start"
+                    >Static dependency · not an execution trace</span
+                  >
+                  <h3>Payment worker → key store → retention</h3>
+                  <p class="small">
+                    The worker is unchanged. Its behavior can still change when the key expires
+                    earlier.
+                  </p>
+                  <p class="fine" id="source-caption">
+                    No dependency edit since the inspected snapshot.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div
+              class="demo-pane"
+              id="pane-memory"
+              role="tabpanel"
+              aria-labelledby="tab-memory"
+              hidden
+            >
+              <div class="glance-grid">
+                <div class="stack" style="gap: 15px">
+                  <span class="kicker">Your selected expectation</span>
+                  <h3>One charge for pay_123 retried after 12h.</h3>
+                  <p class="small">
+                    Known footprint<br /><span class="code"
+                      >retry.ts · key-store.ts · payments.ts<br />fixture · runtime · dependency
+                      lock</span
+                    >
+                  </p>
+                  <p class="fine">
+                    Footprint is illustrative. Missing dependency knowledge must not retain a fresh
+                    badge.
+                  </p>
+                </div>
+                <div class="demo-card">
+                  <span class="pill gray" id="memory-badge" style="align-self: start"
+                    >No receipt yet</span
+                  >
+                  <h3 id="memory-title">Pin the example to start.</h3>
+                  <p class="small" id="memory-description">
+                    A pin records your expectation and the evidence you inspected. It does not
+                    approve the entire PR.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wb-status">
+            <p class="small" id="demo-status" aria-live="polite">
+              Start by pinning the 12-hour example.
+            </p>
+            <button class="plain" id="inventory-open">17 unclassified hunks ↗</button>
+          </div>
+        </div>
+        <div class="demo-controls">
+          <button class="btn smallbtn" id="pin-btn">1 · Pin expectation</button
+          ><button class="btn secondary smallbtn" id="edit-btn" disabled>
+            2 · Simulate agent edit</button
+          ><button class="btn secondary smallbtn" id="run-btn" disabled>
+            3 · Simulate paired run</button
+          ><button class="plain" id="reset-btn">Reset</button
+          ><span class="fine">All state stays in this page.</span>
+        </div>
+        <p class="print-only fine">
+          Interactive HTML sequence: pin the example → simulate a retention edit → see evidence
+          become stale → simulate a paired run → inspect the new result.
+        </p>
+      </section>
+      <section
+        class="slide"
+        id="slide-5"
+        data-number="05"
+        data-title="Explore the boundary"
+        data-note="This is a second, fixed illustrative dataset comparing v1 and v2 after three sample captures. It is independent of the previous slide's simulation. Select 30 seconds, 12 hours, or 48 hours. The two-hour point was not run, so no output is invented. The shaded interval is an inferred boundary, not a claim that all points were executed or verified."
+      >
+        <div>
+          <p class="eyebrow">04 / The interaction worth inventing</p>
+          <h2>Find the edge<br />where behavior <em>changes.</em></h2>
+        </div>
+        <div class="boundary-layout">
+          <div class="stack" style="gap: 14px">
+            <p class="lead">Browse the conditions, not just the files.</p>
+            <p class="small">
+              Fixed demo dataset · reviewed v1 versus candidate v2.<br />Same key. Same payment.
+              Change only the retry delay.
+            </p>
+            <div class="scenario-choices" aria-label="Retry delay">
+              <button class="choice" data-delay="fast" aria-pressed="false">30 seconds</button
+              ><button class="choice" data-delay="middle" aria-pressed="true">12 hours</button
+              ><button class="choice" data-delay="expired" aria-pressed="false">48 hours</button
+              ><button class="choice" data-delay="unknown" aria-pressed="false">
+                2 hours · not run
+              </button>
+            </div>
+            <div
+              class="range-axis"
+              aria-label="Inferred divergence between five minutes and twenty-four hours. Observed sample points at thirty seconds, twelve hours, and forty-eight hours. Not to scale."
+            >
+              <div class="region"></div>
+              <div class="axis-line"></div>
+              <span class="threshold t1">5 min</span><span class="threshold t2">24 hours</span
+              ><span class="axis-point p1"></span><span class="axis-point p2"></span
+              ><span class="axis-point p3"></span><span class="axis-label l1">30 sec</span
+              ><span class="axis-label l2">12h</span><span class="axis-label l3">48h</span>
+            </div>
+            <p class="fine">
+              ● Captured points &nbsp; ▨ Inferred interval<br />Not to scale. Concurrency and clock
+              skew not tested.
+            </p>
+          </div>
+          <div class="paper">
+            <div class="paper-head">
+              <span class="kicker" id="boundary-condition">Retry after 12 hours</span
+              ><span class="pill green" id="boundary-badge">Observed example</span>
+            </div>
+            <div class="paper-body stack">
+              <div class="comparison">
+                <div class="comp-half before">
+                  <span class="kicker">Reviewed v1</span>
+                  <div class="big-number" id="boundary-before">1</div>
+                  <span class="small">charge count</span>
+                </div>
+                <span class="comp-arrow">→</span>
+                <div class="comp-half after">
+                  <span class="kicker">Candidate v2</span>
+                  <div class="big-number danger-text" id="boundary-after">2</div>
+                  <span class="small">charge count</span>
+                </div>
+              </div>
+              <p class="small" id="boundary-description" aria-live="polite">
+                The older key still exists in v1. In v2 it has expired. This selected input produces
+                a different result.
+              </p>
+              <a href="#7" class="btn secondary" style="align-self: start"
+                >Follow into the code →</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+      <section
+        class="slide"
+        id="slide-6"
+        data-number="06"
+        data-title="Review memory"
+        data-note="Invalidation is not verification. First reopen an expectation when its known basis changes; only a new execution can establish a new observed result. Other receipts can retain their historical reviewed state when the known footprint is unchanged, but incomplete dependency information must conservatively reopen them or show freshness unknown. This mechanism has prior art in Critique and Proof."
+      >
+        <div>
+          <p class="eyebrow">05 / Review the next iteration</p>
+          <h2>Your attention should<br /><em>accumulate.</em> Not reset.</h2>
+        </div>
+        <div class="timeline">
+          <div class="timeline-card">
+            <span class="time-label">First inspection</span
+            ><span class="pill green" style="align-self: start">Pinned</span>
+            <h3>One charge<br />after twelve hours.</h3>
+            <p>You keep the example, its captured result, and its known dependencies.</p>
+          </div>
+          <div class="timeline-arrow">→</div>
+          <div class="timeline-card current">
+            <span class="time-label">Agent edits again</span
+            ><span class="pill orange" style="align-self: start">Needs another look</span>
+            <h3>Retention changes.<br />The worker does not.</h3>
+            <p>
+              The pin reopens because a supporting setting changed. New output is still unknown.
+            </p>
+          </div>
+          <div class="timeline-arrow">→</div>
+          <div class="timeline-card">
+            <span class="time-label">Selected example reruns</span
+            ><span class="pill orange" style="align-self: start">Observation differs</span>
+            <h3>Two charges.<br />One concrete decision.</h3>
+            <p>
+              Inspect the cause. Decide whether this behavior is acceptable. Keep the original
+              evidence.
+            </p>
+          </div>
+        </div>
+        <div class="carry-row">
+          <div>
+            <strong>Keep</strong>
+            <p class="small">History and decisions with unchanged known footprints.</p>
+          </div>
+          <div>
+            <strong>Reopen</strong>
+            <p class="small">Expectations whose code, inputs, tools, or environment moved.</p>
+          </div>
+          <div>
+            <strong>Say unknown</strong>
+            <p class="small">When the dependency inventory is incomplete.</p>
+          </div>
+        </div>
+      </section>
+      <section
+        class="slide"
+        id="slide-7"
+        data-number="07"
+        data-title="Follow the cause"
+        data-note="The solid edge in this conceptual path is a recorded call in the sample trace; the dashed edge is a statically inspected configuration relationship. Neither a graph nor a single changed output proves a full causal explanation. Labels must separate measured execution, source inspection, and hypotheses. The ordinary diff remains available with all changes, including those outside the selected path."
+      >
+        <div class="intro">
+          <div>
+            <p class="eyebrow">06 / The code is still the ground truth</p>
+            <h2>The important line may be<br />in <em>unchanged code.</em></h2>
+          </div>
+          <p class="small">
+            Start from an example. Expand a short path.<br />No whole-repository graph required.
+          </p>
+        </div>
+        <div class="flow">
+          <div class="node">
+            <span class="pill gray" style="align-self: start">Unchanged</span>
+            <h3>retry-worker.ts</h3>
+            <p class="small">Submits the same key again.</p>
+          </div>
+          <div class="edge-wrap">
+            <div class="edge"></div>
+            <div class="edge-label">trace</div>
+          </div>
+          <div class="node">
+            <span class="pill gray" style="align-self: start">Unchanged</span>
+            <h3>key-store.ts</h3>
+            <p class="small">An expired key is absent.</p>
+          </div>
+          <div class="edge-wrap">
+            <div class="edge dashed"></div>
+            <div class="edge-label">static</div>
+          </div>
+          <div class="node modified">
+            <span class="pill orange" style="align-self: start">Changed</span>
+            <h3>payments.ts</h3>
+            <p class="small">Retention<br /><strong>24 hours → 5 minutes</strong></p>
+          </div>
+        </div>
+        <div class="code-panel">
+          <div>
+            <p class="kicker" style="margin-bottom: 12px">The visible edit</p>
+            <div class="code-block">
+              <span class="removed">− KEY_RETENTION = hours(24)</span><br /><span class="added"
+                >+ KEY_RETENTION = minutes(5)</span
+              >
+            </div>
+          </div>
+          <div class="stack" style="gap: 12px">
+            <p class="kicker">The review question</p>
+            <h3 style="line-height: 1.5">
+              Should the twelve-hour retry still reuse the first charge?
+            </h3>
+            <p class="small">
+              The example makes the consequence concrete.<br />The reviewer still decides the
+              intended behavior.
+            </p>
+          </div>
+        </div>
+        <p class="fine">
+          Illustrative trace + static relationship. Inspect provenance before accepting a causal
+          explanation.
+        </p>
+      </section>
+      <section
+        class="slide"
+        id="slide-8"
+        data-number="08"
+        data-title="Evidence and limits"
+        data-note="These labels describe evidence, not a universal confidence ladder. Observed executions are bounded by inputs and environment. Structural facts are bounded by the analyzer. An author's statement remains a claim. Freshness and human acceptance are separate dimensions. The inventory partitions hunks exactly once even if several cards reference a hunk. Representation does not imply complete understanding."
+      >
+        <div class="intro">
+          <div>
+            <p class="eyebrow">07 / Make the limits visible</p>
+            <h2>No magic <em>green check.</em></h2>
+          </div>
+          <p class="small">
+            A readable story is not proof.<br />A passing example is not approval.
+          </p>
+        </div>
+        <div class="trust-grid">
+          <div class="trust-card">
+            <span class="pill green">Observed</span>
+            <h3>It ran for these inputs.</h3>
+            <p>Keep outputs, environment, and snapshot. Do not generalize to all cases.</p>
+          </div>
+          <div class="trust-card">
+            <span class="pill blue">Structural</span>
+            <h3>A bounded fact.</h3>
+            <p>A value changed. An export disappeared. Runtime equivalence is not implied.</p>
+          </div>
+          <div class="trust-card">
+            <span class="pill gold">Inferred</span>
+            <h3>A prediction to inspect.</h3>
+            <p>A model or heuristic expects this result. No run is implied.</p>
+          </div>
+          <div class="trust-card">
+            <span class="pill gray">Author says</span>
+            <h3>Intent, not verification.</h3>
+            <p>Agent summaries and test claims retain their author-supplied status.</p>
+          </div>
+          <div class="trust-card">
+            <span class="pill gold">Not checked</span>
+            <h3>The evidence is missing.</h3>
+            <p>Unsupported languages, absent fixtures, and failed setup stay visible.</p>
+          </div>
+          <div class="trust-card">
+            <span class="pill orange">Stale</span>
+            <h3>Its basis moved.</h3>
+            <p>Keep the earlier observation. Withdraw its applicability to the new state.</p>
+          </div>
+        </div>
+        <div>
+          <div class="inventory">
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+          <div class="inventory-labels">
+            <span>66 mapped hunks</span><span>54 folded candidates</span
+            ><span>17 unclassified</span>
+          </div>
+          <p class="fine" style="margin-top: 10px">
+            Illustrative full-PR inventory · 137 total · every hunk recoverable · represented ≠
+            understood
+          </p>
+        </div>
+      </section>
+      <section
+        class="slide"
+        id="slide-9"
+        data-number="09"
+        data-title="Local and GitHub"
+        data-note="These CLI commands are proposed interfaces, not installed commands. Local captures distinguish working tree, index, and merge-base comparisons. A PR adapter reads exact base/head objects without overwriting the current checkout. Publishing reviews requires confirmation and a current revision check. Pins transfer only after content and dependency reconciliation, never because titles or history look similar."
+      >
+        <div>
+          <p class="eyebrow">08 / Meet engineers where they work</p>
+          <h2>Two entrances.<br /><em>One review memory.</em></h2>
+        </div>
+        <div class="two-doors">
+          <div class="door">
+            <div class="badge-line">
+              <span class="pill gray">Local</span
+              ><span class="fine">AFTER YOUR AGENT FINISHES</span>
+            </div>
+            <div class="terminal">
+              <span class="prompt">$</span> after<br /><span class="dim"
+                >working tree · captured snapshot</span
+              >
+            </div>
+            <ol>
+              <li>Open without commits or agent logs.</li>
+              <li>Browse now. Add analysis as it arrives.</li>
+              <li>New edits notify; your snapshot stays still.</li>
+            </ol>
+          </div>
+          <div class="door">
+            <div class="badge-line">
+              <span class="pill gray">GitHub</span><span class="fine">BEFORE YOU APPROVE</span>
+            </div>
+            <div class="terminal">
+              <span class="prompt">$</span> after pr 482<br /><span class="dim"
+                >pinned base + head · no checkout switch</span
+              >
+            </div>
+            <ol>
+              <li>Read without touching your dirty worktree.</li>
+              <li>Inspect checks, examples, and exact changes.</li>
+              <li>Draft privately. Confirm before publishing.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="join-line">Same example → same source anchors → explicit reconciliation</div>
+        <p class="fine">
+          Proposed commands. No upload by default. Inference and execution require deliberate
+          permission.
+        </p>
+      </section>
+      <section
+        class="slide"
+        id="slide-10"
+        data-number="10"
+        data-title="The first product"
+        data-note="The first experiment should be a CLI plus a thin local TUI, with Go preferred. The browser presentation illustrates possible later visual interfaces, not a browser-first implementation requirement. It starts with Git and the raw patch, then structural facts and imported evidence. Rich source support can start with TypeScript while ordinary diffs work for any repository. Do not begin by building a universal execution harness. A worktree is not a security sandbox. AFTER is a standalone product, not a Hunk extension. Existing test reports and fixtures come first; an authorized HTTP/JSON paired-run driver is the first execution slice. Rich TypeScript analysis is optional."
+      >
+        <div>
+          <p class="eyebrow">09 / Build the smallest convincing version</p>
+          <h2>A useful local TUI.<br /><em>Prove the review loop first.</em></h2>
+        </div>
+        <div class="build-grid">
+          <div class="build-list">
+            <div class="build-item">
+              <span class="step">01</span>
+              <div>
+                <h3>Git snapshot + ordinary diff</h3>
+                <p>Local snapshots first. Defer PR import. Useful before a model responds.</p>
+              </div>
+            </div>
+            <div class="build-item">
+              <span class="step">02</span>
+              <div>
+                <h3>Contact sheet + existing examples</h3>
+                <p>Import test reports and artifacts. Add an authorized HTTP/JSON fixture driver.</p>
+              </div>
+            </div>
+            <div class="build-item">
+              <span class="step">03</span>
+              <div>
+                <h3>One-click pins + conservative reopening</h3>
+                <p>Track exact evidence bindings. Show unknown when dependencies are incomplete.</p>
+              </div>
+            </div>
+            <div class="build-item">
+              <span class="step">04</span>
+              <div>
+                <h3>Prove one real paired-run loop</h3>
+                <p>Explicit permission. Isolated compute. No ambient credentials.</p>
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <p class="kicker">One simple shape</p>
+            <div class="small-diagram">
+              <span>Git<br />snapshot</span>→<span>Bound<br />examples</span>→<span
+                >Local TUI<br />+ diff</span
+              >
+            </div>
+            <div class="rule"></div>
+            <p class="kicker">Deliberately not first</p>
+            <div class="no-list">
+              <span>Universal simulator</span><span>Autonomous repairs</span
+              ><span>3D repo graph</span><span>New agent harness</span><span>Mandatory specs</span
+              ><span>Approval scores</span>
+            </div>
+            <p class="small">
+              Go is preferred. TUI libraries remain open.<br />No Hunk, editor, or agent runtime
+              dependency.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section
+        class="slide"
+        id="slide-11"
+        data-number="11"
+        data-title="The actual wedge"
+        data-note="The difference here is positioning and interaction, not exclusive ownership of the components. The comparison states what the inspected documentation emphasizes. It does not assert that a competitor lacks unmentioned features. If an incumbent already delivers this exact workflow well in practice, integrate or revise the concept. The research did not establish worldwide novelty."
+      >
+        <div class="intro">
+          <div>
+            <p class="eyebrow">10 / Be precise about the opportunity</p>
+            <h2>The wedge is the <em>habit.</em></h2>
+          </div>
+          <p class="small">
+            Browse by example.<br />Pin an expectation.<br />Reopen it when its basis moves.
+          </p>
+        </div>
+        <table class="wedge-table">
+          <thead>
+            <tr>
+              <th>Closest work</th>
+              <th>Documented emphasis</th>
+              <th>What AFTER would emphasize</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Linear / CodeRabbit</td>
+              <td>Guided explanation of a PR</td>
+              <td>Concrete contrasts as the primary index</td>
+            </tr>
+            <tr>
+              <td>Limn</td>
+              <td>Local narrative + incremental review</td>
+              <td>Example bookmarks with evidence-aware reopening</td>
+            </tr>
+            <tr>
+              <td>HyperTest / ReGrade</td>
+              <td>Execution-backed behavioral comparisons</td>
+              <td>A human browsing surface across change types</td>
+            </tr>
+            <tr>
+              <td>Critique / Proof</td>
+              <td>Bound evidence, intent, verification state</td>
+              <td>Optional pins on ordinary diffs, without a required assurance workflow</td>
+            </tr>
+            <tr>
+              <td>AFTER hypothesis</td>
+              <td colspan="2">
+                Make those ideas feel like a fast diff browser, not an additional process.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="statement">
+          <p>Easy to try. Worth reopening.</p>
+          <span class="fine"
+            >The defensible work is reliable bindings<br />and a remarkably direct interface.</span
+          >
+        </div>
+        <p class="fine">
+          Documentation-based positioning, not a claim that these capabilities are absent elsewhere.
+        </p>
+      </section>
+      <section
+        class="slide"
+        id="slide-12"
+        data-number="12"
+        data-title="The recommendation"
+        data-note="Do not fund a universal verifier on the strength of this deck. Test first with practicing engineers, unfamiliar changes, controlled follow-up edits, and a strong guided-review baseline. Measure correct understanding, regression detection, re-review effort, false freshness, and setup burden. The target of roughly thirty percent lower re-review time is a proposed experiment target, not a measured result. Stop if examples are scarce or users prefer the tour."
+      >
+        <div class="closing">
+          <div class="stack">
+            <p class="eyebrow">11 / The recommendation</p>
+            <h2>
+              A diff should show<br />a consequence.<br />Then <em>remember<br />your judgment.</em>
+            </h2>
+            <p class="lead">
+              Build the example-first interaction.<br />Prove that it saves attention before
+              building the engine around it.
+            </p>
+            <div class="actions print-hide">
+              <a href="#4" class="btn accent">Try the prototype again ↗</a
+              ><a href="README.md" class="btn secondary">Read the proposal</a>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="verdict">
+              <span class="kicker" style="color: #b6c7af">The first experiment</span>
+              <h3>Can people re-review faster without missing more?</h3>
+              <p class="small">
+                Compare raw diffs, a strong guided tour, and AFTER on unfamiliar changes.
+              </p>
+              <div class="rule" style="background: #556153"></div>
+              <p class="small">
+                Target ~30% less re-review time.<br />No loss in defect detection.<br />No silent
+                freshness in adversarial tests.
+              </p>
+              <span class="fine" style="color: #bac7b4">Targets, not measured results.</span>
+            </div>
+            <p class="small">
+              If useful examples require months of setup, this is the wrong wedge. If the contact
+              sheet works but pins do not, ship the contact sheet.
+            </p>
+          </div>
+        </div>
+        <div class="footer-note">
+          PRIMARY SOURCES · inspected October 2, 2026 · documentation review, not hands-on
+          benchmarking
+          <div class="source-links">
+            <a href="https://linear.app/docs/diffs#guides" target="_blank" rel="noopener noreferrer"
+              >Linear</a
+            ><a
+              href="https://www.graphite.com/blog/code-tours"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Graphite</a
+            ><a
+              href="https://www.coderabbit.ai/blog/coderabbit-review-reads-a-pr-how-author-would-explain-it"
+              target="_blank"
+              rel="noopener noreferrer"
+              >CodeRabbit</a
+            ><a href="https://github.com/glebmish/limn" target="_blank" rel="noopener noreferrer"
+              >Limn</a
+            ><a
+              href="https://understandingdata.com/tools/diffcore/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Diffcore</a
+            ><a href="https://www.hypertest.co/" target="_blank" rel="noopener noreferrer"
+              >HyperTest</a
+            ><a href="https://www.curtail.com/" target="_blank" rel="noopener noreferrer">ReGrade</a
+            ><a
+              href="https://www.critique.sh/docs/architecture/independent-verification"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Critique</a
+            ><a href="https://reqproof.com/product" target="_blank" rel="noopener noreferrer"
+              >Proof</a
+            ><a href="https://github.com/hoklims/semctx" target="_blank" rel="noopener noreferrer"
+              >Semctx</a
+            ><a href="research.md">All 16 sources + limitations ↗</a>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="bottom">
+      <span class="caption" id="slide-caption">01 / 12 · The idea</span>
+      <div class="bottom-actions">
+        <button class="plain" id="notes-btn" aria-expanded="false" aria-controls="speaker-notes">
+          Presenter notes</button
+        ><button class="plain" id="print-btn" title="Print all slides or save as PDF">
+          Print / PDF</button
+        ><button class="navbtn" id="prev" aria-label="Previous slide">←</button
+        ><button class="navbtn" id="next" aria-label="Next slide">→</button>
+      </div>
+    </footer>
+    <div class="progress" id="progress" aria-hidden="true"></div>
+    <aside class="notes" id="speaker-notes" aria-label="Presenter notes" hidden>
+      <button class="plain close" id="notes-close" aria-label="Close notes">×</button>
+      <h3 id="notes-title">Presenter notes</h3>
+      <p id="notes-copy"></p>
+    </aside>
+    <dialog class="dialog" id="inventory-dialog" aria-labelledby="inventory-title">
+      <h3 id="inventory-title">Nothing disappears into a summary.</h3>
+      <p>
+        This is an illustrative inventory, not 137 actual patch hunks. A real product must account
+        for every changed hunk and offer the original diff.
+      </p>
+      <table class="grid-table">
+        <thead>
+          <tr>
+            <th>Partition</th>
+            <th>Hunks</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Mapped</td>
+            <td>66</td>
+            <td>Linked to one or more cards; counted once</td>
+          </tr>
+          <tr>
+            <td>Folded candidates</td>
+            <td>54</td>
+            <td>Repetitive or structural; still inspectable</td>
+          </tr>
+          <tr>
+            <td>Unclassified</td>
+            <td>17</td>
+            <td>Not explained by the current grouping</td>
+          </tr>
+          <tr>
+            <td><strong>Total</strong></td>
+            <td><strong>137</strong></td>
+            <td>Representation is not understanding</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        When parsing, evidence collection, or a model fails, keep the ordinary diff usable. Never
+        convert an unexplained remainder into a green status.
+      </p>
+      <button class="btn" id="inventory-close">Back to the example</button>
+    </dialog>
+    <div class="sr-only" id="slide-announcement" aria-live="polite"></div>
+    <noscript
+      ><style>
+        .slide {
+          height: auto;
+          min-height: 100vh;
+        }
+        .rail,
+        .bottom {
+          display: none;
+        }
+        main {
+          height: auto;
+        }</style
+      >This deck works as a readable document without JavaScript. The prototype controls require
+      JavaScript.</noscript
+    >
+    <script>
+      (() => {
+        "use strict";
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const railLinks = Array.from(document.querySelectorAll(".rail a"));
+        const byId = (id) => document.getElementById(id);
+        let current = 0;
+        function showSlide(index) {
+          current = Math.max(0, Math.min(slides.length - 1, index));
+          slides.forEach((slide, i) => {
+            slide.hidden = i !== current;
+          });
+          railLinks.forEach((link, i) => {
+            link.setAttribute("aria-current", String(i === current));
+          });
+          const slide = slides[current];
+          const label = `${String(current + 1).padStart(2, "0")} / ${slides.length} · ${slide.dataset.title}`;
+          byId("slide-caption").textContent = label;
+          byId("slide-announcement").textContent = label;
+          byId("progress").style.width = `${((current + 1) / slides.length) * 100}%`;
+          byId("prev").disabled = current === 0;
+          byId("next").disabled = current === slides.length - 1;
+          byId("notes-title").textContent = slide.dataset.title;
+          byId("notes-copy").textContent = slide.dataset.note;
+          slide.scrollTop = 0;
+          window.scrollTo(0, 0);
+        }
+        function go(index) {
+          location.hash = String(Math.max(0, Math.min(slides.length - 1, index)) + 1);
+        }
+        function fromHash() {
+          const requested = Number(location.hash.slice(1));
+          showSlide(Number.isInteger(requested) && requested > 0 ? requested - 1 : 0);
+        }
+        window.addEventListener("hashchange", fromHash);
+        byId("prev").addEventListener("click", () => go(current - 1));
+        byId("next").addEventListener("click", () => go(current + 1));
+        function toggleNotes(open) {
+          byId("speaker-notes").hidden = !open;
+          byId("notes-btn").setAttribute("aria-expanded", String(open));
+        }
+        byId("notes-btn").addEventListener("click", () =>
+          toggleNotes(byId("speaker-notes").hidden),
+        );
+        byId("notes-close").addEventListener("click", () => {
+          toggleNotes(false);
+          byId("notes-btn").focus();
+        });
+        byId("print-btn").addEventListener("click", () => window.print());
+        document.addEventListener("keydown", (event) => {
+          if (byId("inventory-dialog").open) return;
+          if (event.key === "Escape") {
+            toggleNotes(false);
+            return;
+          }
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          if (event.target.closest('button,input,select,textarea,[role="tab"]')) return;
+          if (event.key === "ArrowRight" || event.key === "PageDown") {
+            event.preventDefault();
+            go(current + 1);
+          }
+          if (event.key === "ArrowLeft" || event.key === "PageUp") {
+            event.preventDefault();
+            go(current - 1);
+          }
+          if (event.key === "Home") {
+            event.preventDefault();
+            go(0);
+          }
+          if (event.key === "End") {
+            event.preventDefault();
+            go(slides.length - 1);
+          }
+          if (event.key.toLowerCase() === "n") toggleNotes(byId("speaker-notes").hidden);
+        });
+        const tabs = Array.from(document.querySelectorAll("[data-tab]"));
+        function selectTab(tab, focus = false) {
+          tabs.forEach((button) => {
+            const selected = button === tab;
+            button.setAttribute("aria-selected", String(selected));
+            button.tabIndex = selected ? 0 : -1;
+            byId(`pane-${button.dataset.tab}`).hidden = !selected;
+          });
+          if (focus) tab.focus();
+        }
+        tabs.forEach((tab, index) => {
+          tab.addEventListener("click", () => selectTab(tab));
+          tab.addEventListener("keydown", (event) => {
+            let next;
+            if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+            if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+            if (event.key === "Home") next = 0;
+            if (event.key === "End") next = tabs.length - 1;
+            if (next !== undefined) {
+              event.preventDefault();
+              selectTab(tabs[next], true);
+            }
+          });
+        });
+        const state = { pinned: false, edited: false, ran: false };
+        const setText = (id, value) => {
+          byId(id).textContent = value;
+        };
+        function setBadge(id, text, color) {
+          setText(id, text);
+          byId(id).className = `pill ${color}`;
+        }
+        function renderDemo() {
+          const stale = state.edited && !state.ran;
+          setText("snapshot-label", `Inspected v1 → latest ${state.edited ? "v2" : "v1"} · demo`);
+          setText("candidate-version", `LATEST ${state.edited ? "v2" : "v1"}`);
+          setText("latest-value", state.ran ? "2 charges" : stale ? "Not run" : "1 charge");
+          byId("latest-value").classList.toggle("danger-text", state.edited);
+          setText(
+            "demo-title",
+            state.ran
+              ? "The selected retry now charges twice."
+              : stale
+                ? "Its basis changed. The result is unknown."
+                : "This example still produces one charge.",
+          );
+          setText(
+            "evidence-caption",
+            state.ran
+              ? "New simulated observation · sequential fixture only"
+              : stale
+                ? "Previous observation retained · current evidence stale"
+                : "Captured fixture · sequential requests only",
+          );
+          setText(
+            "group-status",
+            state.ran
+              ? "1 charge → 2 charges at 12h"
+              : stale
+                ? "Retention changed · new result missing"
+                : "One captured example agrees",
+          );
+          setBadge(
+            "group-badge",
+            state.ran ? "Differs" : stale ? "Stale" : "Observed",
+            state.edited ? "orange" : "green",
+          );
+          setBadge(
+            "pin-badge",
+            state.edited ? "Reopened pin" : state.pinned ? "Pinned expectation" : "Not pinned",
+            state.edited ? "orange" : state.pinned ? "green" : "gray",
+          );
+          byId("pin-btn").disabled = state.pinned;
+          byId("edit-btn").disabled = !state.pinned || state.edited;
+          byId("run-btn").disabled = !state.edited || state.ran;
+          setText("pin-btn", state.pinned ? "1 · Expectation pinned" : "1 · Pin expectation");
+          setText("edit-btn", state.edited ? "2 · Retention edited" : "2 · Simulate agent edit");
+          setText("run-btn", state.ran ? "3 · Observation captured" : "3 · Simulate paired run");
+          setText(
+            "demo-status",
+            state.ran
+              ? "New observation conflicts with your pin. A human decision is still open."
+              : stale
+                ? "Reopened because payments.ts changed. Nothing has run on v2 yet."
+                : state.pinned
+                  ? "Pinned the 12h example. Now simulate another agent edit."
+                  : "Start by pinning the 12-hour example.",
+          );
+          setText("row-fast", state.edited ? "Not rerun" : "1 charge");
+          setText("row-mid", state.ran ? "2 charges" : stale ? "Not run" : "1 charge");
+          setText("row-expired", state.edited ? "Not rerun" : "2 charges");
+          const evidenceCells = Array.from(document.querySelectorAll(".current-evidence"));
+          evidenceCells.forEach((cell, i) => {
+            cell.textContent = !state.edited
+              ? "Observed"
+              : i === 1 && state.ran
+                ? "Observed · differs"
+                : "Stale";
+          });
+          byId("row-delayed").classList.toggle("highlight-row", state.edited);
+          setText(
+            "source-diff",
+            state.edited
+              ? "− export const KEY_RETENTION = hours(24);\n+ export const KEY_RETENTION = minutes(5);\n\n  // retry-worker.ts is unchanged."
+              : "  export const KEY_RETENTION = hours(24);\n\n  // No newer candidate captured.",
+          );
+          setText(
+            "source-caption",
+            state.edited
+              ? "Exact config edit found. A new run is separate evidence of its effect."
+              : "No dependency edit since the inspected snapshot.",
+          );
+          setBadge(
+            "memory-badge",
+            state.ran
+              ? "Observed · decision open"
+              : stale
+                ? "Stale · reopened"
+                : state.pinned
+                  ? "Pinned on v1"
+                  : "No receipt yet",
+            state.edited ? "orange" : state.pinned ? "green" : "gray",
+          );
+          setText(
+            "memory-title",
+            state.ran
+              ? "The pin and latest observation disagree."
+              : stale
+                ? "The footprint changed, not your intent."
+                : state.pinned
+                  ? "An expectation worth remembering."
+                  : "Pin the example to start.",
+          );
+          setText(
+            "memory-description",
+            state.ran
+              ? "The earlier result remains in history. The selected case now produces two charges. That does not automatically decide whether the PR should ship."
+              : stale
+                ? "payments.ts changed retention. Earlier evidence no longer applies to this candidate. Re-run before claiming an outcome."
+                : state.pinned
+                  ? "The twelve-hour result and its known footprint are recorded. This does not establish the entire twenty-four-hour requirement."
+                  : "A pin records your expectation and the evidence you inspected. It does not approve the entire PR.",
+          );
+        }
+        byId("pin-btn").addEventListener("click", () => {
+          state.pinned = true;
+          renderDemo();
+        });
+        byId("edit-btn").addEventListener("click", () => {
+          state.edited = true;
+          renderDemo();
+        });
+        byId("run-btn").addEventListener("click", () => {
+          state.ran = true;
+          renderDemo();
+        });
+        byId("reset-btn").addEventListener("click", () => {
+          Object.assign(state, { pinned: false, edited: false, ran: false });
+          renderDemo();
+          selectTab(tabs[0]);
+        });
+        byId("inventory-open").addEventListener("click", () =>
+          byId("inventory-dialog").showModal(),
+        );
+        byId("inventory-close").addEventListener("click", () => byId("inventory-dialog").close());
+        const samples = {
+          fast: {
+            condition: "Retry after 30 seconds",
+            before: "1",
+            after: "1",
+            badge: "Observed example",
+            color: "green",
+            description:
+              "The key still exists in both versions. This captured example agrees. Agreement here does not establish all retry behavior.",
+          },
+          middle: {
+            condition: "Retry after 12 hours",
+            before: "1",
+            after: "2",
+            badge: "Observed example",
+            color: "green",
+            description:
+              "The older key still exists in v1. In v2 it has expired. This selected input produces a different result.",
+          },
+          expired: {
+            condition: "Retry after 48 hours",
+            before: "2",
+            after: "2",
+            badge: "Observed example",
+            color: "green",
+            description:
+              "Both retention windows have expired. Both fixtures produce two charges. A second charge is not automatically a regression.",
+          },
+          unknown: {
+            condition: "Retry after 2 hours",
+            before: "?",
+            after: "?",
+            badge: "Not run",
+            color: "gold",
+            description:
+              "No captured result exists for this input. The shaded interval suggests a difference, but that is an inference, not an execution result.",
+          },
+        };
+        document.querySelectorAll("[data-delay]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const sample = samples[button.dataset.delay];
+            document
+              .querySelectorAll("[data-delay]")
+              .forEach((choice) => choice.setAttribute("aria-pressed", String(choice === button)));
+            setText("boundary-condition", sample.condition);
+            setText("boundary-before", sample.before);
+            setText("boundary-after", sample.after);
+            setText("boundary-description", sample.description);
+            setBadge("boundary-badge", sample.badge, sample.color);
+            byId("boundary-after").classList.toggle("danger-text", sample.before !== sample.after);
+          });
+        });
+        fromHash();
+        renderDemo();
+      })();
+    </script>
+  </body>
+</html>
