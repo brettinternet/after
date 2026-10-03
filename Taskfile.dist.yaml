@@ -64,6 +64,18 @@ tasks:
     desc: Run focused CLI, configuration, and native entry point tests
     cmd: go test -race ./internal/config ./internal/cli ./cmd/after
 
+  test:terminal:
+    desc: Check terminal safety, captured-diff budgets and actual PTY restoration
+    cmd: go test -race -v ./internal/terminal
+
+  terminal:bench:
+    desc: Measure the captured 50-file 100000-line viewport (no project execution)
+    cmd: go test ./internal/terminal -run '^TestCapturedDiffBudget$' -bench BenchmarkCapturedViewport -benchmem -count=1
+
+  terminal:fuzz:
+    desc: Fuzz terminal-safe text and width bounds
+    cmd: go test ./internal/terminal -run '^$' -fuzz FuzzLine -fuzztime 5s
+
   cli:proof:
     desc: Authorize the real paired payment comparison through CLI subprocesses (requires pinned Docker image and explicit AFTER_DOCKER_BINARY/HOST)
     env:
