@@ -4,6 +4,7 @@ title: Deliver the complete headless review workflow
 status: To Do
 assignee: []
 created_date: '2026-10-03 05:42'
+updated_date: '2026-10-03 14:49'
 labels:
   - poc
   - cli
@@ -24,6 +25,10 @@ ordinal: 10000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 A testable headless loop must exist before the TUI can hide engine faults. Scope: command composition over capture/import/run/compare, stable JSON output and real integration checks. Keep the vocabulary in docs/IMPLEMENTATION.md small and avoid adding another workflow runtime.
+
+Use urfave/cli for command and flag parsing behind a thin cmd/after/main.go. Model internal/config on github.com/brettinternet/worklease/internal/config: explicit input values and injectable environment access, a typed resolved Config, and per-setting Sources identifying the winning configuration layer. Adapt the shape rather than copying Worklease-specific settings or introducing speculative configuration knobs. Configuration provenance must be inspectable, not lost during CLI parsing.
+
+Include YAML configuration support in this planned workflow, after the CLI/config foundation: explicit flags override AFTER_* environment variables, which override YAML values, which override defaults. Preserve explicit flag presence so parser defaults do not masquerade as user overrides. Document supported settings, config-file selection, empty-value semantics and source reporting. Configuration loading must not execute repository code or supply blanket execution consent.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -34,6 +39,10 @@ A testable headless loop must exist before the TUI can hide engine faults. Scope
 - [ ] #4 JSON output is versioned and does not mix progress/ANSI on stdout; diagnostics go to stderr and documented exit statuses distinguish invalid input, denied execution, operational failure and comparison findings.
 - [ ] #5 Models, GitHub access and accounts are absent from the path; missing Docker still permits import/diff/inspection. Errors leave terminal/process/store state usable.
 - [ ] #6 CLI tests cover paths with spaces, bad IDs, unreadable artifacts, bounded output and injection strings; help examples work from a fresh prepared checkout.
+- [ ] #7 The entry point and command layer use urfave/cli with a thin main.go; focused tests preserve help/version, invalid-input exit behavior and stdout/stderr separation.
+- [ ] #8 A typed internal/config resolver modeled on Worklease exposes each effective setting and its winning source (flag, env, file or default). Tests exercise precedence and distinguish explicitly supplied values from CLI defaults, including supported false/zero values.
+- [ ] #9 YAML configuration is supported with documented file discovery and explicit path selection. Missing optional default files are allowed; missing explicit files, malformed YAML, unknown or duplicate keys and invalid types produce actionable errors identifying the setting/source. Tests cover flags > environment > YAML > defaults and empty-value semantics.
+- [ ] #10 Users can inspect effective configuration and per-setting provenance through documented CLI output without exposing sensitive values or executing project code. Configuration never substitutes for exact execution-plan authorization.
 <!-- AC:END -->
 
 ## Definition of Done
