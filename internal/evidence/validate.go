@@ -198,5 +198,5 @@ func (p Pin) Validate() error {
 	if p.History[0].Decision != Pinned || p.Decision != p.History[len(p.History)-1].Decision {
 		return errors.New("pin decision must follow its history")
 	}
-	return nil
+	return p.ValidateReview()
 }

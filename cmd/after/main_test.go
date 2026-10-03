@@ -332,6 +332,8 @@ func TestPaymentCLIProof(t *testing.T) {
 		}
 	}
 
+	paymentReviewProof(t, exe, root, home, project, configPath, r, dockerEnv)
+
 	// The same process boundary also proves imported outcomes stay reported.
 	report := `{"Action":"run","Package":"example.invalid/import","Test":"TestPass"}
 {"Action":"pass","Package":"example.invalid/import","Test":"TestPass"}

@@ -32,6 +32,7 @@ const maxInventoryPageSize = 256
 
 func commands(state *invocation) []*ucli.Command {
 	return []*ucli.Command{
+		pinCommand(state), reviewCommand(state),
 		{
 			Name: "capture", Usage: "capture a bounded local Git comparison without running project code",
 			ArgsUsage: "[--staged | --base BASE --target TARGET]", Flags: append(commonFlags(),

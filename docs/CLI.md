@@ -17,6 +17,18 @@ Flags may appear before or after positional arguments. Capture defaults to HEAD 
 
 Stored artifacts (including observer response/effect channels referenced by receipts) can also be inspected or exported by content ID. `--artifact-offset` and `--artifact-size` return exact base64 byte pages, up to 65536 bytes, with `next`, `total`, and `more`. A complete valid JSON artifact fitting one page also has a `document` field preserving numeric precision. Artifact content alone does not establish its producer or evidence state; inspect its referring receipt for provenance.
 
+## Persistent expectations
+
+`pin RECEIPT_ID --expectation TEXT --scope finite_example|human_intent --reason TEXT`
+creates an immutable pin revision. `review PIN_REVISION_ID` opens it read-only.
+Mutations use exactly one of `--select SNAPSHOT_ID --mode original_base|last_inspected`,
+`--receipt RECEIPT_ID`, or `--accept`, always with `--reason TEXT`. Each returns a
+new revision ID; use that ID for the next operation. Selection reopens changed
+bindings without predicting results. Receipt attachment never accepts the pin;
+human acceptance is a separate action. No pin/review action executes code or
+grants run permission. See [the review workflow](REVIEW.md) for examples, exact
+reuse rules, broader-intent limits, historical revisions and rerun authorization.
+
 ## Execution authorization
 
 The first run command prepares the payment-specific frozen plan; it does not execute it before authorization. In a non-TTY invocation, save the exact plan and read its digest from the JSON response:
@@ -40,7 +52,7 @@ AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
   --approve sha256:... --project "/work/payment"
 ```
 
-No Docker context, image pull, host execution, build, or project command is used by help, config display, capture, import, inspect, export, comparison, or preview. Provision the pinned image separately as documented in [SANDBOX.md](SANDBOX.md). Missing endpoints or isolation produce an incomplete operational result; they never select a host fallback.
+No Docker context, image pull, host execution, build, or project command is used by help, config display, capture, import, inspect, export, comparison, pin, review, or preview. Provision the pinned image separately as documented in [SANDBOX.md](SANDBOX.md). Missing endpoints or isolation produce an incomplete operational result; they never select a host fallback.
 
 ## Configuration
 

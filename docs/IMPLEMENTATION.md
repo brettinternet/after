@@ -48,7 +48,7 @@ Immutable records and atomic writes should survive crashes. One writer per revie
 
 ## CLI and TUI behavior contract
 
-The implemented headless command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, `inspect`, `compare`, `export`, `run`, and `config`; pin/review actions remain future TUI work.
+The implemented headless command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, `inspect`, `compare`, `export`, `run`, `config`, and [headless pin/review actions](REVIEW.md); their TUI integration remains future work.
 
 ```text
 after capture [--staged | --base REF --target REF]

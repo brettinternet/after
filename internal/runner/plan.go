@@ -65,6 +65,15 @@ func validRequestID(id evidence.Digest) bool {
 func (p *Plan) Preview() ([]byte, string)  { return append([]byte(nil), p.preview...), p.id }
 func (p *Plan) RequestID() evidence.Digest { return p.request }
 
+// ReviewBasis exposes expected identities without executing the prepared plan.
+func (p *Plan) ReviewBasis() evidence.ReviewBasis {
+	b := p.scenario
+	base, candidate := p.environments[0], p.environments[1]
+	base.Argv = append([]string(nil), base.Argv...)
+	candidate.Argv = append([]string(nil), candidate.Argv...)
+	return evidence.ReviewBasis{Snapshots: p.pair, Bindings: &evidence.Bindings{Scenario: b.ID, Input: b.Input, Driver: b.Driver, Observer: b.Observer, Rules: b.Rules}, BaseEnvironment: &base, CandidateEnvironment: &candidate}
+}
+
 // Prepare reads validated immutable store records; it neither contacts Docker nor
 // builds anything. Every future execution, including builds, is in the preview.
 func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits sandbox.Limits) (*Plan, error) {

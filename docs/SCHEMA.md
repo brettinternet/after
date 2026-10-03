@@ -4,7 +4,8 @@ AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
 [private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
 AFTER-4 adds [Go test report cards](GO-REPORTS.md), including incomplete cards
 with report status `none`. AFTER-8 adds [frozen paired execution](RUNNER.md);
-AFTER-9 adds [exact finite comparisons](COMPARISON.md). Review remains a separate task. All test
+AFTER-9 adds [exact finite comparisons](COMPARISON.md); AFTER-11 adds
+[persistent expectations and explicit review transitions](REVIEW.md). All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -105,7 +106,13 @@ Incomplete, missing, redacted or truncated observations cannot establish equalit
 
 A pin's last history event determines its decision; history begins with pinned.
 Accepting/reopening it never changes a receipt, expectation or applicability.
-The future store/review layer must enforce append-only history and basis checks.
+The store/review layer enforces snapshot/scenario/receipt basis checks and appends
+immutable revisions. Scoped pins add `scope` (`finite_example` or `human_intent`)
+and a `review` context per history event: action, comparison mode, prior candidate,
+expected target bindings, and optional actual receipt ID. Changed selections
+reopen without a current receipt. Attachment cannot accept; explicit acceptance
+cannot change selection. Missing contexts/scope in legacy pins remain readable
+but confer no current applicability. See [review](REVIEW.md) for bounds and reuse.
 
 ## Trust boundary and deferred checks
 

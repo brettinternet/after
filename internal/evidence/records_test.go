@@ -34,7 +34,7 @@ func receipt() Receipt {
 	}
 }
 func pin() Pin {
-	return Pin{SchemaVersion, syntheticDigest, syntheticDigest, "synthetic: one request", syntheticDigest, SnapshotPair{syntheticDigest, syntheticDigest}, Pinned, []DecisionEvent{{Pinned, syntheticTime, "synthetic human decision"}}}
+	return Pin{SchemaVersion: SchemaVersion, ID: syntheticDigest, Scenario: syntheticDigest, Expectation: "synthetic: one request", BasisReceipt: syntheticDigest, BasisSnapshots: SnapshotPair{syntheticDigest, syntheticDigest}, Decision: Pinned, History: []DecisionEvent{{Decision: Pinned, At: syntheticTime, Reason: "synthetic human decision"}}}
 }
 func reported() Receipt {
 	r := receipt()
@@ -165,7 +165,7 @@ func TestImportedPassAndPinCannotPromoteEvidence(t *testing.T) {
 	before, _ := json.Marshal(r)
 	p := pin()
 	p.Decision = Accepted
-	p.History = append(p.History, DecisionEvent{Accepted, syntheticTime.Add(time.Second), "synthetic acceptance"})
+	p.History = append(p.History, DecisionEvent{Decision: Accepted, At: syntheticTime.Add(time.Second), Reason: "synthetic acceptance"})
 	roundTrip(t, p)
 	after, _ := json.Marshal(r)
 	if !bytes.Equal(before, after) {

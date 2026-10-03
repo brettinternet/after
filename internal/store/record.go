@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/brettinternet/after/internal/evidence"
 )
@@ -249,8 +250,35 @@ func references[T Record](s *Store, record T) error {
 		if e != nil {
 			return e
 		}
-		if receipt.Snapshots != r.BasisSnapshots {
-			return errors.New("pin receipt and snapshot basis differ")
+		if receipt.Snapshots != r.BasisSnapshots || receipt.Bindings == nil || receipt.Bindings.Scenario != r.Scenario {
+			return errors.New("pin receipt and scenario/snapshot basis differ")
+		}
+		for _, event := range r.History {
+			if event.Review == nil {
+				continue
+			}
+			c := event.Review
+			if err = snapshots(s, c.Target.Snapshots); err != nil {
+				return err
+			}
+			if b := c.Target.Bindings; b != nil {
+				scenario, e := get[evidence.Scenario](s, b.Scenario)
+				if e != nil {
+					return e
+				}
+				if scenario.Input != b.Input || scenario.Driver != b.Driver || scenario.Observer != b.Observer || scenario.Rules != b.Rules {
+					return errors.New("review frozen bindings mismatch")
+				}
+			}
+			if c.Receipt != "" {
+				bound, e := get[evidence.Receipt](s, c.Receipt)
+				if e != nil {
+					return e
+				}
+				if bound.State.Producer != evidence.Runner || !reflect.DeepEqual(evidence.BasisOf(bound), c.Target) {
+					return errors.New("review receipt does not match selected basis")
+				}
+			}
 		}
 		err = snapshots(s, r.BasisSnapshots)
 	}

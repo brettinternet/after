@@ -187,9 +187,10 @@ type Receipt struct {
 }
 
 type DecisionEvent struct {
-	Decision HumanDecision `json:"decision"`
-	At       time.Time     `json:"at"`
-	Reason   string        `json:"reason"`
+	Decision HumanDecision  `json:"decision"`
+	At       time.Time      `json:"at"`
+	Reason   string         `json:"reason"`
+	Review   *ReviewContext `json:"review,omitempty"`
 }
 
 // Pin contains no evidence state. Accepting or reopening it cannot change a receipt.
@@ -202,4 +203,5 @@ type Pin struct {
 	BasisSnapshots SnapshotPair    `json:"basis_snapshots"`
 	Decision       HumanDecision   `json:"decision"`
 	History        []DecisionEvent `json:"history"`
+	Scope          PinScope        `json:"scope,omitempty"`
 }
