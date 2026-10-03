@@ -43,8 +43,8 @@ bases fail visibly rather than produce a supposedly complete snapshot.
 The ordinary binary Git diff is generated in a private temporary repository from
 captured regular-file bytes only. Renames appear as deletion/addition. Unsupported
 or excluded entries are **not** represented faithfully by that patch: always
-inspect both inventories alongside it. AFTER-5 owns the complete inventory/raw
-review presentation. Literal redaction in the store forces incomplete snapshots;
+inspect both inventories alongside it. The [captured raw review API](RAW-DIFF.md)
+combines those inventories with bounded diff/context windows and hunk bookkeeping. Literal redaction in the store forces incomplete snapshots;
 a redacted capture must not be treated as the original executable source.
 
 Budgets are 2,000 entries per inventory, 8 MiB per source file, 64 MiB of source
