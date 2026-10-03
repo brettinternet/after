@@ -4,7 +4,7 @@ AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
 [private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
 AFTER-4 adds [Go test report cards](GO-REPORTS.md), including incomplete cards
 with report status `none`. AFTER-8 adds [frozen paired execution](RUNNER.md);
-comparison computation and review remain separate tasks. All test
+AFTER-9 adds [exact finite comparisons](COMPARISON.md). Review remains a separate task. All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -72,7 +72,12 @@ Artifacts and receipts optionally carry `redaction_policy: literal-v1`; redacted
 records require it. Receipt-level `redacted` also forces incomplete evidence.
 The initial conservative contract permits conclusive comparisons only for complete
 receipts. A stored Comparison binds an outcome, completeness and scoped limits to
-a receipt; channel-level witnesses and repetition records arrive in AFTER-9.
+a receipt. AFTER-9 adds optional `details`, an artifact descriptor for the bounded
+`comparison-details-v1` report: exact channel witnesses, paired/repetition sample
+references, policy digest and source inventory links. Old records without details
+remain readable. Values live in the artifact, preserving number tokens rather
+than passing through generic record sanitization. Partial/redacted/truncated
+details cannot support a conclusive comparison.
 
 ## Independent state axes
 

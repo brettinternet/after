@@ -25,7 +25,12 @@ var observer []byte
 var seconds = []int64{43200, 30}
 
 const inputs = `{"epoch":1735689600,"seconds":[43200,30],"key":"synthetic-key-a","body":{"amount_cents":1200,"currency":"USD"}}`
-const rules = "v1: exact response status/body and ordered provider traffic; no candidate masks; repetitions retained; no cross-version comparison in runner"
+
+// ComparisonRules is immutable policy text retained with receipts. Any change
+// changes the scenario digest and requires a new authorized run.
+const ComparisonRules = `{"version":1,"responses":"ordered status and body; JSON bodies structural, otherwise exact text","provider":"ordered timestamp, method, fixed observer destination 127.0.0.1:18082 plus path, key and body; count is log length","json":"exact decimal values, object key order ignored, arrays ordered, null distinct from missing; reject duplicate keys and invalid Unicode","masks":[],"normalization":[],"scope":"finite sequential synthetic requests only"}`
+
+const rules = ComparisonRules
 
 var scope = []string{"Sequential synthetic payment ABI only; two same-key requests at 12h and 30s; finite observation window, not production billing or universal behavior.", "Candidate suites are not run; candidate test/driver/mask files remain source inventory, not the frozen oracle.", "Docker daemon, CLI, image and kernel trusted; app and observer share only offline loopback networking; denial of service fails the run."}
 
@@ -37,6 +42,7 @@ type Plan struct {
 	limits       sandbox.Limits
 	experiments  [2][2]*sandbox.Experiment
 	environments [2]evidence.Environment
+	planIDs      [2][2][2]string // side, case, app/observer
 	preview      []byte
 	id           string
 }
@@ -50,6 +56,10 @@ func (p *Plan) RequestID() evidence.Digest { return p.request }
 // Prepare reads validated immutable store records; it neither contacts Docker nor
 // builds anything. Every future execution, including builds, is in the preview.
 func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits sandbox.Limits) (*Plan, error) {
+	return prepare(s, pair, repetitions, limits, "")
+}
+
+func prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits sandbox.Limits, request evidence.Digest) (*Plan, error) {
 	if pair.Base == "" || repetitions < 1 || repetitions > 5 {
 		return nil, errors.New("base and 1-5 repetitions required")
 	}
@@ -64,11 +74,14 @@ func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 	if err != nil {
 		return nil, err
 	}
-	nonce := make([]byte, 32)
-	if _, err = rand.Read(nonce); err != nil {
-		return nil, err
+	if request == "" {
+		nonce := make([]byte, 32)
+		if _, err = rand.Read(nonce); err != nil {
+			return nil, err
+		}
+		request = hash(nonce)
 	}
-	p := &Plan{request: hash(nonce), pair: pair, scenario: scenario, repetitions: repetitions, limits: limits}
+	p := &Plan{request: request, pair: pair, scenario: scenario, repetitions: repetitions, limits: limits}
 	var previews [2][2]json.RawMessage
 	for side, id := range []evidence.Digest{pair.Base, pair.Candidate} {
 		snap, e := store.Get[evidence.Snapshot](s, id)
@@ -106,13 +119,15 @@ func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 		if e != nil {
 			return nil, e
 		}
-		appPreview, _ := app.Preview()
+		appPreview, appID := app.Preview()
 		p.environments[side] = evidence.Environment{Environment: hash(appPreview), Toolchain: evidence.Digest(strings.Split(sandbox.Image, "@")[1]), Dependencies: id, Argv: argv}
 		for c, sec := range seconds {
 			obs, e := sandbox.Prepare(string(scenario.ID), map[string][]byte{"observer.go": observer}, []string{"/usr/local/go/bin/go", "run", "/input/observer.go", fmt.Sprint(sec)}, limits)
 			if e != nil {
 				return nil, e
 			}
+			_, observerID := obs.Preview()
+			p.planIDs[side][c] = [2]string{appID, observerID}
 			p.experiments[side][c], e = sandbox.PrepareExperiment(app, obs)
 			if e != nil {
 				return nil, e

@@ -224,6 +224,11 @@ func references[T Record](s *Store, record T) error {
 			}
 		}
 	case evidence.Comparison:
+		if r.Details != nil {
+			if err = s.artifact(*r.Details); err != nil {
+				return err
+			}
+		}
 		receipt, e := get[evidence.Receipt](s, r.Receipt)
 		if e != nil {
 			return e

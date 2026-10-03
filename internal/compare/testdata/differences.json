@@ -1,0 +1,46 @@
+[
+  {
+    "path": "/~1~0",
+    "kind": "changed",
+    "before": "é",
+    "after": "é"
+  },
+  {
+    "path": "/a/0",
+    "kind": "changed",
+    "before": 1,
+    "after": 2
+  },
+  {
+    "path": "/a/1",
+    "kind": "changed",
+    "before": 2,
+    "after": 1
+  },
+  {
+    "path": "/a/2",
+    "kind": "added",
+    "after": 3
+  },
+  {
+    "path": "/gone",
+    "kind": "removed",
+    "before": true
+  },
+  {
+    "path": "/n",
+    "kind": "changed",
+    "before": 9007199254740992,
+    "after": 9007199254740993
+  },
+  {
+    "path": "/new",
+    "kind": "added",
+    "after": null
+  },
+  {
+    "path": "/z",
+    "kind": "removed",
+    "before": null
+  }
+]

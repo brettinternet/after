@@ -69,7 +69,9 @@ missing/incompatible channels and cleanup failures yield incomplete receipts,
 never behavioral equality or a fabricated baseline. Late output stays attached
 to the submitted pair/request, not a newly selected UI snapshot. Matching
 repetitions remain `not_compared`; differing complete repetitions are `unstable`.
-Cross-version comparison and exact witnesses belong to AFTER-9.
+[Exact finite comparisons](COMPARISON.md) validate these stored bindings and
+recompute semantic repetition stability. The versioned shipped comparison policy
+is retained as a rules artifact; any policy change requires a new authorized run.
 
 Diagnostics use fixed failure codes plus bounded separate artifacts. The store
 redacts explicitly configured literals; redacted/truncated data cannot yield a

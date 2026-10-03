@@ -121,8 +121,12 @@ func (e Executor) Run(ctx context.Context, s *store.Store, p *Plan, approved str
 	if err != nil {
 		return result, err
 	}
-	artifacts := []evidence.Artifact{planArtifact}
-	allComplete := allowed && acquired && planArtifact.Completeness == evidence.Complete
+	policyArtifact, err := s.PutArtifact([]byte(ComparisonRules), "comparison-rules", 4096)
+	if err != nil {
+		return result, err
+	}
+	artifacts := []evidence.Artifact{planArtifact, policyArtifact}
+	allComplete := allowed && acquired && planArtifact.Completeness == evidence.Complete && policyArtifact.Completeness == evidence.Complete
 	unstable := false
 	previous := map[string]evidence.Digest{}
 	observe := e.observe
