@@ -2,7 +2,9 @@
 
 AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
 [private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
-Report import, execution, comparison computation and review remain separate tasks. All test
+AFTER-4 adds [Go test report cards](GO-REPORTS.md), including incomplete cards
+with report status `none`. Execution, comparison computation and review remain
+separate tasks. All test
 records and the [scenario example](schema-example.json) are **synthetic**.
 Their digests are placeholders, not measurements.
 
@@ -81,9 +83,9 @@ a receipt; channel-level witnesses and repetition records arrive in AFTER-9.
 
 An imported pass is always reported/unknown/not_run/not_compared. Its selected
 candidate snapshot is an association, not validated applicability. It cannot
-assert runner environments, frozen bindings or authorization. Validated external
-bindings can be added with the importer task when that requirement is exercised;
-this foundation intentionally does not promote imports.
+assert runner environments, frozen bindings or authorization. A report without a
+terminal status uses `none`, never inferred success. Importer snapshot bindings
+remain caller-supplied and unverified; they never promote applicability.
 
 Observed evidence requires completed runner execution. Completion means the
 experiment completed, not that behavior passed. Failed/cancelled/unexecuted runs
@@ -101,8 +103,8 @@ Validation establishes **structural consistency, not truth**. It cannot check
 whether referenced captures exist, whether a producer actually executed, whether
 artifacts are compatible, or whether a receipt applies to a newly selected pair.
 Even a fully bound digest is not a signature. Consumers must not decode arbitrary
-repository JSON as trusted runner evidence. AFTER-4 must construct importer
-records from supported report facts; AFTER-8 owns locally authorized runner
+repository JSON as trusted runner evidence. AFTER-4 constructs importer
+cards from supported report facts; AFTER-8 owns locally authorized runner
 receipts; AFTER-9/11 own compatibility and applicability derivation.
 
 No CLI command accepts these records yet. The shipped CLI only prints help and

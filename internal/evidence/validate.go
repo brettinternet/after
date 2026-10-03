@@ -101,7 +101,7 @@ func (s EvidenceState) Validate() error {
 	}
 	switch s.Producer {
 	case Importer:
-		if s.Kind != Reported || s.Applicability != Unknown || s.Execution != NotRun || s.Comparison != NotCompared || s.Report == NoReport {
+		if s.Kind != Reported || s.Applicability != Unknown || s.Execution != NotRun || s.Comparison != NotCompared {
 			return errors.New("imported reports cannot establish observed/current evidence or AFTER execution")
 		}
 	case Runner:

@@ -1,0 +1,5 @@
+{"Time":"2026-10-03T09:58:52.37282-06:00","Action":"start","Package":"example.invalid/reportfixture/other"}
+{"Time":"2026-10-03T09:58:52.372932-06:00","Action":"output","Package":"example.invalid/reportfixture/other","Output":"testing: warning: no tests to run\n"}
+{"Time":"2026-10-03T09:58:52.372948-06:00","Action":"output","Package":"example.invalid/reportfixture/other","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-03T09:58:52.372951-06:00","Action":"output","Package":"example.invalid/reportfixture/other","Output":"ok  \texample.invalid/reportfixture/other\t(cached) [no tests to run]\n"}
+{"Time":"2026-10-03T09:58:52.372956-06:00","Action":"pass","Package":"example.invalid/reportfixture/other","Elapsed":0}

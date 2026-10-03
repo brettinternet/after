@@ -60,6 +60,20 @@ tasks:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
     cmd: go test -race ./...
 
+  fixtures:go-report:
+    desc: Regenerate synthetic Go report fixtures (intentional test/build failures)
+    dir: internal/gotestreport/testdata/source
+    env:
+      GOPROXY: "off"
+      GOSUMDB: "off"
+      GOTOOLCHAIN: local
+    cmds:
+      - go version > ../producer.txt
+      - if go test -json -count=1 ./cases ./other > ../tests.jsonl; then exit 1; else test $? -eq 1; fi
+      - if go test -json -count=1 ./buildfail > ../build.jsonl; then exit 1; else test $? -eq 1; fi
+      - go test -json -run '^$' ./other > ../no-tests.jsonl
+      - if go test -json -timeout=invalid > ../empty.jsonl 2> /dev/null; then exit 1; else test $? -eq 2; fi
+
   format:go:
     desc: Format Go sources
     cmd: gofmt -w cmd internal

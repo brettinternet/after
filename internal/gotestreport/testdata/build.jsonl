@@ -1,0 +1,6 @@
+{"ImportPath":"example.invalid/reportfixture/buildfail","Action":"build-output","Output":"# example.invalid/reportfixture/buildfail\n"}
+{"ImportPath":"example.invalid/reportfixture/buildfail","Action":"build-output","Output":"buildfail/broken.go:4:9: undefined: intentionallyUndefined\n"}
+{"ImportPath":"example.invalid/reportfixture/buildfail","Action":"build-fail"}
+{"Time":"2026-10-03T09:58:52.312589-06:00","Action":"start","Package":"example.invalid/reportfixture/buildfail"}
+{"Time":"2026-10-03T09:58:52.312654-06:00","Action":"output","Package":"example.invalid/reportfixture/buildfail","Output":"FAIL\texample.invalid/reportfixture/buildfail [build failed]\n","OutputType":"frame"}
+{"Time":"2026-10-03T09:58:52.312665-06:00","Action":"fail","Package":"example.invalid/reportfixture/buildfail","Elapsed":0,"FailedBuild":"example.invalid/reportfixture/buildfail"}
