@@ -117,7 +117,7 @@ repository JSON as trusted runner evidence. AFTER-4 constructs importer
 cards from supported report facts; AFTER-8 owns locally authorized runner
 receipts; AFTER-9/11 own compatibility and applicability derivation.
 
-No CLI command accepts these records yet. The shipped CLI only prints help and
-version; it has no startup hooks, repository access, subprocesses, network client,
-model client or init-time execution. Unsupported commands fail rather than
-pretending a capture, comparison or review succeeded.
+The [headless CLI](CLI.md) accepts and emits these records through bounded
+commands. Help, configuration display, import, inspection, and comparison do not
+execute repository code. The exact authorized runner path is separate; no model
+client or init-time hook can create evidence or grant consent.

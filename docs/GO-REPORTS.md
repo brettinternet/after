@@ -2,8 +2,8 @@
 
 `internal/gotestreport.Import(io.Reader, Metadata)` imports stock `go test -json`
 bytes without opening a project, running Go, fetching URLs, or following paths.
-CLI import wiring belongs to AFTER-10; the current CLI still provides help/version
-only. Report cards are data for later inspection, not runner receipts.
+The [headless CLI](CLI.md) exposes import and inspection. Report cards remain data
+for later inspection, not runner receipts.
 
 ## Tested compatibility
 

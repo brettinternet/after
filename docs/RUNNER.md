@@ -1,8 +1,9 @@
 # Frozen paired execution
 
-`internal/runner` implements AFTER-8's payment-specific paired runner. The public
-CLI still only has help/version; AFTER-10 owns operator prompts and command wiring.
-No open, capture, import, inspect or ordinary test invokes this runner.
+`internal/runner` implements AFTER-8's payment-specific paired runner. The
+[headless CLI](CLI.md) previews plans, obtains operator confirmation, executes
+only the exact authorized plan, and persists a comparison. Help, capture, import,
+inspection, comparison, preview, and ordinary tests do not execute the runner.
 
 ## Boundary and authorization
 

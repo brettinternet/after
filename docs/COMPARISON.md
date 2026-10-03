@@ -2,8 +2,9 @@
 
 `internal/compare.Run(store, receiptID)` implements AFTER-9. It reads validated
 immutable receipts and snapshots, never executes code, and persists a comparison
-record plus a bounded `comparison-details-v1` artifact. CLI wiring is AFTER-10.
-The store must be writable to publish the result and idempotently reconstruct
+record plus a bounded `comparison-details-v1` artifact. The [headless CLI](CLI.md)
+exposes `compare`, `inspect`, and `export`; none executes project code. The store
+must be writable to publish the result and idempotently reconstruct
 frozen input/scenario records. Inspection alone must not call the runner executor.
 
 ## Supported policy and compatibility

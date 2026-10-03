@@ -1,8 +1,8 @@
 # Local Git capture
 
 `internal/capture.Capture(ctx, repositoryRoot, store, options)` implements AFTER-3.
-The CLI remains help/version-only until AFTER-10. Capture reads source; it never
-builds, tests, runs project commands or creates an execution receipt.
+The [headless CLI](CLI.md) exposes capture and raw-diff inspection. Capture reads
+source; it never builds, tests, runs project commands or creates an execution receipt.
 
 ## Selection and identity
 

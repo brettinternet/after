@@ -89,6 +89,22 @@ func TestFrozenPlanAndDenial(t *testing.T) {
 	s, pair := captured(t, "")
 	p := prepared(t, s, pair, 1)
 	preview, id := p.Preview()
+	rebuilt, err := PrepareFromPreview(s, preview)
+	if err != nil {
+		t.Fatalf("saved preview did not reconstruct: %v", err)
+	}
+	_, rebuiltID := rebuilt.Preview()
+	if rebuiltID != id || rebuilt.RequestID() != p.RequestID() {
+		t.Fatal("saved preview lost its exact authorization identity")
+	}
+	altered := append([]byte(nil), preview...)
+	altered[len(altered)-2] ^= 1
+	if _, err := PrepareFromPreview(s, altered); err == nil {
+		t.Fatal("edited saved preview was accepted")
+	}
+	if _, err := PrepareFromPreview(s, []byte(`{"version":1,"request":"sha256:bad"}`)); err == nil {
+		t.Fatal("partial saved preview was accepted")
+	}
 	preview[0] = 'x'
 	next, id2 := p.Preview()
 	if next[0] == 'x' || id != id2 {

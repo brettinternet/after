@@ -48,18 +48,20 @@ Immutable records and atomic writes should survive crashes. One writer per revie
 
 ## CLI and TUI behavior contract
 
-Command names below are a target vocabulary, not installed commands. AFTER-10 owns final help and exit semantics; preserve these capabilities rather than expanding flags speculatively.
+The implemented headless command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, `inspect`, `compare`, `export`, `run`, and `config`; pin/review actions remain future TUI work.
 
 ```text
-after capture [--staged | BASE...HEAD]
-after import <go-test-json> --snapshot <id>
-after inspect <comparison-id> --json
-after run <scenario-id> --comparison <id>     # preview/confirm; no implicit run
-after pin <example-id>
-after review [<comparison-id>]              # TUI; default command may alias this
+after capture [--staged | --base REF --target REF]
+after import <go-test-json-file> --producer <caller-provenance> [--snapshot <id>]
+after inspect <snapshot-or-record-id> [--base <snapshot-id>]
+after compare <receipt-id>
+after export <comparison-id>
+after run <base-id> <candidate-id> --plan-out <private-file>
+after run --plan-file <private-file> --approve <exact-preview-digest>
+after config
 ```
 
-A headless authorized run must require a specific approved plan/digest, not a blanket “yes to all repository commands”. A plan shows images, commands, mounts, network policy, limits, inputs and the selected snapshots. Consent expires if that plan changes. Import/open/inspect must never trigger installation, hooks, credentials access, or project execution. Non-TTY operation is explicit; a piped command must not hang at an interactive prompt.
+Every run requires a specific approved plan/digest or an interactive confirmation of the displayed exact plan, never a blanket “yes to all repository commands”. The preview shows images, commands, mounts, network policy, limits, inputs and selected snapshots. A saved plan is reconstructed and checked byte-for-byte before execution. Import, inspection, comparison, help, config and preview do not execute repository code; non-TTY commands never read from stdin for confirmation. Configuration cannot authorize a run.
 
 The TUI needs only a list, inspector, ordinary diff, and explicit actions:
 

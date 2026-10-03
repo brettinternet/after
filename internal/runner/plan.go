@@ -3,12 +3,15 @@
 package runner
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/brettinternet/after/internal/evidence"
@@ -50,6 +53,15 @@ type Plan struct {
 func hash(b []byte) evidence.Digest {
 	return evidence.Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(b)))
 }
+
+func validRequestID(id evidence.Digest) bool {
+	s := string(id)
+	if len(s) != 71 || !strings.HasPrefix(s, "sha256:") || s != strings.ToLower(s) {
+		return false
+	}
+	_, err := hex.DecodeString(s[7:])
+	return err == nil
+}
 func (p *Plan) Preview() ([]byte, string)  { return append([]byte(nil), p.preview...), p.id }
 func (p *Plan) RequestID() evidence.Digest { return p.request }
 
@@ -62,6 +74,9 @@ func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 func prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits sandbox.Limits, request evidence.Digest) (*Plan, error) {
 	if pair.Base == "" || repetitions < 1 || repetitions > 5 {
 		return nil, errors.New("base and 1-5 repetitions required")
+	}
+	if request != "" && !validRequestID(request) {
+		return nil, errors.New("invalid saved request identity")
 	}
 	input, err := s.PutArtifact([]byte(inputs), "frozen-input", 4096)
 	if err != nil {
@@ -141,14 +156,53 @@ func prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 		Snapshots      evidence.SnapshotPair `json:"snapshots"`
 		Scenario       evidence.Scenario     `json:"scenario"`
 		Repetitions    int                   `json:"repetitions"`
+		Limits         sandbox.Limits        `json:"limits"`
 		Concurrency    int                   `json:"concurrency"`
 		Experiments    [2][2]json.RawMessage `json:"experiments"`
 		BuildArgv      []string              `json:"build_argv"`
 		AppArgv        []string              `json:"app_argv"`
 		AppEnvironment []string              `json:"app_environment"`
-	}{1, p.request, p.pair, p.scenario, repetitions, 1, previews,
+	}{1, p.request, p.pair, p.scenario, repetitions, limits, 1, previews,
 		[]string{"/usr/local/go/bin/go", "build", "-trimpath", "-o", "/work/app", "./app"},
 		[]string{"/work/app", "http://127.0.0.1:18081", "http://127.0.0.1:18082"}, []string{"GOMAXPROCS=2"}}, "", "  ")
 	p.id = string(hash(p.preview))
 	return p, err
+}
+
+// PrepareFromPreview reconstructs a previously saved preview from its frozen
+// request identity and bounds. The rebuilt bytes must match exactly before the
+// returned plan can be approved; caller-supplied text never becomes a plan.
+func PrepareFromPreview(s *store.Store, preview []byte) (*Plan, error) {
+	var saved struct {
+		Version     int                   `json:"version"`
+		Request     evidence.Digest       `json:"request"`
+		Snapshots   evidence.SnapshotPair `json:"snapshots"`
+		Scenario    evidence.Scenario     `json:"scenario"`
+		Repetitions int                   `json:"repetitions"`
+		Limits      sandbox.Limits        `json:"limits"`
+		Concurrency int                   `json:"concurrency"`
+		Experiments [2][2]json.RawMessage `json:"experiments"`
+		BuildArgv   []string              `json:"build_argv"`
+		AppArgv     []string              `json:"app_argv"`
+		Environment []string              `json:"app_environment"`
+	}
+	if len(preview) == 0 || len(preview) > 1<<20 {
+		return nil, errors.New("saved execution plan exceeds bounds")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(preview))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&saved); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return nil, errors.New("invalid saved execution plan")
+	}
+	if saved.Version != 1 || saved.Request == "" || saved.Snapshots.Base == "" || saved.Snapshots.Candidate == "" || saved.Repetitions < 1 || saved.Repetitions > 5 || saved.Limits.Seconds < 1 || saved.Limits.Seconds > 300 || saved.Limits.OutputBytes < 1 || saved.Limits.OutputBytes > 1<<20 || saved.Concurrency != 1 {
+		return nil, errors.New("invalid saved execution plan bindings")
+	}
+	p, err := prepare(s, saved.Snapshots, saved.Repetitions, saved.Limits, saved.Request)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(p.preview, preview) {
+		return nil, errors.New("saved execution plan no longer matches stored inputs")
+	}
+	return p, nil
 }

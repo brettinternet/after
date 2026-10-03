@@ -1,8 +1,8 @@
 # Private local storage
 
-`internal/store` implements AFTER-2 storage on macOS and Linux. It is a library,
-not a capture, import, execution, comparator or review command. Opening it never
-executes project code. The CLI remains help/version only.
+`internal/store` implements AFTER-2 storage on macOS and Linux. It is a library;
+the [headless CLI](CLI.md) composes it with capture, import, execution, comparison,
+and inspection commands. Opening storage never executes project code.
 
 ## Objects and identities
 

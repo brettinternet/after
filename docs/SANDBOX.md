@@ -26,8 +26,9 @@ not a live checkout. `Preview()` returns JSON and its SHA-256 authorization toke
 `Execute` requires that exact token before even querying Docker. A caller must
 show the preview and obtain **operator** consent. Repository text, an imported
 report or a digest supplied by the repository cannot authorize execution. The
-API cannot authenticate a human; AFTER-10 owns that interaction. Render preview
-argv and returned output as untrusted text with terminal escaping.
+API cannot authenticate a human; the [headless CLI](CLI.md) owns the interactive
+confirmation or exact noninteractive digest. Render preview argv and returned
+output as untrusted text with terminal escaping.
 
 Docker rejects copying into even a stopped read-only container. Preparation
 therefore creates an **unstarted** container, copies at most 256 regular files /

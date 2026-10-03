@@ -60,6 +60,16 @@ tasks:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
     cmd: go test -race ./...
 
+  test:cli:
+    desc: Run focused CLI, configuration, and native entry point tests
+    cmd: go test -race ./internal/config ./internal/cli ./cmd/after
+
+  cli:proof:
+    desc: Authorize the real paired payment comparison through CLI subprocesses (requires pinned Docker image and explicit AFTER_DOCKER_BINARY/HOST)
+    env:
+      AFTER_CLI_PROOF: "1"
+    cmd: go test -v -count=1 -timeout=15m ./cmd/after -run '^TestPaymentCLIProof$'
+
   fixtures:go-report:
     desc: Regenerate synthetic Go report fixtures (intentional test/build failures)
     dir: internal/gotestreport/testdata/source
