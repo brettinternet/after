@@ -74,6 +74,12 @@ tasks:
       - go test -json -run '^$' ./other > ../no-tests.jsonl
       - if go test -json -timeout=invalid > ../empty.jsonl 2> /dev/null; then exit 1; else test $? -eq 2; fi
 
+  sandbox:proof:
+    desc: Authorize synthetic offline Docker isolation probes (requires separately provisioned image and explicit AFTER_DOCKER_BINARY/HOST)
+    env:
+      AFTER_SANDBOX_PROOF: "1"
+    cmd: go test -v -count=1 -timeout=15m ./internal/sandbox -run TestDockerProof
+
   format:go:
     desc: Format Go sources
     cmd: gofmt -w cmd internal
