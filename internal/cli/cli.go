@@ -130,9 +130,10 @@ func normalizeArgs(args []string) []string {
 		"--inventory-offset": true, "--inventory-limit": true, "--card-offset": true,
 		"--card-limit": true, "--plan-file": true, "--plan-out": true, "--approve": true,
 		"--artifact-offset": true, "--artifact-size": true,
+		"--evidence": true, "--import-file": true,
 		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true,
 	}
-	boolFlags := map[string]bool{"--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--help": true, "-h": true}
+	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--help": true, "-h": true}
 	var flags, positionals []string
 	for i := 1; i < len(args); i++ {
 		token := args[i]

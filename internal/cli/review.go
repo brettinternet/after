@@ -43,7 +43,12 @@ func pinCommand(state *invocation) *ucli.Command {
 func reviewReason(reason string) bool { return strings.TrimSpace(reason) != "" && len(reason) <= 4096 }
 
 func reviewCommand(state *invocation) *ucli.Command {
-	return &ucli.Command{Name: "review", Usage: "inspect a pin revision or explicitly select, attach a receipt, or accept (no execution)", ArgsUsage: "<pin-revision-id>", Flags: append(commonFlags(),
+	return &ucli.Command{Name: "review", Usage: "browse captured evidence with --tui, or inspect/mutate a headless pin revision", ArgsUsage: "<pin-revision-id> OR --tui <candidate-id> --base <base-id>", Flags: append(commonFlags(),
+		&ucli.BoolFlag{Name: "tui", Usage: "browse immutable captures without execution (requires terminal)"},
+		&ucli.StringFlag{Name: "base", Usage: "matching captured base snapshot for --tui"},
+		&ucli.StringSliceFlag{Name: "evidence", Usage: "stored comparison, receipt or imported report ID for --tui (repeatable, maximum 32)"},
+		&ucli.StringFlag{Name: "import-file", Usage: "file read only when i is pressed in --tui"},
+		&ucli.StringFlag{Name: "producer", Usage: "caller provenance for the explicit TUI import action"},
 		&ucli.StringFlag{Name: "select", Usage: "explicitly select a captured candidate snapshot ID"},
 		&ucli.StringFlag{Name: "mode", Usage: "required with --select: original_base or last_inspected"},
 		&ucli.StringFlag{Name: "receipt", Usage: "attach an already-authorized run receipt without accepting it"},
@@ -52,6 +57,14 @@ func reviewCommand(state *invocation) *ucli.Command {
 	), Action: func(ctx *ucli.Context) error {
 		if err := requireArgs(ctx, 1); err != nil {
 			return err
+		}
+		if ctx.Bool("tui") {
+			return browseCommand(state, ctx)
+		}
+		for _, flag := range []string{"base", "evidence", "import-file", "producer"} {
+			if ctx.IsSet(flag) {
+				return invalid("browser flags require --tui")
+			}
 		}
 		id := evidence.Digest(ctx.Args().First())
 		if !validDigest(string(id)) {

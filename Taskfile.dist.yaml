@@ -66,7 +66,7 @@ tasks:
 
   test:terminal:
     desc: Check terminal safety, captured-diff budgets and actual PTY restoration
-    cmd: go test -race -v ./internal/terminal
+    cmd: go test -race -v ./internal/terminal ./internal/browser
 
   terminal:bench:
     desc: Measure the captured 50-file 100000-line viewport (no project execution)

@@ -1,6 +1,6 @@
 # Headless CLI
 
-`after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Commands emit one versioned JSON object on stdout; diagnostics use stderr. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
+`after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Headless commands emit one versioned JSON object on stdout; diagnostics use stderr. `review --tui <candidate-id> --base <base-id>` instead opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
 
 Build with `mise exec -- task build`, then run commands from any directory with a selected project:
 

@@ -332,6 +332,7 @@ func TestPaymentCLIProof(t *testing.T) {
 		}
 	}
 
+	paymentBrowserProof(t, exe, root, home, project, configPath, r, executed.Data.Comparison)
 	paymentReviewProof(t, exe, root, home, project, configPath, r, dockerEnv)
 
 	// The same process boundary also proves imported outcomes stay reported.
