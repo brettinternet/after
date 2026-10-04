@@ -11,7 +11,7 @@ jobs:
   go:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +21,10 @@ jobs:
       - run: mise exec -- task check:go
       - run: ./bin/after --help
       - run: ./bin/after --version
+      - run: mise exec -- task demo:inspect
+      - run: mise exec -- task package
+      - name: Verify package checksums
+        run: for package in dist/*; do (cd "$package" && shasum -a 256 -c SHA256SUMS); done
   poc:
     runs-on: ubuntu-latest
     timeout-minutes: 65
@@ -38,6 +42,10 @@ jobs:
           mkdir -p artifacts/poc
           export AFTER_DOCKER_BINARY="$(command -v docker)"
           export AFTER_DOCKER_HOST=unix:///var/run/docker.sock
+          mise exec -- go version
+          docker version
+          docker image inspect docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 --format '{{.Id}} {{.RepoDigests}}'
+          mise exec -- task demo:proof 2>&1 | tee artifacts/poc/demo.log
           mise exec -- task test:poc 2>&1 | tee artifacts/poc/gate.log
       - uses: actions/upload-artifact@v4
         if: always()

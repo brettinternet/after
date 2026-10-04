@@ -9,15 +9,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/brettinternet/after/internal/config"
 	ucli "github.com/urfave/cli/v2"
 	"golang.org/x/term"
 )
 
+// Version is replaced by the unpublished package build task.
+var Version = "0.1.0-dev"
+
 const (
-	Version         = "0.1.0-dev"
 	MaxCLIOutput    = 16 << 20
 	ExitOK          = 0
 	ExitOperational = 1
@@ -45,7 +49,9 @@ func (e *exitError) Error() string { return e.diagnostic }
 
 // Run executes the command layer with separate, caller-supplied output streams.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return run(context.Background(), args, stdout, stderr, os.Stdin, terminalInput(os.Stdin))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return run(ctx, args, stdout, stderr, os.Stdin, terminalInput(os.Stdin))
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io.Reader, tty bool) int {
@@ -53,6 +59,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
+		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports only the frozen offline payment experiment with exact consent.\n   No general application adapter, GitHub sync, or universal behavior guarantee.",
 		Version:                   Version,
 		Writer:                    stdout,
 		ErrWriter:                 stderr,

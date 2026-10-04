@@ -81,6 +81,10 @@ The destination presentation has now passed real Chromium checks for all twelve 
 
 The original seven documentation artifacts were committed as `1337132` and pushed to `origin/main`. This bootstrap adds pinned tools, hooks, CI, local link/backlog checks and implementation tasks. Recheck Git state before beginning implementation; preserve any intervening user or agent work.
 
+## Packaging and repeatable demo
+
+AFTER-16 adds [native packaging and the owned demo](DEMO.md). `task package` emits unpublished versioned macOS/Linux amd64/arm64 binaries and checksums. `task demo:inspect` exercises capture/import without Docker; `task demo` walks real receipt-backed pin/edit/reopen/rerun with two exact consent prompts, while `task demo:proof` explicitly authorizes the same synthetic plans for CI. Successful setup/teardown owns only its private temporary workspace; failures retain diagnostic state. The root README now describes implemented capabilities rather than the initial scaffold. Human evaluation remains unrun.
+
 ## Tooling and next action
 
 Run `mise trust && mise install && mise exec -- task init`. The template's mise/Task/Lefthook/Prettier/Gitleaks/Worktrunk conventions are adapted without its application, databases, secrets or service stack. Go and Backlog.md are pinned; Bun/Playwright are development-only documentation dependencies.

@@ -2,7 +2,9 @@
 
 **See what the code will do differently.** A local-first, example-first review tool: inspect concrete before/after behavior, pin an expectation, and reopen it when its evidence changes.
 
-**Status:** native Go help/version CLI and versioned evidence contracts. Capture, import, execution, comparison and TUI are not implemented yet. The presentation is a simulation.
+**Status:** working native Go CLI/TUI for local Git capture, Go report import, raw inspection, frozen offline payment experiments, exact comparison and pin/edit/reopen/rerun. This is a bounded proof of concept, not a general application runner or validated human review tool. The presentation is a simulation.
+
+Start with the [repeatable demo and native packages](docs/DEMO.md): `mise exec -- task demo:inspect` needs no Docker; `task demo` requires separate image provisioning and exact consent for each real run.
 
 - [Agent handoff](docs/HANDOFF.md)
 - [Implementation contract and POC gates](docs/IMPLEMENTATION.md)
@@ -25,9 +27,9 @@ mise exec -- task build
 mise exec -- task test
 ```
 
-The pinned tools are Go, Bun, Prettier, Gitleaks, Lefthook, Task, Worktrunk and Backlog.md. Bun and Playwright support documentation checks only; the AFTER binary does not need them at runtime. Help/version work outside a repository without Docker, network access or model credentials. No arguments prints help. Unknown commands, flags and extra arguments exit 2; help/version exit 0; output failures exit 1. The CLI never prompts or executes project code.
+The pinned tools are Go, Bun, Prettier, Gitleaks, Lefthook, Task, Worktrunk and Backlog.md. Bun and Playwright support documentation checks only; the AFTER binary does not need them at runtime. Help/version work outside a repository without Docker, network access or model credentials. No arguments prints help. Unknown commands, flags and extra arguments exit 2; help/version exit 0; output failures exit 1. Inspection never executes project code. Only an explicitly authorized `run` executes the frozen payment experiment; interactive runs require exact-plan confirmation.
 
-The tooling is adapted from the sibling `project` template: mise, Task targets, staged formatting/secret hooks, EditorConfig and blocking Worktrunk setup. Web/server tasks, Docker Compose services, Hum, Varlock and copied environment state were deliberately omitted: this project currently has no development service stack or secrets to configure. Future fixture isolation is a separate, tested execution boundary, not the template's database stack.
+The tooling is adapted from the sibling `project` template: mise, Task targets, staged formatting/secret hooks, EditorConfig and blocking Worktrunk setup. Web/server tasks, Docker Compose services, Hum, Varlock and copied environment state were deliberately omitted: this project currently has no development service stack or secrets to configure. Fixture isolation uses the separately provisioned, pinned offline Docker boundary, not a development database stack.
 
 ## Checks
 
@@ -44,4 +46,4 @@ mise exec -- task docs:check            # real browser checks; ignored artifacts
 mise exec -- task docs:render           # also regenerate PDF and preview
 ```
 
-CI runs Go build/race tests/vet/format checks and CLI smoke commands on macOS and Linux, plus formatting, backlog/link checks, secret scanning and Chromium presentation checks. Race tests require a C compiler and target macOS/Linux amd64/arm64; the shipped binary is standard-library-only. AFTER-15/16 add the real sandbox POC gate. Green foundation checks do not establish the proposed review engine.
+CI is configured for Go build/race tests/vet/format, CLI/demo smoke checks and native packages on macOS/Linux amd64/arm64, plus formatting, backlog/link checks, secret scanning and Chromium presentation checks. The Linux Docker job runs the real demo and adversarial POC gate with the exact pinned image. Race tests require a C compiler; the shipped binary needs no Go or JavaScript runtime. Green foundation checks alone do not prove execution, and finite synthetic receipts do not establish universal behavior or human benefit.

@@ -1,8 +1,8 @@
 # Offline sandbox proof
 
 AFTER-6 supplies `internal/sandbox`; AFTER-8 adds its protected two-container
-experiment and the [paired payment runner](RUNNER.md). Neither is wired to a
-public `after run` command yet. Ordinary help, inspection and `task test` never contact Docker. The
+experiment and the [paired payment runner](RUNNER.md), wired to the
+public [after run command](CLI.md) and [repeatable demo](DEMO.md). Ordinary help, inspection and `task test` never contact Docker. The
 [implementation contract](IMPLEMENTATION.md) still governs future execution.
 
 ## Decision and supported boundary
