@@ -6,7 +6,7 @@
 
 The [versioned evaluation kit](docs/EVALUATION.md) provides matched review conditions, verified synthetic answer keys and scoring sheets. It is an author-rehearsed kit, not human validation; recruitment and scheduling remain gated.
 
-Start with the [repeatable demo and native packages](docs/DEMO.md): `mise exec -- task demo:inspect` needs no Docker; `task demo` requires separate image provisioning and exact consent for each real run.
+Start with the [repeatable demo and native packages](docs/DEMO.md): `mise exec -- task demo:inspect` needs no Docker; `task demo` requires separate image provisioning and exact consent for each real run. The [examples](examples/README.md) walk practical CLI and TUI scenarios, from a first capture to catching a duplicate payment charge.
 
 - [Agent handoff](docs/HANDOFF.md)
 - [Implementation contract and POC gates](docs/IMPLEMENTATION.md)

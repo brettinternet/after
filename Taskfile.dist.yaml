@@ -84,6 +84,17 @@ tasks:
       - task: build
       - go run ./internal/demo --execute --authorize-synthetic-plans {{.CLI_ARGS}}
 
+  examples:
+    desc: Smoke-test every example that needs no Docker (see examples/README.md)
+    cmds:
+      - task: build
+      - examples/cli/01-working-tree.sh
+      - examples/cli/02-staged-and-branches.sh
+      - examples/cli/03-moved-oracle.sh
+      - examples/cli/04-config.sh
+      - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/01-raw-review.sh
+      - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/02-test-reports.sh
+
   study:assign:
     desc: Print reproducible anonymous study assignments (supply --assign-seed via CLI_ARGS)
     cmd: go run ./internal/demo --assign-seed study-v1 {{.CLI_ARGS}}
