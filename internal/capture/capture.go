@@ -490,15 +490,19 @@ func (r *reader) account(e entry) (entry, error) {
 
 func persist(ctx context.Context, s *store.Store, scan scan) (Result, error) {
 	var out Result
-	diff, err := makeDiff(ctx, scan.Base, scan.Candidate)
+	// Each snapshot's Diff is the patch from the captured base to that snapshot.
+	diff := func(candidate image) (evidence.Artifact, error) {
+		patch, err := makeDiff(ctx, scan.Base, candidate)
+		if err != nil {
+			return evidence.Artifact{}, err
+		}
+		return s.PutArtifact(patch, "git-diff", store.MaxBlobBytes)
+	}
+	a, err := diff(scan.Candidate)
 	if err != nil {
 		return out, err
 	}
-	a, err := s.PutArtifact(diff, "git-diff", store.MaxBlobBytes)
-	if err != nil {
-		return out, err
-	}
-	save := func(im image, index evidence.Digest) (evidence.Snapshot, error) {
+	save := func(im image, index evidence.Digest, a evidence.Artifact) (evidence.Snapshot, error) {
 		snap := evidence.Snapshot{SchemaVersion: evidence.SchemaVersion, Source: im.Source, Commit: im.Commit, Unborn: im.Unborn, Completeness: evidence.Complete, Diff: a.Content, IndexSnapshot: index, Limits: []string{"two matching reads; not an atomic filesystem snapshot", "diff includes captured regular files only; inspect excluded and unsupported inventory"}}
 		if im.Source == evidence.MergeBase {
 			snap.MergeBase = im.MergeBase
@@ -529,13 +533,20 @@ func persist(ctx context.Context, s *store.Store, scan scan) (Result, error) {
 		}
 		return store.Put(s, snap)
 	}
-	out.Base, err = save(scan.Base, "")
+	out.Base, err = save(scan.Base, "", a)
 	if err != nil {
 		return out, err
 	}
 	var index evidence.Digest
 	if scan.HasIndex {
-		snap, e := save(scan.Index, "")
+		indexDiff := a
+		if scan.Candidate.Source == evidence.WorkingTree {
+			// Never label the unstaged patch as the staged one.
+			if indexDiff, err = diff(scan.Index); err != nil {
+				return out, err
+			}
+		}
+		snap, e := save(scan.Index, "", indexDiff)
 		if e != nil {
 			return out, e
 		}
@@ -545,7 +556,7 @@ func persist(ctx context.Context, s *store.Store, scan scan) (Result, error) {
 	if scan.Candidate.Source != evidence.WorkingTree {
 		index = ""
 	}
-	out.Candidate, err = save(scan.Candidate, index)
+	out.Candidate, err = save(scan.Candidate, index, a)
 	return out, err
 }
 

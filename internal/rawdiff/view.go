@@ -137,9 +137,9 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 		v.entries = append(v.entries, e)
 	}
 	sort.Slice(v.entries, func(i, j int) bool { return v.entries[i].Path < v.entries[j].Path })
-	if base.Diff != candidate.Diff {
+	if !CapturedPair(base, candidate) {
 		v.indexComplete = false
-		v.limits = append(v.limits, "snapshots do not share a captured diff; complete stored inventory and both sources remain available, but no patch is claimed for this pair")
+		v.limits = append(v.limits, "snapshots are not a captured base/candidate pair; complete stored inventory and both sources remain available, but no patch is claimed for this pair")
 		return v, nil
 	}
 	var err error
@@ -152,6 +152,13 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 	v.available = true
 	v.index(candidate.Diff)
 	return v, nil
+}
+
+// CapturedPair reports whether the shared stored Diff is this pair's patch. A
+// capture stores the patch from its commit base to each candidate; other
+// pairings (index/worktree, reversed, mixed captures) get inventory only.
+func CapturedPair(base, candidate evidence.Snapshot) bool {
+	return base.Diff == candidate.Diff && base.Source == evidence.Commit && candidate.Source != evidence.Commit
 }
 
 func files(s evidence.Snapshot) map[string]evidence.File {

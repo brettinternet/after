@@ -4,11 +4,12 @@ title: Persist immutable captures and receipts safely
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 15:34'
+updated_date: '2026-10-04 01:45'
 labels:
   - poc
   - storage
   - security
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-1
@@ -74,6 +75,8 @@ Takeover validation: implementation staged checks passed (mise exec -- task chec
 Operator-authorized takeover: existing independent verifier a4907847-084f-45d5-9dda-623c03aaf0d4 is still running, so consume its result rather than duplicate review. Preserve staged implementation and original checkout receipt; integrate onto main and commit after verification.
 
 Delivered implementation commit 56cb6ce via fast-forward onto main. Independent verifier a4907847-084f-45d5-9dda-623c03aaf0d4 completed with PASS on all five criteria and no concrete findings. Parent reran mise exec -- task check:go and mise exec -- task test on main: build, race tests, vet, formatting, 36 documentation links and 20-task integrity passed. mise exec -- task check:staged passed formatting and secret scanning before implementation commit; final metadata receives the same gate. Tests exercise five-record reopen/identity, publication fault boundaries, corruption/version/missing references, confinement/permissions/limits, killed-writer recovery, redaction and false completeness. docs/STORAGE.md records same-user threat limits, filesystem durability limits and explicit literal-secret policy. No external blocker or resumable implementation remains. Inherited .worktrees/after-2-storage and its workspace are retained because historical cleanup ownership remains unverified; no new checkout created. No push performed.
+
+Review 2026: No defects found in store publish/lock/confinement/redaction. Residual limits (already documented): crash between link and pending removal leaves a two-link object that blocks republish until manual repair; pin expectation redaction carries no incompleteness marker because pins have no completeness field.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

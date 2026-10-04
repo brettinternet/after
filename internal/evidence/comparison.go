@@ -26,7 +26,7 @@ func (c Comparison) Validate() error {
 	}
 	if c.Details != nil {
 		a := c.Details
-		if !digest(a.Content) || a.Channel != "comparison-details-v1" || a.Bytes < 0 || a.MaxBytes <= 0 || a.Bytes > a.MaxBytes || !oneOf(a.Completeness, Complete, Incomplete) {
+		if !digest(a.Content) || a.Channel != "comparison-details-v1" || a.Bytes < 0 || a.MaxBytes <= 0 || a.Bytes > a.MaxBytes || !oneOf(a.Completeness, Complete, Incomplete) || partialMarkedComplete(*a) {
 			return errors.New("invalid comparison details")
 		}
 		if c.Completeness == Complete && (a.Completeness != Complete || a.Redacted || a.Truncated) {

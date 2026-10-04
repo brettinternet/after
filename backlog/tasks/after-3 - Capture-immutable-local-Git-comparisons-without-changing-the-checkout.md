@@ -4,11 +4,12 @@ title: Capture immutable local Git comparisons without changing the checkout
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 15:50'
+updated_date: '2026-10-04 01:45'
 labels:
   - poc
   - git
   - security
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-1
@@ -59,6 +60,8 @@ Evidence cannot bind to a moving branch name or mixed working-tree contents. Sco
 Implemented bounded read-only Git capture and private immutable persistence for working-tree/index/merge-base modes, including unborn snapshots and stored index association. Added path/mode/binary/deletion/rename, exclusion/oversize, unsupported repository/filesystem, controlled-edit, redaction and hostile config/environment tests. Independent verifier ran task check:go and found ambient PATH could substitute Git; fixed to trusted /usr/bin/git and added fake-Git PATH sentinel regression. Verification used the task copy in the worktree because the verifier sandbox denied primary-checkout reads; parent retained authoritative provider ownership. Parent also fixed private-store self-inventory changing capture IDs and ensured staged captures list excluded untracked paths, with regressions. After fixes: mise exec -- task check:go PASS (build, race suite, vet, gofmt); mise exec -- task test PASS (race suite, 40 local links, 20-task graph). LSP diagnostics clean on affected source. docs/CAPTURE.md documents bounded reads, unsupported states, non-atomic/ABA residual consistency and captured-regular-file-only diff limitations. No execution receipts or CLI capture command are claimed.
 
 Delivery: implementation acb7d1f fast-forwarded into main without disturbing the authoritative task claim. Re-ran mise exec -- task check:go and mise exec -- task test on main: PASS. Implementation staging gate passed formatting and secret checks. Session-owned implementation worktree/branch removed with Worktrunk after receipt and idle-shell checks; matching Herdr workspace disappearance verified. Pre-existing after-2-storage worktree/workspace retained because it belongs to earlier work and was not adopted. No remaining AFTER-3 blocker; CLI exposure remains AFTER-10. Next dependency-ready item is AFTER-4; not started.
+
+Review 2026: Found working-tree captures stored the base->worktree diff on the index snapshot, so inspecting base/index showed unstaged edits as the staged patch. Fixed: index snapshot now stores its own base->index diff; regression TestPatchOnlyForCapturedPair; CAPTURE.md updated. task check:go PASS.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

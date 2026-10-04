@@ -8,7 +8,9 @@ source; it never builds, tests, runs project commands or creates an execution re
 
 - Default: HEAD versus tracked working-tree files, plus explicitly selected
   non-ignored untracked paths. The candidate also references a separately stored
-  index snapshot, so staged and unstaged bytes remain distinguishable.
+  index snapshot, so staged and unstaged bytes remain distinguishable. Each
+  snapshot's diff is the patch from HEAD to that snapshot, so the index snapshot
+  carries the staged patch, never the working-tree one.
 - `Mode: evidence.Index`: HEAD versus the index, ignoring unstaged edits.
 - `Mode: evidence.MergeBase`, with `Base` and `Target`: resolve both commit-ish
   values, compare their unique merge base with the target commit, without fetch.

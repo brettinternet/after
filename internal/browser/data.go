@@ -92,7 +92,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		return nil, err
 	}
 	d := &Data{Selection: selected, Patch: Section{Name: "captured raw diff", Blob: candidate.Diff}, Limits: document("capture limits", raw.Limits())}
-	if base.Diff != candidate.Diff {
+	if !rawdiff.CapturedPair(base, candidate) {
 		d.Patch = document("no shared captured patch; inspect inventory and both sources", raw.Limits())
 	}
 	for _, item := range raw.Inventory() {

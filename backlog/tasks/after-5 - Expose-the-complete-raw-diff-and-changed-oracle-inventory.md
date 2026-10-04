@@ -4,11 +4,12 @@ title: Expose the complete raw diff and changed-oracle inventory
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 16:14'
+updated_date: '2026-10-04 01:45'
 labels:
   - poc
   - git
   - review
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-3
@@ -59,6 +60,8 @@ Implemented internal/rawdiff read-only views over captured manifests/blobs with 
 Resuming on main under explicit operator handoff of incomplete work. Rechecking staged implementation, prior independent verification and focused checks before delivery.
 
 Delivered implementation on main as 42bd3b5 (Add captured raw diff review). Independent verifier dce8e84b-ee2a-4d07-952d-f391b31461fa passed criteria 2-5 and found a criterion-1 redaction collision: distinct originals could produce equal stored records and disappear from inventory. Fixed by retaining equal records as unknown when either capture is incomplete; added real capture regression TestRedactionCollisionRetainsUnknownPath and documented conservative overinclusion. Final mise exec -- task check:go PASS (build, race tests including regression, vet, gofmt); mise exec -- task test PASS (race tests, 45 links, 20-task graph); mise exec -- task check:staged PASS (format/secrets); git diff --cached --check PASS; both Go files LSP clean. One general independent verification pass completed; concrete finding fixed and affected checks rerun. No blockers. Existing after-2-storage worktree remains untouched and unadopted because ownership was not established; no checkout created for this task. No push. Final task metadata committed separately on main.
+
+Review 2026: rawdiff.Open claimed a patch for any pair sharing a diff digest, including reversed or index/worktree pairs. Added rawdiff.CapturedPair (commit base, non-commit candidate, shared diff) used by Open and the TUI loader; other pairs get inventory only. Regression TestPatchOnlyForCapturedPair; RAW-DIFF.md updated.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

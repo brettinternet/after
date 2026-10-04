@@ -4,10 +4,11 @@ title: Import Go test JSON as honestly scoped reported evidence
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 16:03'
+updated_date: '2026-10-04 01:45'
 labels:
   - poc
   - import
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-1
@@ -57,6 +58,8 @@ Implemented reader-only go-test-json-v1 report cards with raw SHA-256/provenance
 Operator explicitly handed off incomplete work on main. Resuming existing staged AFTER-4 implementation; verifying acceptance and prior review evidence before committing. No other checkout adopted.
 
 Delivered on main in b963986. Verification: mise exec -- task check:go passed build, race tests, vet and gofmt; mise exec -- task test passed Go tests, 42 local links and 20-task integrity; mise exec -- task format:check passed; mise exec -- task check:staged passed formatting and secret scan before implementation commit. TestCapturedFixtures covers real pinned-Go statuses, interleaving and empty/build reports; provenance assertions and metadata tests cover digest/times/binding; malformed/repetition/bounds tests cover recovery; TestImportOnlyHostileData passes with unusable PATH/Docker and module networking off. Prior-session independent verifier returned PASS after inspecting trust boundaries and running Task checks; no concrete defects reported. No remaining task blocker. CLI/private-store integration remains assigned to AFTER-10; strings require sanitization by future renderers and imported bindings remain unverified. Final task metadata is committed separately. Existing after-2-storage checkout was not adopted or modified; ownership cleanup evidence is outside this task.
+
+Review 2026: No defects found in go-test-json-v1 importer; bounds, diagnostics, attempts and importer-only evidence state verified by reading and existing tests.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

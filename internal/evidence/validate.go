@@ -167,6 +167,9 @@ func (r Receipt) Validate() error {
 		if (a.Redacted && a.RedactionPolicy != "literal-v1") || (a.RedactionPolicy != "" && a.RedactionPolicy != "literal-v1") {
 			return errors.New("invalid artifact redaction policy")
 		}
+		if partialMarkedComplete(a) {
+			return errors.New("redacted or truncated artifact cannot be complete")
+		}
 		if a.Redacted || a.Truncated || a.Completeness != Complete {
 			complete = false
 		}
@@ -181,6 +184,10 @@ func (r Receipt) Validate() error {
 		return errors.New("conclusive comparison requires complete observations")
 	}
 	return nil
+}
+
+func partialMarkedComplete(a Artifact) bool {
+	return (a.Redacted || a.Truncated) && a.Completeness == Complete
 }
 
 func (p Pin) Validate() error {

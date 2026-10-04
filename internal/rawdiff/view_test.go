@@ -352,7 +352,7 @@ func TestMissingArtifactsRedactionAndInvalidPair(t *testing.T) {
 	}
 	r.Candidate.Diff = evidence.Digest("sha256:" + strings.Repeat("a", 64))
 	v, err := Open(s, r.Base, r.Candidate)
-	if err != nil || len(v.Inventory()) != 1 || !strings.Contains(strings.Join(v.Limits(), " "), "do not share a captured diff") {
+	if err != nil || len(v.Inventory()) != 1 || !strings.Contains(strings.Join(v.Limits(), " "), "not a captured base/candidate pair") {
 		t.Fatal("cross-capture inventory unavailable", err)
 	}
 	if _, err := v.Raw(0, 10); !errors.Is(err, ErrDiff) {
@@ -452,5 +452,44 @@ func TestPotentialOracleHeuristic(t *testing.T) {
 	// This intentionally admits false positives: labels are hints, not approvals.
 	if !potentialOracle("contest.go") {
 		t.Fatal("heuristic changed")
+	}
+}
+
+func TestPatchOnlyForCapturedPair(t *testing.T) {
+	d := t.TempDir()
+	git(t, d, "init", "-q", "--template=", "-b", "main")
+	put(t, d, "prod.go", []byte("before\n"))
+	git(t, d, "add", "--all")
+	git(t, d, "commit", "-qm", "base")
+	put(t, d, "prod.go", []byte("staged\n"))
+	git(t, d, "add", "--all")
+	put(t, d, "prod.go", []byte("unstaged\n"))
+	s := openStore(t, d, nil)
+	r, err := capture.Capture(context.Background(), d, s, capture.Options{})
+	if err != nil || r.Index == nil {
+		t.Fatal(err)
+	}
+	if raw := allRaw(t, view(t, s, r), MaxPageBytes); !bytes.Contains(raw, []byte("+unstaged")) {
+		t.Fatalf("captured pair lost its patch: %q", raw)
+	}
+	if staged, err := s.ReadBlob(r.Index.Diff); err != nil || !bytes.Contains(staged, []byte("+staged")) || bytes.Contains(staged, []byte("unstaged")) {
+		t.Fatalf("index snapshot diff is not the staged patch: %q %v", staged, err)
+	}
+	for name, pair := range map[string][2]evidence.Snapshot{
+		"base-index":          {r.Base, *r.Index},
+		"index-candidate":     {*r.Index, r.Candidate},
+		"reversed":            {r.Candidate, r.Base},
+		"candidate-candidate": {r.Candidate, r.Candidate},
+	} {
+		v, err := Open(s, pair[0], pair[1])
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		if p, err := v.Raw(0, MaxPageBytes); err == nil {
+			t.Fatalf("%s: patch for another pair exposed: %q", name, p.Bytes)
+		}
+		if len(v.Inventory()) == 0 && name != "candidate-candidate" {
+			t.Fatal(name, "inventory hidden")
+		}
 	}
 }

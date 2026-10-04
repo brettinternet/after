@@ -4,10 +4,11 @@ title: Establish the Go CLI and evidence-state contracts
 status: Done
 assignee: []
 created_date: '2026-10-03 05:39'
-updated_date: '2026-10-03 14:30'
+updated_date: '2026-10-04 01:45'
 labels:
   - poc
   - core
+  - reviewed
 milestone: m-0
 dependencies: []
 documentation:
@@ -58,6 +59,8 @@ Verification: mise exec -- task check passed (build, race tests in 3 packages, v
 Explicit operator handoff to the successor session. Recovered the original creation receipt and inactive owner transcript; independent verifier run 717d5dec-1e45-4786-aee3-efa95dc19212 is complete. Verification passed criteria 2-5 with no concrete defects; direct native binary smoke was blocked by verifier shell policy. Prior parent recorded Linux binary smoke evidence; successor will refresh local checks before integration.
 
 Delivered implementation commit ebcc610 to main by fast-forward, preserving authoritative task metadata. Refreshed mise exec -- task check in the adopted worktree and on main: passed build, race tests (3 packages), vet, gofmt, formatting, 35 local links, 20-task backlog integrity and secret scan. mise exec -- task check:staged passed before implementation commit. Native macOS binary under env -i passed help/version and rejected capture with exit 2; entrypoint test passed in an empty non-repository directory. Rechecked prior transcript evidence for Linux arm64 binary help/version in an offline, read-only, non-root container and Linux amd64 cross-build. Independent verification found no concrete defects in criteria 2-5; its isolated-binary attempt was policy-blocked, covered by parent smoke evidence instead. No additional general review or source changes were needed. Worktrunk removed the verified adopted worktree and branch; its matching idle-shell Herdr workspace disappeared. No remaining blocker; next ready task is AFTER-2, not started. Remote CI remains unrun; no push authorized.
+
+Review 2026: Found artifact validation accepted impossible redacted/truncated + completeness=complete combinations (AC3). Fixed in evidence.Validate for receipt artifacts and comparison details; added negative tests. task check:go PASS.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

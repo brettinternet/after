@@ -130,11 +130,18 @@ func TestRejectReceipt(t *testing.T) {
 		"redacted equality":     func(r *Receipt) { r.Artifacts[0].Redacted = true },
 		"incomplete equality":   func(r *Receipt) { r.Completeness = Incomplete },
 		"artifact incomplete":   func(r *Receipt) { r.Artifacts[0].Completeness = Incomplete },
-		"oversized":             func(r *Receipt) { r.Artifacts[0].Bytes = 1025 },
-		"negative size":         func(r *Receipt) { r.Artifacts[0].Bytes = -1 },
-		"unbounded":             func(r *Receipt) { r.Artifacts[0].MaxBytes = 0 },
-		"artifact path":         func(r *Receipt) { r.Artifacts[0].Content = "../../secret" },
-		"limits":                func(r *Receipt) { r.Limits = nil },
+		"truncated artifact marked complete": func(r *Receipt) {
+			r.Completeness, r.State.Comparison, r.Artifacts[0].Truncated = Incomplete, NotCompared, true
+		},
+		"redacted artifact marked complete": func(r *Receipt) {
+			r.Completeness, r.State.Comparison = Incomplete, NotCompared
+			r.Artifacts[0].Redacted, r.Artifacts[0].RedactionPolicy = true, "literal-v1"
+		},
+		"oversized":     func(r *Receipt) { r.Artifacts[0].Bytes = 1025 },
+		"negative size": func(r *Receipt) { r.Artifacts[0].Bytes = -1 },
+		"unbounded":     func(r *Receipt) { r.Artifacts[0].MaxBytes = 0 },
+		"artifact path": func(r *Receipt) { r.Artifacts[0].Content = "../../secret" },
+		"limits":        func(r *Receipt) { r.Limits = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := receipt()
