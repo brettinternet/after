@@ -4,11 +4,12 @@ title: Build the real payment-retention fixture and independent observer
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 17:08'
+updated_date: '2026-10-04 02:17'
 labels:
   - poc
   - fixtures
   - runner
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-3
@@ -60,6 +61,8 @@ Implemented the synthetic fixture in after-7-payment using captured Git revision
 Explicit operator handoff: taking over existing staged after-7-payment implementation. Preserve original creation receipt; cleanup ownership remains unverified because historical session access is scope-blocked. Revalidate existing implementation and integrate to main; do not start another item.
 
 Delivery: implementation dbae18c fast-forwarded to main with authoritative task edits preserved. Revalidated mise exec -- task check:go (build/race/vet/gofmt), mise exec -- task test (Go, 50 links, 20 tasks), and mise exec -- task check:staged: all passed. With explicitly configured local Docker CLI and Colima socket, mise exec -- task fixtures:payment passed four revisions x nine cases in 95.231s. Independent verifier run e25d5eb0-32a4-41df-bc14-d92d062bf3a2 completed: all six AC pass, no blockers, separate live proof passed in 95.431s. Counts come from exact received traffic; threshold/no-sliding and both mutations passed. No source corrections needed after verification. General hostile-candidate isolation remains AFTER-8, not a fixture claim. Retain .worktrees/after-7-payment and its branch: historical ownership continuity could not be fully verified for destructive cleanup. Existing after-2-storage checkout untouched. Final task metadata is committed separately on main; no push authorized. No remaining implementation blocker; next eligible work requires a new request.
+
+Review 2026: No defects found. task fixtures:payment PASS: base 1 vs candidate 2 provider calls for 12h same-key, 30s control 1/1, expired/different-key 2, threshold at 5m/24h, no sliding expiry, disabled-dedup and printed-count controls.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

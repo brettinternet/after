@@ -653,6 +653,11 @@ func compareCommand(state *invocation, ctx *ucli.Context) error {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
+	if _, ok, err := optionalGet[evidence.Receipt](s, evidence.Digest(id)); err != nil {
+		return operational("receipt record is corrupt or unavailable")
+	} else if !ok {
+		return invalid("receipt ID was not found")
+	}
 	comparisonRecord, err := compare.Run(s, evidence.Digest(id))
 	if err != nil {
 		return operational("comparison could not be persisted")

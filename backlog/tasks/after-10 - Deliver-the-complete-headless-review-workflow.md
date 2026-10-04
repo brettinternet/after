@@ -4,10 +4,11 @@ title: Deliver the complete headless review workflow
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 19:36'
+updated_date: '2026-10-04 02:17'
 labels:
   - poc
   - cli
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-4
@@ -66,6 +67,8 @@ Takeover: prior workflow dcd17f18 stopped on session reload before edits; clean 
 Implemented urfave/cli headless capture/import/inspect/export/compare/run/config, strict layered YAML and per-setting sources, bounded JSON and artifact/diff pages, and exact saved-plan authorization. Independent verifier ba5a1515 passed AC1-2 and AC4-10 plus full checks, and found a real AC3 failure: observer artifact IDs were not inspectable. Parent added bounded exact-byte artifact inspection with optional complete JSON document and precision/injection/page regression tests; no second general review. Verification after fix: mise exec -- task format:go; mise exec -- task test:cli (race tests passed); explicitly configured local Docker plus mise exec -- task cli:proof PASSED TestPaymentCLIProof in 177.14s (actual identical responses, 12h provider requests 1 vs 2, 30s control 1 vs 1, retained provenance and imported reported pass/fail); mise exec -- task check PASSED; git diff --check PASSED; mise exec -- task check:staged PASSED. LSP diagnostics clean on changed workflow and artifact test files. No models/accounts used. No private artifacts staged. Remaining scope is payment-only runner; TUI and pins remain future tasks.
 
 Delivery: implementation commit 4a8d8be fast-forwarded into main, preserving authoritative claim edits; mise exec -- task test:cli passed again on main. During takeover the old executor was discovered still running despite its parent reporting stopped; it was explicitly interrupted and confirmed terminal before sole-writer reconciliation continued. Current implementation and verifier runs completed. Adopted after-10-cli checkout is retained because the Herdr workbench plugin is unavailable, preventing required pane/unsaved-state verification for safe cleanup. Only its generated private writer lock is untracked; it was excluded from the implementation commit. No delivery blocker; no push. Final task metadata is committed separately on main.
+
+Review 2026: Found compare with a well-formed but unknown/non-receipt ID exited 1 ('comparison could not be persisted') instead of documented invalid-ID status 2. Fixed compareCommand to return invalid 'receipt ID was not found'; added regression for snapshot and unknown IDs. task check:go PASS; task cli:proof PASS (488s). Config precedence/YAML strictness reviewed without findings.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -4,11 +4,12 @@ title: Prove the offline execution sandbox and consent boundary
 status: Done
 assignee: []
 created_date: '2026-10-03 05:40'
-updated_date: '2026-10-03 16:51'
+updated_date: '2026-10-04 02:17'
 labels:
   - poc
   - runner
   - security
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-1
@@ -64,6 +65,8 @@ Resumed the explicitly handed-off implementation and integrated commit 5b7a762 i
 Final verification: mise exec -- task check:go passed (build, race tests, vet, gofmt); mise exec -- task test passed in implementation checkout and again on main (48 local links and 20-task graph); mise exec -- task check:staged passed formatting and secret scan before implementation commit. With explicit AFTER_DOCKER_BINARY/HOST, mise exec -- task sandbox:proof passed all nine real Docker cases in 32.659s after the readiness correction. Owned Docker container/image inventories were empty afterward. LSP diagnostics clean for changed tests. Live environment was macOS Colima with Linux aarch64 Docker 29.5.2/cgroup v2; native Linux workstation, Docker Desktop and amd64 were not independently tested. docs/SANDBOX.md records provisioning, exact limits, daemon/kernel trust, interrupted-mutation reconciliation and observer-isolation obligations for AFTER-8.
 
 Delivery: adopted sandbox checkout and branch removed with Worktrunk after receipt verification and idle-pane inspection; matching Herdr workspace disappearance verified. Pre-existing after-2-storage checkout/workspace was not adopted and remains untouched. No push. No task blocker remains; subsequent fixture/runner work requires a separate task invocation.
+
+Review 2026: No defects found in plan digest/consent, owned-name cleanup, preflight or output bounds. task sandbox:proof PASS on colima (linux cgroup v2) with pinned image: http/attacks, denied, missing image/dependency, output, deadline/cancel descendants, memory, scratch budget; no after-sandbox containers/images left.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

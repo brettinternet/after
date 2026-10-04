@@ -4,10 +4,11 @@ title: Run frozen paired experiments with bounded process supervision
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 17:42'
+updated_date: '2026-10-04 02:17'
 labels:
   - poc
   - runner
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-5
@@ -60,6 +61,8 @@ Independent read-only review b8e36c3d-8c16-4a62-bd5f-c8f00a17d84b / child 106c2f
 
 Delivered implementation 5e11e8c by fast-forward to main, preserving the authoritative task claim. Final mise exec -- task check passed tool checks, all formatting, Go race tests, vet/build/gofmt, 57 local links, 20-task graph and secret scan. mise exec -- task check:staged passed before implementation commit; task test passed again on main. Unit barrier/concurrency/instability/redaction/failure tests and real runner:proof supply AC evidence; independent read-only review defects are covered by passing live regressions. No private receipts or credentials committed. Docs/RUNNER.md records API, exact ABI, resource limits, failure/recovery contract and deferred public CLI.
 Verified creation receipt and clean Worktrunk listing against this session; reviewer completed, matching Herdr pane was an idle shell. Removed after-8-runner checkout/branch with Worktrunk and verified workspace wY disappeared. Final owned Docker containers/images inventory empty. Pre-existing after-2-storage and after-7-payment checkouts/workspaces remain untouched: historical cleanup ownership was not adopted. No remaining task blocker; no subsequent item started; no push. Final task metadata committed separately on main.
+
+Review 2026: No defects found in frozen plan reconstruction, request/snapshot binding, status classification or cleanup blocking. task runner:proof PASS (TestRunnerProof and TestObservedProof isolation/output/startup/timeout/cancel).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

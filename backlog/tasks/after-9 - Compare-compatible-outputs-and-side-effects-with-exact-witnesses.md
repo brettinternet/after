@@ -4,10 +4,11 @@ title: Compare compatible outputs and side effects with exact witnesses
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 18:17'
+updated_date: '2026-10-04 02:17'
 labels:
   - poc
   - comparison
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-8
@@ -58,6 +59,8 @@ Implementation is in session-owned .worktrees/after-9-comparison (creation recei
 Resumed the existing implementation after explicit takeover; preserved original worktree receipt and recorded adoption in Git-local continuation state. The single independent review completed with two concrete P1 findings: sample execution-plan identities were unchecked, and omitted/null observation fields decoded as empty values. Fixed both with per-side/case app and observer plan matching and required typed non-null observation fields. Added TestSampleExecutionPlanBinding and TestObservationRequiredFields, including positive explicit empty/zero cases. No second general review was needed: corrections preserve the design. After fixes, mise exec -- task check:go passed all race tests/build/vet/format; affected Go LSP diagnostics were clean. The actual mise exec -- task comparison:proof passed again in 177.00s: two repetitions, equal responses, 12h provider counts 1/2, 30s 1/1, 16 linked witnesses. Earlier resumed comparison:fuzz passed 140700 executions; final staged checks and integration follow.
 
 Delivery: implementation c8c2caf was fast-forwarded onto main with authoritative task edits preserved. Final mise exec -- task check and task check:staged passed (race tests, build, vet, formatting, 61 links, 20-task graph and secret scan). Acceptance evidence: TestJSONGolden/ExactAndInvalid/Properties for AC1; TestPaymentAndDeterminism, TestRepetitionsAndExactPayloads and live comparison:proof for AC2/5/6; TestIncomparable, TestSampleExecutionPlanBinding and TestObservationRequiredFields for AC3; TestPolicyDigestAndReviewableDiff and TestNewRedactionPolicyCannotPublishEquality for AC4. Both independent review findings are corrected and regression-tested. Owned after-9-comparison worktree and branch removed through Worktrunk; its Herdr workspace disappearance verified. Pre-existing after-2-storage and after-7-payment checkouts/workspaces were not adopted or altered. No remaining AFTER-9 blocker or resumable step; CLI integration is the separately scoped AFTER-10. Final task-state commit is this metadata delivery; no push authorized.
+
+Review 2026: No defects found in exact decimal/Unicode/duplicate-key JSON walk, policy binding or repetition instability. task comparison:proof PASS (222s).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

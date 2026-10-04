@@ -258,6 +258,14 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "invalid input") {
 		t.Fatalf("bad ID status: %d %q %q", code, stdout, stderr)
 	}
+	// A well-formed ID that is not a stored receipt is invalid input, not an
+	// operational persistence failure.
+	for _, id := range []string{candidate, "sha256:" + strings.Repeat("0", 64)} {
+		code, stdout, stderr = invoke([]string{"compare", id, "--project", project, "--config", configFile}, false, "")
+		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "receipt ID was not found") {
+			t.Fatalf("unknown receipt status: %d %q %q", code, stdout, stderr)
+		}
+	}
 	hostile := "\x1b]52;c;clipboard\a"
 	code, stdout, stderr = invoke([]string{"inspect", hostile, "--project", project, "--config", configFile}, false, "")
 	if code != ExitInvalid || stdout != "" || strings.ContainsAny(stderr, "\x1b\a") {
