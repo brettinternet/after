@@ -80,11 +80,9 @@ tasks:
 
   demo:proof:
     desc: Explicitly authorize both synthetic demo plans and verify actual observations (no prompts)
-    env:
-      AFTER_DEMO_PROOF: "1"
     cmds:
       - task: build
-      - go run ./internal/demo --execute {{.CLI_ARGS}}
+      - go run ./internal/demo --execute --authorize-synthetic-plans {{.CLI_ARGS}}
 
   study:assign:
     desc: Print reproducible anonymous study assignments (supply --assign-seed via CLI_ARGS)
@@ -96,11 +94,9 @@ tasks:
 
   study:proof:
     desc: Authorize six synthetic offline study runs and validate independent keys (author rehearsal only)
-    env:
-      AFTER_DEMO_PROOF: "1"
     cmds:
       - task: build
-      - go run ./internal/demo --study --execute {{.CLI_ARGS}}
+      - go run ./internal/demo --study --execute --authorize-synthetic-plans {{.CLI_ARGS}}
 
   test:go:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)

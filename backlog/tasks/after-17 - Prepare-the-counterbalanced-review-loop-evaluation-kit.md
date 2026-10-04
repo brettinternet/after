@@ -4,11 +4,12 @@ title: Prepare the counterbalanced review-loop evaluation kit
 status: Done
 assignee: []
 created_date: '2026-10-03 05:44'
-updated_date: '2026-10-04 01:37'
+updated_date: '2026-10-04 02:31'
 labels:
   - poc
   - evaluation
   - docs
+  - reviewed
 milestone: m-1
 dependencies:
   - AFTER-16
@@ -53,6 +54,8 @@ A terminal demo cannot prove the product hypothesis. Scope: a runnable evaluatio
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented and committed directly on main as explicitly requested: 3f7d47c. Kit v1 reuses the owned native demo harness for A repair, B harmless comment, C weakened oracle; separate missing/initial/follow-up stores prevent future-result leakage, and facilitator keys come from separately executed protected-observer receipts. Candidate tests are captured source, not falsely claimed passing reports. Seeded six-permutation assignment tests cover 6/12/16/18 slots and document incomplete case-period balance. Protocol, strong tour, anonymous CSV sheets, scoring and precise human handoff are in docs/EVALUATION.md. Verification passed: mise exec -- task study:check; task study:assign -- --assign-seed cohort-01 --participants 12; task study:proof (six actual offline runs, all initial 12h counts 1→2, A follow-up 1→1, B/C 1→2, all 30s controls 1→1, equal HTTP responses and all pins stale/missing after follow-up); task check; task check:staged. Local proof used macOS arm64/Colima and pinned toolchain image; CI is configured, not claimed newly run. Initial proof exposed CopyFS private-mode mismatch, fixed and covered by native copied-store inspection. One independent scoped review found wrong documented TUI pin syntax; fixed to candidate/base/evidence and exercised both initial current and follow-up stale commands in real PTYs with clean quit. LSP diagnostics clean. Logs remain in ignored artifacts/after-17/. Successful proof cleaned its owned workspace; the first failed owned workspace was moved to Trash after PTY verification. No new worktrees; pre-existing worktrees untouched. No push, human observations or usability claims. Next step requires explicit AFTER-18 recruitment/scheduling authorization, facilitator plus second scorer, 12–16 consenting unfamiliar engineers, privacy/deletion ownership and 75-minute sessions; not started.
+
+Review 2026: No defects found. Checked assignment counterbalancing (period/condition and case/condition balance at multiples of 6; documented case/period gap at 12/16), case setup/follow-up edits against key counts (A repair 1->1; B comment, C weakened oracle 1->2), isolated missing/initial/follow-up/facilitator stores and docs. Shares AFTER-16's consent fix: study:proof now passes --authorize-synthetic-plans instead of ambient env. task study:check (go test -race ./internal/demo) PASS; study:proof not rerun (same execute path verified by demo:proof).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

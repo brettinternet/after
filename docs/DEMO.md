@@ -104,8 +104,9 @@ Allow several minutes: every observation builds and runs real processes offline.
 6. Attachment does **not** accept the expectation or establish universal behavior.
    Human acceptance remains a separate [review action](REVIEW.md).
 
-For an explicitly authorized automated synthetic check, `task demo:proof` logs
-and authorizes both exact generated plans without prompts. This is the demo's
+For an explicitly authorized automated synthetic check, `task demo:proof` passes
+`--authorize-synthetic-plans`, then logs and authorizes both exact generated plans
+without prompts. No environment variable skips consent. This is the demo's
 CI proof mode, not consent configuration for arbitrary project execution.
 `task test:poc` additionally runs the full adversarial Docker/PTY gate and mutation
 controls. Neither command starts production services or uses a host fallback.

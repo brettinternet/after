@@ -201,7 +201,7 @@ func (d *demo) execute(c capture, name string, finding bool) (execution, error) 
 			return result, errors.New("execution declined; no Docker call authorized")
 		}
 	} else {
-		fmt.Println("task demo:proof authorizes this synthetic plan only")
+		fmt.Println("--authorize-synthetic-plans authorizes this synthetic plan only")
 	}
 	code := 0
 	if finding {
@@ -332,6 +332,8 @@ func (d *demo) walk(execute bool) error {
 func run() (err error) {
 	execute := flag.Bool("execute", false, "walk both offline payment runs, requiring exact-plan consent")
 	keep := flag.Bool("keep", false, "retain the owned private workspace and receipts for inspection")
+	// An explicit flag, never ambient environment, so a leftover export cannot skip consent.
+	authorize := flag.Bool("authorize-synthetic-plans", false, "authorize generated synthetic plans without prompts (proof tasks only)")
 	study := flag.Bool("study", false, "generate study v1 cases (author rehearsal, not human research)")
 	binary := flag.String("binary", "bin/after", "native AFTER binary")
 	assignmentSeed := flag.String("assign-seed", "", "print reproducible anonymous study assignments; no workspace or execution")
@@ -376,7 +378,7 @@ func run() (err error) {
 	if *execute {
 		env = append(env, "AFTER_DOCKER_BINARY="+os.Getenv("AFTER_DOCKER_BINARY"), "AFTER_DOCKER_HOST="+os.Getenv("AFTER_DOCKER_HOST"))
 	}
-	d := demo{root: w.root, project: filepath.Join(w.root, "payment"), binary: exe, env: env, input: bufio.NewReader(io.LimitReader(os.Stdin, 1024)), proof: os.Getenv("AFTER_DEMO_PROOF") == "1"}
+	d := demo{root: w.root, project: filepath.Join(w.root, "payment"), binary: exe, env: env, input: bufio.NewReader(io.LimitReader(os.Stdin, 1024)), proof: *authorize}
 	if *study {
 		return d.study(*execute)
 	}
