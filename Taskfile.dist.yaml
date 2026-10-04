@@ -82,6 +82,22 @@ tasks:
       - task: build
       - go run ./internal/demo --execute {{.CLI_ARGS}}
 
+  study:assign:
+    desc: Print reproducible anonymous study assignments (supply --assign-seed via CLI_ARGS)
+    cmd: go run ./internal/demo --assign-seed study-v1 {{.CLI_ARGS}}
+
+  study:check:
+    desc: Check study assignment balance and native missing-evidence case setup without Docker
+    cmd: go test -race ./internal/demo
+
+  study:proof:
+    desc: Authorize six synthetic offline study runs and validate independent keys (author rehearsal only)
+    env:
+      AFTER_DEMO_PROOF: "1"
+    cmds:
+      - task: build
+      - go run ./internal/demo --study --execute {{.CLI_ARGS}}
+
   test:go:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
     cmd: go test -race ./...

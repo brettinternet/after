@@ -4,6 +4,8 @@
 
 **Status:** working native Go CLI/TUI for local Git capture, Go report import, raw inspection, frozen offline payment experiments, exact comparison and pin/edit/reopen/rerun. This is a bounded proof of concept, not a general application runner or validated human review tool. The presentation is a simulation.
 
+The [versioned evaluation kit](docs/EVALUATION.md) provides matched review conditions, verified synthetic answer keys and scoring sheets. It is an author-rehearsed kit, not human validation; recruitment and scheduling remain gated.
+
 Start with the [repeatable demo and native packages](docs/DEMO.md): `mise exec -- task demo:inspect` needs no Docker; `task demo` requires separate image provisioning and exact consent for each real run.
 
 - [Agent handoff](docs/HANDOFF.md)

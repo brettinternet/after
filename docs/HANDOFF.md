@@ -85,6 +85,10 @@ The original seven documentation artifacts were committed as `1337132` and pushe
 
 AFTER-16 adds [native packaging and the owned demo](DEMO.md). `task package` emits unpublished versioned macOS/Linux amd64/arm64 binaries and checksums. `task demo:inspect` exercises capture/import without Docker; `task demo` walks real receipt-backed pin/edit/reopen/rerun with two exact consent prompts, while `task demo:proof` explicitly authorizes the same synthetic plans for CI. Successful setup/teardown owns only its private temporary workspace; failures retain diagnostic state. The root README now describes implemented capabilities rather than the initial scaffold. Human evaluation remains unrun.
 
+## Evaluation kit and human boundary
+
+AFTER-17 supplies the [version-1 study kit](EVALUATION.md): three matched payment cases, isolated missing/initial/follow-up checkpoints, strong guided-tour/raw/AFTER conditions, reproducible assignments, blank recording sheets and explicit scoring/limitations. `task study:check` checks native capture and assignment consistency; `task study:proof` explicitly authorizes six real synthetic runs and validates independent observer-backed keys. Rehearsals are not participant data. M1/M2 technical completion establishes neither usability nor market value. AFTER-18 requires operator authorization, 12–16 consenting unfamiliar engineers, a facilitator and second scorer, private consent ownership/deletion policy and scheduled 75-minute sessions. Do not autonomously start M3.
+
 ## Tooling and next action
 
 Run `mise trust && mise install && mise exec -- task init`. The template's mise/Task/Lefthook/Prettier/Gitleaks/Worktrunk conventions are adapted without its application, databases, secrets or service stack. Go and Backlog.md are pinned; Bun/Playwright are development-only documentation dependencies.

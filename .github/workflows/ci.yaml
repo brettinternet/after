@@ -46,6 +46,7 @@ jobs:
           docker version
           docker image inspect docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 --format '{{.Id}} {{.RepoDigests}}'
           mise exec -- task demo:proof 2>&1 | tee artifacts/poc/demo.log
+          mise exec -- task study:proof 2>&1 | tee artifacts/poc/study.log
           mise exec -- task test:poc 2>&1 | tee artifacts/poc/gate.log
       - uses: actions/upload-artifact@v4
         if: always()

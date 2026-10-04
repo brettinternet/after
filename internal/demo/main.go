@@ -242,6 +242,9 @@ func (d *demo) execute(c capture, name string, finding bool) (execution, error) 
 		}
 		fmt.Printf("Observed %ds: identical responses; provider requests %d -> %d\n", seconds, len(base.Calls), len(candidate.Calls))
 	}
+	if err := writeJSON(d.root, name+"-observations.json", observations); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 func (d *demo) walk(execute bool) error {
@@ -329,8 +332,18 @@ func (d *demo) walk(execute bool) error {
 func run() (err error) {
 	execute := flag.Bool("execute", false, "walk both offline payment runs, requiring exact-plan consent")
 	keep := flag.Bool("keep", false, "retain the owned private workspace and receipts for inspection")
+	study := flag.Bool("study", false, "generate study v1 cases (author rehearsal, not human research)")
 	binary := flag.String("binary", "bin/after", "native AFTER binary")
+	assignmentSeed := flag.String("assign-seed", "", "print reproducible anonymous study assignments; no workspace or execution")
+	participants := flag.Int("participants", 12, "anonymous assignment slots (1–18)")
 	flag.Parse()
+	if *assignmentSeed != "" {
+		rows, err := assignments(*assignmentSeed, *participants)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(rows)
+	}
 	if flag.NArg() != 0 {
 		return errors.New("unexpected arguments")
 	}
@@ -364,6 +377,9 @@ func run() (err error) {
 		env = append(env, "AFTER_DOCKER_BINARY="+os.Getenv("AFTER_DOCKER_BINARY"), "AFTER_DOCKER_HOST="+os.Getenv("AFTER_DOCKER_HOST"))
 	}
 	d := demo{root: w.root, project: filepath.Join(w.root, "payment"), binary: exe, env: env, input: bufio.NewReader(io.LimitReader(os.Stdin, 1024)), proof: os.Getenv("AFTER_DEMO_PROOF") == "1"}
+	if *study {
+		return d.study(*execute)
+	}
 	return d.walk(*execute)
 }
 func main() {
