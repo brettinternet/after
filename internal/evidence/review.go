@@ -107,7 +107,8 @@ func (p Pin) ValidateReview() error {
 			if !reflect.DeepEqual(c.Target, prev.Review.Target) || c.Mode != prev.Review.Mode || c.PriorCandidate != prev.Review.PriorCandidate || c.Receipt == "" {
 				return errors.New("receipt or decision changed selection")
 			}
-			if c.Action == "attach" && e.Decision != prev.Decision {
+			reopened := prev.Decision == Accepted && e.Decision == Reopened && c.Receipt != prev.Review.Receipt
+			if c.Action == "attach" && e.Decision != prev.Decision && !reopened {
 				return errors.New("receipt cannot accept a pin")
 			}
 			if c.Action == "accept" && (e.Decision != Accepted || c.Receipt != prev.Review.Receipt) {

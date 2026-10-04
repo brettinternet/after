@@ -201,6 +201,20 @@ func TestRerunHistoryAndSeparateAcceptance(t *testing.T) {
 	if same.Decision != evidence.Accepted || view(t, s, same).Applicability != evidence.Current {
 		t.Fatal("bounded reuse failed")
 	}
+	if again, err := Attach(s, same.ID, rerun.ID, "same reviewed receipt"); err != nil || again.Decision != evidence.Accepted {
+		t.Fatal("reattaching the accepted receipt changed the decision", err)
+	}
+	fresh := rerun
+	fresh.ID = ""
+	fresh.FinishedAt = fresh.FinishedAt.Add(time.Second)
+	fresh = put(t, s, fresh)
+	unreviewed, err := Attach(s, same.ID, fresh.ID, "fresh identical-basis rerun")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unreviewed.Decision != evidence.Reopened || view(t, s, unreviewed).CurrentReceipt.ID != fresh.ID {
+		t.Fatal("fresh execution inherited acceptance of a different receipt")
+	}
 	follow := cloneBasis(target)
 	follow.Snapshots.Base = target.Snapshots.Candidate
 	follow.Snapshots.Candidate = changedSnapshot(t, s, target.Snapshots.Candidate, "latest.go")

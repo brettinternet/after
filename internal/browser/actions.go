@@ -156,10 +156,16 @@ func (a *Actions) Attach(sel Selection, comparison evidence.Digest) (Selection, 
 	if r.Snapshots != sel.Pair {
 		return sel, errors.New("late result retained for originating snapshots only")
 	}
+	// Check before appending pin revisions so none are orphaned from the selection.
+	if len(sel.Evidence) >= MaxEvidence {
+		return sel, errors.New("evidence limit reached; result remains stored")
+	}
 	next := sel
 	next.Evidence = append([]evidence.Digest(nil), sel.Evidence...)
 	for i, id := range sel.Evidence {
-		if _, err := store.Get[evidence.Pin](s, id); err != nil {
+		if _, err := store.Get[evidence.Pin](s, id); errors.Is(err, store.ErrCorrupt) {
+			return sel, err
+		} else if err != nil {
 			continue
 		}
 		pin, err := review.Attach(s, id, r.ID, "TUI rerun: attach measured result without accepting behavior")
@@ -167,9 +173,6 @@ func (a *Actions) Attach(sel Selection, comparison evidence.Digest) (Selection, 
 			return sel, fmt.Errorf("result retained at %s: %w", comparison, err)
 		}
 		next.Evidence[i] = pin.ID
-	}
-	if len(next.Evidence) >= MaxEvidence {
-		return sel, errors.New("evidence limit reached; result remains stored")
 	}
 	next.Evidence = append(next.Evidence, comparison)
 	return next, nil

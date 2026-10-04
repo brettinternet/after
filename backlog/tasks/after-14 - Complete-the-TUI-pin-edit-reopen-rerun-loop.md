@@ -4,11 +4,12 @@ title: Complete the TUI pin-edit-reopen-rerun loop
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 22:43'
+updated_date: '2026-10-04 02:24'
 labels:
   - poc
   - tui
   - review
+  - reviewed
 milestone: m-1
 dependencies:
   - AFTER-11
@@ -60,6 +61,8 @@ Verification: mise exec -- task test:terminal, task test:cli, task check:go, tas
 Independent verifier completed one trust-boundary pass: no consent or snapshot-binding defect found; identified the old rawdiff test expecting rejection instead of the new explicit no-patch inventory fallback. Updated that assertion and reran full checks successfully. Initial PTY iterations exposed the cross-capture diff constraint and test-harness issues (fixture edit omitted required constants; combined jj was not two key events); corrected and real proof passed. Barrier test holds an actual denied runner completion, accepts a separate real capture without moving focus on arrival, and verifies late persisted receipt/request bindings are unchanged. No remaining external blocker; delivery pending implementation commit and fast-forward integration.
 
 Delivered implementation commit b6ab322 to main by fast-forward after rereading the authoritative claim and preserving primary task edits. Final task metadata is committed separately on main. No push or PR. Remaining limitations: explicit immutable revision IDs for restart; original-base cross-capture inventory/source fallback when no shared patch exists. No further work started.
+
+Review 2026: Found TUI Actions.Attach appended pin revisions before checking the evidence limit, then returned the old selection on limit error, orphaning the new revisions from the session; it also skipped corrupt pins silently. Limit is now checked first and ErrCorrupt fails like Select. Limitation retained: a run finishing while another TUI action is busy is kept in session results but not auto-attached. task check:go PASS; task tui:proof PASS (204s).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

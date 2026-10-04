@@ -4,11 +4,12 @@ title: Evaluate and pin a responsive terminal framework
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 21:17'
+updated_date: '2026-10-04 02:24'
 labels:
   - poc
   - tui
   - security
+  - reviewed
 milestone: m-1
 dependencies:
   - AFTER-5
@@ -71,6 +72,8 @@ Current takeover checks passed: mise exec -- task check:go (build/race/vet/gofmt
 Current takeover: task check:go, task test and task check:staged passed; terminal:bench passed at 26974 ns/op, 16186 B/op, 285 allocs/op; terminal:fuzz passed 1891628 executions. Prior verification workflow 3c974868 stopped because its extension session was replaced; staged implementation remains intact. Same-protocol independent read-only verification retry c24b9afa is active. Await its verdict before implementation commit and fast-forward integration; preserve existing worktrees.
 
 Operator explicitly approved direct final trust-boundary verification instead of independent verification after workflow runs 3c974868 and c24b9afa both stopped on extension-session replacement. Direct review found no concrete item-scoped defects. Fresh GOFLAGS=-count=1 mise exec -- task test:terminal passed all headless, asynchronous and actual PTY tests: 7,506,350-byte captured diff prepared in 40.774 ms, 11,613,488 bytes allocated; maximum input/view 1.032 ms, resize/view 0.457 ms; PTY restoration 10.5-12.4 ms. mise exec -- task check:go, task test, task check:staged and git diff --cached --check passed. task terminal:bench passed at 26,479 ns/op, 16,186 B/op, 285 allocs/op; task terminal:fuzz passed 2,180,206 executions. Full TUI/CLI wiring remains AFTER-13. Existing worktrees retained without destructive cleanup; no push authorized.
+
+Review 2026: Reviewed terminal.Line sanitization (invalid UTF-8 -> U+FFFD, C0/C1/Cf/line separators escaped, leading combining guarded, tabs, clipping) and Model binding/cancellation. No findings.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

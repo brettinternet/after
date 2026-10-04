@@ -4,11 +4,12 @@ title: Persist expectations and conservatively reopen changed evidence
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 20:11'
+updated_date: '2026-10-04 02:24'
 labels:
   - poc
   - review
   - storage
+  - reviewed
 milestone: m-0
 dependencies:
   - AFTER-10
@@ -60,6 +61,8 @@ Implemented immutable scoped pin revisions and explicit select/attach/accept API
 Operator explicitly handed off incomplete work. Reused the staged after-11-pins checkout without discarding any changes. Reran mise exec -- task check:go (build/race tests/vet/gofmt), task test (77 local links and 20-task graph), and task check:staged (format/secrets): all passed. Read the inherited cli:proof log and confirmed TestPaymentCLIProof PASS in 370.75s including the native pin/reopen/rerun/attach/separate-accept flow. A fresh independent acceptance verifier is checking the staged implementation before integration. Cleanup will retain the inherited checkout because original-session cleanup ownership cannot be fully verified under the transcript access boundary.
 
 Final takeover verification: mise exec -- task check:go, mise exec -- task test, and mise exec -- task check:staged all passed. Fresh mise exec -- task cli:proof with the explicitly configured local Docker CLI/socket passed TestPaymentCLIProof in 375.54s: actual equal HTTP responses with 1-versus-2 provider effects, control, and pin/reopen/authorized-rerun/attach/separate-accept across native restarts. Independent verifier 6f9156a2 passed all six acceptance criteria with no concrete defects and independently ran task check:go and task test:cli. Its primary backlog read was sandbox-blocked; parent confirmed its reviewed criteria match the authoritative task. Implementation c6624fc fast-forwarded onto main. No private receipts or credentials committed. Retain inherited .worktrees/after-11-pins: cleanup ownership continuity was not independently established; other pre-existing worktrees remain untouched. No remaining implementation blocker or resumable step for AFTER-11; later TUI integration is AFTER-14.
+
+Review 2026: Found attaching a different identical-basis receipt to an accepted pin kept decision accepted, so a fresh, possibly different observation inherited acceptance never given to it. review.Attach now reopens an accepted pin when the receipt changes (re-attaching the same receipt keeps acceptance); Pin.ValidateReview permits only that transition. Added regression in TestRerunHistoryAndSeparateAcceptance; updated REVIEW.md/SCHEMA.md. task check:go PASS; task tui:proof PASS (204s).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

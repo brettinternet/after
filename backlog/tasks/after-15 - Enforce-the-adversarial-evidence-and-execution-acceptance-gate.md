@@ -4,11 +4,12 @@ title: Enforce the adversarial evidence and execution acceptance gate
 status: Done
 assignee: []
 created_date: '2026-10-03 05:44'
-updated_date: '2026-10-03 23:40'
+updated_date: '2026-10-04 02:24'
 labels:
   - poc
   - verification
   - security
+  - reviewed
 milestone: m-1
 dependencies:
   - AFTER-14
@@ -58,6 +59,8 @@ Implemented test:poc orchestration, no-skip/required-proof guards, actual produc
 Independent verification (fresh-context verifier, one bounded pass): no concrete item-scoped defect found in gate fail-closed behavior, CI wiring or performance harness. Independently ran task test:terminal, task terminal:bench and git diff --check: passed; complete 10/10 and 50/50 paths/hunks, Apple M5 Max darwin/arm64, warm viewport 29,727 ns/op, 16,185 B/op, 285 allocs/op. Verifier explicitly left full Docker/mutation acceptance unverified pending the parent-owned gate; this is separate from author execution claims. Host supervisor SIGKILL/daemon/power-loss cleanup remains a documented residual limit.
 
 Final author evidence: task test:poc completed exit 0; all required real Docker, protected observer, CLI and PTY proofs passed with zero skips. Snapshot-binding overlay failed the expected bad-reopening assertion; actual embedded observer overlay failed got 1 calls want 2; gate accepted only those expected negative-control failures. Workload SIGKILL with live descendant, literal shell metacharacter argv, real build failure, offline/credential/resource/timeout/cancel probes all passed. No owned sandbox containers or input images remained. On Apple M5 Max (18 CPUs, 64GiB, darwin/arm64), medium/large warm raw open 1.468/5.791ms, preparation 1.281/4.779ms and 2.17/11.61MB allocated; active-fixture PTY navigation 15.31ms. Full measurements and cache/threat limits are in docs/POC-GATE.md. task check passed; implementation staged checks passed. Commit aa9ecad fast-forwarded to main; task test passed again after integration. CI workflow is configured but remote CI was not run because no push was requested. Full local gate log/exit preserved in ignored artifacts/poc. Independent verification was one pass, no concrete findings; its narrower executable coverage is separately recorded above. Session-owned after-15-gate checkout and branch removed after receipt, inactive-process and pane verification; exact Herdr workspace removal confirmed. Pre-existing worktrees were neither adopted nor modified. No remaining task blocker; no next task started.
+
+Review 2026: Reviewed pocgate skip/failure/required-proof accounting, overlay mutation controls (sites unchanged by this review) and CI poc job (bash pipefail propagates tee'd failures). No findings; full test:poc not rerun in this review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

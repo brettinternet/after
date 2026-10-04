@@ -110,7 +110,8 @@ The store/review layer enforces snapshot/scenario/receipt basis checks and appen
 immutable revisions. Scoped pins add `scope` (`finite_example` or `human_intent`)
 and a `review` context per history event: action, comparison mode, prior candidate,
 expected target bindings, and optional actual receipt ID. Changed selections
-reopen without a current receipt. Attachment cannot accept; explicit acceptance
+reopen without a current receipt. Attachment cannot accept, and a different
+receipt reopens an accepted pin; explicit acceptance
 cannot change selection. Missing contexts/scope in legacy pins remain readable
 but confer no current applicability. See [review](REVIEW.md) for bounds and reuse.
 

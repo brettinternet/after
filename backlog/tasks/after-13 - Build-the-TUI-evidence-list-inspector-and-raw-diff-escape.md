@@ -4,10 +4,11 @@ title: 'Build the TUI evidence list, inspector and raw-diff escape'
 status: Done
 assignee: []
 created_date: '2026-10-03 05:42'
-updated_date: '2026-10-03 21:53'
+updated_date: '2026-10-04 02:24'
 labels:
   - poc
   - tui
+  - reviewed
 milestone: m-1
 dependencies:
   - AFTER-10
@@ -62,6 +63,8 @@ Real proof passed: configured local Docker CLI/socket, mise exec -- task cli:pro
 Independent read-only reviewer is checking concrete trust/acceptance risks before integration. Implementation worktree after-13-browser is session-owned with Git-local creation receipt; other pre-existing worktrees were not adopted.
 
 Resumed with explicit operator takeover. Independent reviewer completed one general pass (run 020a839c-9bf9-4362-aadf-84f6c099371e), finding one P2 startup-order defect: job completion before initial load hid returned IDs. Fixed by disabling capture/import until initial load completes; TestJobsWaitForInitialLoad covers both actions and inspectable result IDs. No second general review was needed. Post-fix mise exec -- task test:terminal, task test:cli, task check:go and task test all passed; browser model/test LSP clean. The real mise exec -- task cli:proof was rerun successfully (353.29s) before this startup guard, exercising all eight measured observations and native PTY. Implementation 3c768fc fast-forwarded into main; task check:staged passed formatting and secret checks. No private receipts or credentials committed. Retaining the inherited implementation checkout because original-owner inactivity and exact workspace cleanup ownership could not be independently verified within session-root access; other inherited checkouts untouched. No delivery blocker remains; interactive pin/rerun is AFTER-14 and was not started.
+
+Review 2026: Reviewed browser Load/loadEvidence trusted labels (engine enums only; names/channels quoted data), historical receipt staleness, pinability gating, paged quoting and job request binding. No findings.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

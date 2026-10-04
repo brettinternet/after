@@ -53,7 +53,8 @@ behavior**. Changed selections reopen the pin, clear the current receipt and
 return `missing_current_result: true`; no predicted before/after values appear.
 Old receipts remain in history at their original IDs. An authorized rerun creates
 a new receipt; attachment checks its exact selected bindings but never accepts
-the pin. Acceptance is a separate human action requiring a current complete
+the pin, and attaching a different receipt to an accepted pin reopens it.
+Acceptance is a separate human action requiring a current complete
 receipt. Failures and incomplete receipts may be attached but cannot support
 acceptance. No command evaluates expectation prose as a test oracle.
 

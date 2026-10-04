@@ -146,7 +146,8 @@ func Select(s *store.Store, id evidence.Digest, target evidence.ReviewBasis, mod
 
 // Attach never executes or accepts. Reruns must first pass the runner's normal
 // digest-bound authorization. A late/mismatched result remains stored at its
-// receipt ID but cannot become the selected result here.
+// receipt ID but cannot become the selected result here. Acceptance covers only
+// the reviewed receipt, so attaching a different one reopens an accepted pin.
 func Attach(s *store.Store, id, receiptID evidence.Digest, reason string) (evidence.Pin, error) {
 	p, err := load(s, id)
 	if err != nil {
@@ -160,9 +161,13 @@ func Attach(s *store.Store, id, receiptID evidence.Digest, reason string) (evide
 	if r.State.Producer != evidence.Runner || !reflect.DeepEqual(evidence.BasisOf(r), c.Target) {
 		return evidence.Pin{}, errors.New("late or incompatible receipt does not match selected review basis")
 	}
+	decision := p.Decision
+	if decision == evidence.Accepted && r.ID != c.Receipt {
+		decision = evidence.Reopened
+	}
 	c.Action = "attach"
 	c.Receipt = r.ID
-	return appendEvent(s, p, c, p.Decision, reason)
+	return appendEvent(s, p, c, decision, reason)
 }
 
 func Accept(s *store.Store, id evidence.Digest, reason string) (evidence.Pin, error) {
