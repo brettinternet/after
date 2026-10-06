@@ -1,5 +1,8 @@
 # Headless CLI
 
+This page documents current behavior; the planned redesign (AFTER-34
+to AFTER-42) is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
+
 `after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Headless commands emit one versioned JSON object on stdout; diagnostics use stderr. `review --tui <candidate-id> --base <base-id>` instead opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
 
 See [packaging, the repeatable demo and recovery](DEMO.md) for native distributions and a prepared-checkout walkthrough. Build with `mise exec -- task build`, then run commands from any directory with a selected project:

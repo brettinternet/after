@@ -4,6 +4,7 @@ title: Replace raw JSON detail pages with evidence cards
 status: To Do
 assignee: []
 created_date: '2026-10-06 20:29'
+updated_date: '2026-10-06 21:14'
 labels:
   - poc
   - tui
@@ -11,6 +12,7 @@ labels:
 milestone: m-1
 dependencies:
   - AFTER-26
+  - AFTER-35
 documentation:
   - docs/TUI-DESIGN.md
   - docs/TUI.md
@@ -28,7 +30,7 @@ ordinal: 27000
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Enter on a row opens `json.MarshalIndent` dumps of receipts, pin views and inventory entries, followed by up to 20 sections named like `artifact: base/43200/0/observation`. The facts a reviewer needs are buried in records: base versus candidate counts, responses, the witness, the producer, run times and scope. Long scope text is a single clipped line.
 
-Scope, per docs/TUI-DESIGN.md "Detail": a Card section first for every row type in the design's table, built by deterministic templates over strictly decoded records (receipt, comparison report, `runner.Observation`, `runner.Sample`, scenario and frozen input, pin view, report card), with a raw fallback and limitation; sections as lists of parts with trusted divider titles; the Witnesses, Artifacts, Plan and IDs channel mapping; a bounded prose wrap helper in internal/terminal; and, at widths of 110 or more, the selected Overview row's Card in a preview pane. Record values always render as data.
+Scope, per docs/TUI-DESIGN.md "Detail": a Card section first for every row type in the design's table, built by deterministic templates over strictly decoded records (receipt, comparison report, `runner.Observation`, `runner.Sample`, scenario and frozen input, pin view, report card), with a raw fallback and limitation; sections as lists of parts with trusted divider titles; the Witnesses, Artifacts, Plan and IDs channel mapping; a bounded prose wrap helper in internal/terminal; and, at widths of 110 or more, the selected Overview row's Card in a preview pane. Record values always render as data. The CLI prints the same Card from `after inspect ID` and `after pin PIN` (docs/CLI-DESIGN.md "inspect").
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -38,6 +40,7 @@ Scope, per docs/TUI-DESIGN.md "Detail": a Card section first for every row type 
 - [ ] #3 Detail sections are lists of parts whose divider titles come only from typed fields; channel names outside the runner pattern appear escaped under Other artifacts; a test proves that every artifact referenced by the receipt, comparison, scenario and pin history is reachable from some detail.
 - [ ] #4 Long prose wraps inside the card through a terminal wrap helper that uses the same sanitizing and grapheme widths as `Line`, with hostile-content tests.
 - [ ] #5 At widths of 110 or more, Overview shows the selected row's Card in a preview pane that loads off the event loop and ignores stale results; golden views cover each card type.
+- [ ] #6 `after inspect ID` prints the same Card for receipts, comparisons, pin revisions and reports, followed by the IDs section, and `after pin PIN` prints the pin's Card; CLI golden files cover each card type.
 <!-- AC:END -->
 
 ## Definition of Done

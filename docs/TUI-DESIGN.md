@@ -2,9 +2,10 @@
 
 **Status: target design, not implemented.** This is the design for backlog tasks
 AFTER-21 to AFTER-33 (milestone M2). [TUI.md](TUI.md) documents current behavior,
-and each task updates it as it lands. The product invariants in
-[AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md), and
-[TERMINAL.md](TERMINAL.md) still apply. Where this document changes an earlier TUI
+and each task updates it as it lands. The command line, including how
+`after review` launches, is designed in [CLI-DESIGN.md](CLI-DESIGN.md). The product
+invariants in [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md),
+and [TERMINAL.md](TERMINAL.md) still apply. Where this document changes an earlier TUI
 decision, it says so. Values in mockups are illustrative.
 
 ## Why
@@ -63,7 +64,7 @@ and the terminal experiment in [behavior-and-evidence.md](behavior-and-evidence.
 | Per-case comparison outcome                             | `internal/compare` (engine helper, not view code) |
 | Computed source diffs                                   | `internal/rawdiff`                                |
 | Rows with typed fields, badge mapping, sections, layout | `internal/browser`                                |
-| Flags, session file, resume command                     | `internal/cli`                                    |
+| Flags, saved review, readable command output            | `internal/cli`                                    |
 
 Do not import Bubbles or lipgloss. `internal/terminal` stays the only text and
 viewport boundary.
@@ -518,9 +519,9 @@ AFTER · payment · base a750186b (commit 3f2a1c9) → candidate 784eb013 (worki
 ```text
  1 Overview   2 Changes 1   3 Diff   4 Activity
  SESSION
-   after review --tui --session ~/after/payment-review.json        saved after every change
+   saved in .after/session.json after every change · after review resumes it
    pair       base a750186b → candidate 784eb013
-   evidence   1a6270f3 receipt · 57c25a3c pin revision · 0f51d3b0 comparison
+   loaded     1a6270f3 receipt · 57c25a3c pin revision · 0f51d3b0 comparison
  ACTIVITY
  > 19:59:10  run cancelled     comparison c700c664 · incomplete result kept, not equality
    19:57:44  result attached   pin revision 57c25a3c · stays reopened until you decide
@@ -537,7 +538,7 @@ AFTER · payment · base a750186b (commit 3f2a1c9) → candidate 784eb013 (worki
 - Job results and session references never become evidence rows. `s` opens the
   Session section.
 - `i` binds the report to the candidate selected when `i` is pressed, and the event
-  names it. A successful import adds the report ID to the selection (within the
+  names it. A successful import adds the report to the loaded evidence (within the
   32-ID limit), so its rows appear without a restart. At the limit, the report stays
   stored and the event shows its ID.
 - While capture, import, or a run is active, show elapsed time, ticking once per
@@ -548,28 +549,35 @@ AFTER · payment · base a750186b (commit 3f2a1c9) → candidate 784eb013 (worki
 ### Launch and resume
 
 ```sh
-after review --tui --capture                        # capture HEAD vs working tree, then open
-after review --tui --capture --session review.json  # start, or resume and offer the new capture
-after review --tui --session review.json            # reopen exactly what was saved
-after review --tui CANDIDATE --base BASE [--evidence ID ...]   # unchanged
+after review                 # capture HEAD vs the working tree, then open or resume
+after review --staged        # capture HEAD vs the index instead
+after review --base main     # capture the merge base with main vs HEAD
+after review 784eb013        # open stored records, or a BASE CANDIDATE pair, without capturing
 ```
 
-| Flags                            | Session file missing        | Session file exists                                  |
-| -------------------------------- | --------------------------- | ---------------------------------------------------- |
-| `--capture`                      | Capture, then open          | —                                                    |
-| `--capture --session F`          | Capture, open, and create F | Open F's selection; the new capture is pending (`u`) |
-| `--session F`                    | Error: no such session      | Open F's selection                                   |
-| `CANDIDATE --base B --session F` | Open the pair and create F  | Error: the file already holds a session              |
-
-- `--capture` is an explicit request, equivalent to the default `after capture`: no
-  project code runs and untracked files stay excluded. Nothing else runs on open.
-- The session file is explicit and user-named, not discovered. It holds the same
-  JSON printed on quit (`Selection`, `Results`). It is written atomically with mode
-  0600 after every selection change and on quit. It is read as untrusted input: a
-  bounded regular file, valid IDs, at most 32 evidence IDs, and the same project.
-  Keep it outside the repository; it holds local paths and IDs, never source.
-- On quit, stdout keeps the session JSON, and stderr gets a ready-to-paste resume
-  command.
+- `after review` captures exactly as `after capture` does, with the same flags: no
+  project code runs, and untracked files stay excluded unless named. Recapturing an
+  unchanged tree reuses the same snapshot IDs. Nothing else runs on open.
+- The review is saved in `.after/session.json`: the pair, the comparison mode, and
+  the capture flags. It is UI state, not evidence. It is written atomically with
+  mode 0600 after every selection change and on quit, and read as untrusted input
+  (a bounded regular file with valid IDs).
+- With a saved review, `after review` reopens its pair. If the fresh capture
+  differs, it is pending (`u`); the selected pair never changes underneath the
+  reviewer. Without a saved review, the fresh capture opens directly.
+- Different capture flags (for example, `--staged` after a working-tree review)
+  start a new saved review, and stderr names the review it replaced. An invalid
+  session file is reported and replaced. No evidence is lost; it lives in the store.
+- Explicit IDs open those records, or a `BASE CANDIDATE` pair, without capturing
+  and without reading or changing the saved review.
+- Evidence is discovered, not listed by hand: each pin's head revisions (forks show
+  separately), the pair's newest runs and comparisons, and reports bound to the
+  candidate. Within the 32-record limit, pins that need another look come first;
+  Overview says how many older records `after log` lists. An explicit pin revision
+  ID still opens exactly that revision. See [CLI-DESIGN.md](CLI-DESIGN.md#ids-and-defaults).
+- On quit, stderr gets `Saved review a750186b → 784eb013 · after review resumes it`.
+  `--json` also prints the session JSON to stdout. Without a terminal,
+  `after review` exits 2 and points to `after status --json`.
 
 ## Prompts
 
@@ -722,10 +730,10 @@ deliberately blocked), soft-wrapped documents, and GitHub or browser surfaces.
 | AFTER-21 | Content viewer: readable, safe documents                    | —          | High     |
 | AFTER-22 | Theme, badges, per-case outcomes, golden views              | 21         | High     |
 | AFTER-23 | Frame, key map, hints, help, `u`                            | 22         | High     |
-| AFTER-24 | `--capture`, `--session`, resume command                    | —          | Medium   |
+| AFTER-24 | Plain `after review`: capture, resume, discovery            | 23, 36, 38 | High     |
 | AFTER-25 | Activity and session view, timers, quit guard, live imports | 23, 24     | Medium   |
 | AFTER-26 | Overview triage and Next line                               | 25         | High     |
-| AFTER-27 | Evidence cards and wide preview                             | 26         | High     |
+| AFTER-27 | Evidence cards and wide preview, also in `after inspect`    | 26, 35     | High     |
 | AFTER-28 | Changes list and Diff view                                  | 23         | High     |
 | AFTER-29 | Readable consent summary                                    | 23         | High     |
 | AFTER-30 | Confirmed mutations, reasons, pin acceptance                | 27         | Medium   |

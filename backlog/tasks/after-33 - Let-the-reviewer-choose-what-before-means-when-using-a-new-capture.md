@@ -4,6 +4,7 @@ title: Let the reviewer choose what "before" means when using a new capture
 status: To Do
 assignee: []
 created_date: '2026-10-06 20:29'
+updated_date: '2026-10-06 21:14'
 labels:
   - poc
   - tui
@@ -35,7 +36,7 @@ Scope, per docs/TUI-DESIGN.md "Prompts" and "Frame": the `u` prompt asks for the
 - [ ] #1 The `u` prompt offers `original base <id>` (the default) and `last inspected <id>`, states the pair each produces, and requires the confirmation and reason from AFTER-30.
 - [ ] #2 Choosing last inspected selects (current candidate → new capture), records `last_inspected` with the prior candidate on every selected pin through `review.Select`, and keeps earlier receipts as history; the header names the active mode.
 - [ ] #3 In follow-up mode, `r` prepares and runs the plan for the follow-up pair, results attach only to that pair, and Diff shows the computed diff between the two candidates.
-- [ ] #4 Resuming with `--session` restores the pair and mode exactly, and headless `after review PIN` shows the `last_inspected` selection the TUI recorded.
+- [ ] #4 `after review` resumes the saved pair and mode exactly, and `after pin PIN` shows the `last_inspected` selection the TUI recorded.
 - [ ] #5 PTY tests cover both modes, the Docker-gated proof covers a follow-up rerun when Docker settings are available, and docs/TUI.md and docs/REVIEW.md describe the TUI selector.
 <!-- AC:END -->
 
