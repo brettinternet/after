@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,13 +55,16 @@ type Model struct {
 	doc                                  *terminal.Document
 	hex                                  bool
 	status                               string
+	theme                                terminal.Theme
+	now                                  func() time.Time
+	zone                                 *time.Location
 }
 
 func New(ctx context.Context, selected Selection, jobs Jobs) *Model {
 	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	selected.Evidence = append(selected.Evidence[:0:0], selected.Evidence...)
-	return &Model{selected: selected, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples", status: "Loading immutable records; no project execution"}
+	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples", status: "Loading immutable records; no project execution"}
 }
 
 // spawn starts ownership before returning a Bubble Tea command, so even a quit
@@ -212,7 +216,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Keep full IDs and errors in a data view, never a clipped-only toast.
 		if m.data != nil {
-			m.data.Entries = append(m.data.Entries, Entry{Label: "not checked | job completion, not evidence", Name: "background result", Sections: []Section{{Name: "stored result IDs / diagnostic", Content: []byte(result)}}})
+			m.data.Entries = append(m.data.Entries, Entry{Summary: "job completion, not evidence", Name: "background result", Sections: []Section{{Name: "stored result IDs / diagnostic", Content: []byte(result)}}})
 		}
 	case tea.KeyMsg:
 		if msg.Paste {
@@ -367,7 +371,7 @@ var helpLines = []string{
 	"Hex: offset rows keep every original byte reachable",
 	"c capture | i import configured file | x cancel job",
 	"q/Ctrl-C quit and cancel/join owned jobs",
-	"STATE is engine metadata; payload lines cannot forge it",
+	"Badges are engine metadata; payload cannot forge them",
 	"p pin selected measured count | c capture | a accept snapshot",
 	"r exact preview | y approve once | n deny | x cancel",
 	"Resume using pin revision IDs shown in session details (s)",
@@ -375,7 +379,7 @@ var helpLines = []string{
 }
 
 func (m *Model) View() string {
-	lines := []string{terminal.Line("AFTER review | "+m.screen, m.width)}
+	lines := []string{m.theme.Render("AFTER review | "+m.screen, m.width, terminal.Strong, false)}
 	add := func(s string) { lines = append(lines, terminal.Line(s, m.width)) }
 	data := func(s string) {
 		prefix := "data | "
@@ -398,14 +402,10 @@ func (m *Model) View() string {
 			add("Not checked: no evidence / no inventory entries")
 			add("d raw inventory remains available when evidence fails")
 		} else {
-			add("STATE " + entries[i].Label)
+			add("Badges: finite evidence only · Enter for full state and scope")
 			top := max(0, i-m.rows()+1)
 			for n := top; n < min(len(entries), top+m.rows()); n++ {
-				prefix := "  "
-				if n == i {
-					prefix = "> "
-				}
-				data(prefix + strconv.Itoa(n+1) + " " + strconv.Quote(entries[n].Name))
+				lines = append(lines, m.entryLine(entries[n], n == i))
 			}
 		}
 	case "inspector", "patch", "plan":

@@ -49,13 +49,29 @@ func TestBrowserDocumentPTY(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &captureResult); err != nil || captureResult.Data.Base.ID == "" || captureResult.Data.Candidate.ID == "" {
 		t.Fatalf("capture response: %s %v", output, err)
 	}
+	reportPath := filepath.Join(root, "report.jsonl")
+	if err := os.WriteFile(reportPath, []byte("{\"Action\":\"pass\",\"Package\":\"example.com/cart\"}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, output, diagnostic = native(exe, root, home, []string{"import", reportPath, "--producer", "synthetic PTY report", "--project", project}, nil)
+	if code != 0 {
+		t.Fatal(diagnostic)
+	}
+	var imported struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(output), &imported); err != nil || imported.Data.ID == "" {
+		t.Fatalf("import: %s %v", output, err)
+	}
 	for _, tc := range []struct {
 		name          string
 		width, height uint16
 		noColor       bool
 	}{{"80x24", 80, 24, false}, {"80x24-NO_COLOR", 80, 24, true}, {"120x40", 120, 40, false}, {"120x40-NO_COLOR", 120, 40, true}} {
 		t.Run(tc.name, func(t *testing.T) {
-			args := []string{"review", captureResult.Data.Candidate.ID, "--tui", "--base", captureResult.Data.Base.ID, "--project", project}
+			args := []string{"review", captureResult.Data.Candidate.ID, "--tui", "--base", captureResult.Data.Base.ID, "--project", project, "--evidence", imported.Data.ID}
 			encoded, _ := json.Marshal(args)
 			cmd := exec.Command(exe, "-test.run=^TestNativeCLI$")
 			cmd.Dir = root
@@ -125,8 +141,12 @@ func TestBrowserDocumentPTY(t *testing.T) {
 				}
 			}
 			expect("AFTER review | examples")
+			expect("[REPORTED]")
+			expect("example.com/cart (package)")
+			expect("reported · pass")
 			send("d")
 			expect("AFTER review | inventory")
+			expect("[NOT CHECKED]")
 			send("\r")
 			expect("Section 1/3")
 			send("\t")
@@ -164,9 +184,10 @@ func TestBrowserDocumentPTY(t *testing.T) {
 					t.Fatalf("PTY excerpt row missing %q", row)
 				}
 			}
-			if tc.name == "80x24" {
-				t.Logf("synthetic PTY excerpt (%s, NO_COLOR unset):\n  %s\n  %s\n  %s", tc.name, excerpt[0], excerpt[1], excerpt[2])
+			if styled := strings.Contains(transcript.String(), "\x1b[34m[REPORTED]"); styled == tc.noColor {
+				t.Fatalf("theme color mode mismatch: NO_COLOR=%t styled=%t", tc.noColor, styled)
 			}
+			t.Logf("synthetic PTY excerpt (%s): [REPORTED] example.com/cart (package) · reported · pass; [NOT CHECKED] app/main.go; %s; %s", tc.name, excerpt[0], excerpt[1])
 		})
 	}
 }
@@ -178,7 +199,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(data.Entries) != 2 || !strings.Contains(data.Entries[0].Label, "observed | current | completed | different") {
+	if len(data.Entries) != 2 || data.Entries[0].State.Comparison != evidence.Different || data.Entries[1].State.Comparison != evidence.Equal {
 		t.Fatal("real evidence label", data.Entries)
 	}
 	observations := 0
@@ -267,7 +288,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 			t.Fatal(err)
 		}
 	}
-	expect("STATE observed | current | completed | different")
+	expect("[DIFFERENT]")
 	send("\r")
 	expect("measured provider-request counts")
 	send("\t")

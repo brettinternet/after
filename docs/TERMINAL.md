@@ -1,6 +1,6 @@
 # Terminal foundation decision
 
-AFTER-12 selects **Bubble Tea v1.3.10** for the thin local TUI. The evaluated v1 model/update/string-view API meets this slice's budgets; migrating to the newer v2 API is not needed for this decision. `go.mod`/`go.sum` pin the tested dependency graph, including **uniseg v0.4.7** for grapheme widths and **creack/pty v1.1.24** for tests only. No Bubbles components, theme, extra executable, or generic UI/job framework is introduced.
+AFTER-12 selects **Bubble Tea v1.3.10** for the thin local TUI. The evaluated v1 model/update/string-view API meets this slice's budgets; migrating to the newer v2 API is not needed for this decision. `go.mod`/`go.sum` pin the tested dependency graph, including **uniseg v0.4.7** for grapheme widths and **creack/pty v1.1.24** for tests only. No Bubbles components, extra executable, or generic UI/job framework is introduced. AFTER-22 supersedes the original no-theme decision with the fixed-SGR styling boundary below.
 
 This is an executable framework evaluation, **not the finished TUI**. AFTER-13 owns evidence browsing and CLI wiring; AFTER-14 owns the interactive pin/rerun loop. Run the retained experiment as tests:
 
@@ -26,6 +26,25 @@ Bounds and limitations are explicit:
 - Format controls, including emoji joiners, are escaped rather than preserved. Width follows uniseg's Unicode tables; terminal-specific ambiguous-width/font differences are not solved. Invalid UTF-8 becomes replacement characters.
 - `Run` returns errors without printing them after terminal restoration. Future callers must also use safe rendering for untrusted diagnostics. The headless CLI is not changed by this task.
 - SIGKILL, a broken terminal device and non-cooperative external jobs cannot be made safe by a TUI library. No project execution or signal/process sandbox is added here.
+
+## Fixed styling boundary (AFTER-22)
+
+`terminal.Theme.Render` sanitizes and clips every input with the existing
+grapheme-safe boundary before adding a closed set of SGR sequences. Only ANSI
+16-color foregrounds, bold, faint, reverse, and reset are available; callers
+cannot supply markup. No lipgloss or Bubbles components are introduced.
+Color is on unless `NO_COLOR` is non-empty or `TERM=dumb`.
+Badges retain brackets and words with color off; green is reserved for a
+current, complete, equal observation, never a reported pass or human decision.
+
+Browser golden views use fixed Git dates, fixed synthetic record timestamps,
+an injected clock and UTC zone. `task test:views` compares the evidence list
+and inventory at 120×40, 80×24 and 40×12 byte for byte; only
+`task test:views -- -update` regenerates them. Synthetic protocol records
+test rendering, not actual execution. Color-mode frame tests allow only theme
+SGR and assert hostile names/documents cannot supply terminal controls.
+Native CLI PTY tests exercise report badges, inventory, documents and terminal
+restoration at 80×24 and 120×40 with and without `NO_COLOR`.
 
 ## Reproducible gate and measurements
 

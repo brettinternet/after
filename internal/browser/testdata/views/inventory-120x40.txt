@@ -1,0 +1,10 @@
+AFTER review | inventory
+Badges: finite evidence only · Enter for full state and scope
+> [NOT CHECKED] app/config.go · modified · binary=false · potential oracle=false
+  [NOT CHECKED] app/main.go · unknown · binary=false · potential oracle=false
+  [NOT CHECKED] binary · modified · binary=true · potential oracle=false
+  [NOT CHECKED] go.mod · unknown · binary=false · potential oracle=false
+  [NOT CHECKED] unknown · unknown · binary=false · potential oracle=false
+  [NOT CHECKED] unsupported · unknown · binary=false · potential oracle=false
+Stored records only; no new observation. c capture | i import configured file
+Enter inspect | d diff | ? help | Esc back | q quit

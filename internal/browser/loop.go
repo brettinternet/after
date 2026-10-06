@@ -147,7 +147,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			}
 			// Full IDs are data pages, not clipped-only notifications. Immutable pin
 			// revisions are the restart contract, shared with the headless CLI.
-			m.data.Entries = append(m.data.Entries, Entry{Label: "not checked | session references only", Name: "session IDs for restart", Sections: []Section{document("selected pair, evidence/pin revisions, retained run comparisons", struct {
+			m.data.Entries = append(m.data.Entries, Entry{Summary: "session references only", Name: "session IDs for restart", Sections: []Section{document("selected pair, evidence/pin revisions, retained run comparisons", struct {
 				Selection Selection
 				Results   []evidence.Digest
 			}{m.selected, m.results})}})

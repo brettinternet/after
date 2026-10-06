@@ -176,7 +176,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	}
 	sel := browser.Selection{Project: project, Pair: pair, Evidence: []evidence.Digest{id}}
 	p := startLoopPTY(t, args(sel))
-	p.expect("STATE observed | current | completed | equal")
+	p.expect("[EQUAL]")
 	p.send("\r")
 	p.expect("measured provider-request counts")
 	p.send("d")
@@ -203,7 +203,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	}
 	// Restart before editing proves the selected expectation is a durable record.
 	p = startLoopPTY(t, args(sel))
-	p.expect("STATE observed | current")
+	p.expect("observed · current")
 	configBytes, err := os.ReadFile(filepath.Join(project, "app/config.go"))
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		t.Fatal("reopening invented evidence or lost reason", v, err)
 	}
 	p = startLoopPTY(t, args(sel))
-	p.expect("STATE observed | stale")
+	p.expect("[STALE]")
 	p.send("r")
 	p.expect("exact execution preview")
 	p.send("n")
@@ -249,9 +249,9 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("\x1b")
 	p.expect("Measured result attached")
 	p.send("\x1b[F")
-	p.expect("30s: provider requests base=[1] candidate=[1]")
+	p.expect("30s same-key retry · provider requests 1 → 1")
 	p.send("k")
-	p.expect("43200s: provider requests base=[1] candidate=[2]")
+	p.expect("12h same-key retry · provider requests 1 → 2")
 	// Real authorized cancellation persists an incomplete result, not equality.
 	p.send("r")
 	p.expect("exact execution preview")
@@ -293,9 +293,9 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		t.Fatal(cancelled, err)
 	}
 	p = startLoopPTY(t, args(sel))
-	p.expect("STATE observed | stale")
+	p.expect("[STALE]")
 	p.send("\x1b[B\x1b[B")
-	p.expect("reopened")
+	p.expect("[REOPENED]")
 	p.send("\r")
 	p.expect("exact reopening reason")
 	p.finish()

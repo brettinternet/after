@@ -31,7 +31,7 @@ func setup(t *testing.T, unsupported bool) (*store.Store, Selection) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.invalid", "GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.invalid")
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.invalid", "GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.invalid", "GIT_AUTHOR_DATE=2025-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2025-01-01T00:00:00Z")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git: %s %v", out, err)
 		}
@@ -96,7 +96,7 @@ func imported(t *testing.T, s *store.Store, pair evidence.SnapshotPair) evidence
 		input.Write(encoded)
 		input.WriteByte('\n')
 	}
-	report, err := gotestreport.Import(strings.NewReader(input.String()), gotestreport.Metadata{Producer: "go test caller", Snapshot: pair.Candidate, ImportedAt: time.Now().UTC()})
+	report, err := gotestreport.Import(strings.NewReader(input.String()), gotestreport.Metadata{Producer: "go test caller", Snapshot: pair.Candidate, ImportedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Entries) != 2 || !strings.Contains(d.Entries[0].Label, "reported | unknown") || !strings.Contains(d.Entries[1].Label, "unavailable") {
+	if len(d.Entries) != 2 || badgeFor(d.Entries[0]).word != "REPORTED" || !d.Entries[1].Unavailable {
 		t.Fatalf("%+v", d.Entries)
 	}
 	wantReportOutput := "first line\n\t\x1b]52;c;clipboard\a\nSTATE forged"
@@ -140,7 +140,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	found := map[string]bool{}
 	for _, entry := range d.Inventory {
 		found[entry.Name] = true
-		if entry.Name == "binary" && !strings.Contains(entry.Label, "binary=true") {
+		if entry.Name == "binary" && !strings.Contains(entry.Summary, "binary=true") {
 			t.Fatal(entry)
 		}
 	}
@@ -191,7 +191,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 		}
 	}
 	step(m, key("?"))
-	if !strings.Contains(m.View(), "STATE is engine metadata") {
+	if !strings.Contains(m.View(), "Badges are engine metadata") {
 		t.Fatal(m.View())
 	}
 }
@@ -415,12 +415,12 @@ func TestStatesAndLatePersistedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(d.Entries[0].Label, "incomparable | incomplete") {
-		t.Fatal(d.Entries[0].Label)
+	if d.Entries[0].State.Comparison != evidence.Incomparable || d.Entries[0].Completeness != evidence.Incomplete {
+		t.Fatal(d.Entries[0])
 	}
 	for _, outcome := range []evidence.ComparisonOutcome{evidence.Equal, evidence.Different, evidence.Unstable} {
 		state := evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.Observed, Applicability: evidence.Stale, Execution: evidence.Completed, Comparison: outcome, Report: evidence.NoReport}
-		if !strings.Contains(label(state, evidence.Complete), "observed | stale | completed | "+string(outcome)) {
+		if badgeFor(Entry{State: state, Completeness: evidence.Complete}).word != "STALE" {
 			t.Fatal("state hidden")
 		}
 	}

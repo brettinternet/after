@@ -1,0 +1,10 @@
+AFTER review | examples
+Badges: finite evidence only · Enter for full state and scope
+> [DIFFERENT]   12h same-key retry · provider requests … observed · current
+  [EQUAL]       30s same-key retry · provider requests … observed · current
+  [REPORTED]    example.com/cart (package)               reported · pass
+  [REPORTED]    TestThreshold                            reported · fail
+  [REPORTED]    example                                  reported · pass
+  [UNAVAILABLE] sha256:00000000000000000000000000000000000000000000000000000000…
+Stored records only; no new observation. c capture | i import configured file
+Enter inspect | d diff | ? help | Esc back | q quit

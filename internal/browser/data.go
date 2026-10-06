@@ -47,11 +47,18 @@ type Section struct {
 	format  documentFormat
 }
 type Entry struct {
-	Receipt     evidence.Digest
-	Expectation string
-	Label       string // trusted state summary, never repository prose
-	Name        string // untrusted description
-	Sections    []Section
+	Receipt              evidence.Digest
+	Expectation          string
+	State                evidence.EvidenceState
+	Completeness         evidence.Completeness
+	Decision             evidence.HumanDecision
+	Unavailable          bool
+	MissingCurrentResult bool
+	Candidate            evidence.Digest
+	DecisionAt           time.Time
+	Summary              string // untrusted data, never a badge
+	Name                 string // untrusted description
+	Sections             []Section
 }
 type Data struct {
 	Selection Selection
@@ -111,7 +118,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		e := Entry{Label: fmt.Sprintf("not checked | %s | binary=%t | potential oracle=%t", item.Change, item.Binary, item.PotentialOracle), Name: item.Path, Sections: []Section{document("inventory (unclassified)", item)}}
+		e := Entry{Summary: fmt.Sprintf("%s · binary=%t · potential oracle=%t", item.Change, item.Binary, item.PotentialOracle), Name: item.Path, Sections: []Section{document("inventory (unclassified)", item)}}
 		if item.Base != nil {
 			e.Sections = append(e.Sections, Section{Name: "captured base source", Blob: item.Base.Content})
 		}
@@ -126,7 +133,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		}
 		entries, err := loadEvidence(s, id, selected.Pair)
 		if err != nil {
-			entries = []Entry{{Label: "not checked | unknown | unavailable", Name: string(id), Sections: []Section{document("load limitation", "Evidence unavailable or invalid; raw inventory remains usable. Use after inspect for the stored ID.")}}}
+			entries = []Entry{{Unavailable: true, Name: string(id), Sections: []Section{document("load limitation", "Evidence unavailable or invalid; raw inventory remains usable. Use after inspect for the stored ID.")}}}
 		}
 		d.Entries = append(d.Entries, entries...)
 	}
@@ -139,11 +146,14 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		if err != nil {
 			return nil, err
 		}
-		state := string(pin.Decision) + " | " + string(v.Applicability)
-		if v.MissingCurrentResult || pin.Scope == "" || pin.History[len(pin.History)-1].Review.Target.Snapshots != pair {
-			state += " | not run / missing current evidence"
+		applicability := v.Applicability
+		last := pin.History[len(pin.History)-1]
+		missing := v.MissingCurrentResult || pin.Scope == ""
+		if last.Review != nil && last.Review.Target.Snapshots != pair {
+			applicability = evidence.Stale
+			missing = true
 		}
-		e := Entry{Label: state, Name: pin.Expectation, Sections: []Section{document("pin revision / current evidence / exact reopening reason", v)}}
+		e := Entry{State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: []Section{document("pin revision / current evidence / exact reopening reason", v)}}
 		// Every prior observation remains reachable with its original snapshot scope.
 		seen := map[evidence.Digest]bool{}
 		for i := len(pin.History) - 1; i >= 0; i-- {
@@ -175,6 +185,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 	r, err := store.Get[evidence.Receipt](s, id)
 	if err == nil {
 		state := r.State
+		state.Comparison = evidence.NotCompared // only an opened comparison supplies witnesses
 		completeness := r.Completeness
 		// A receipt is only current for its own immutable pair. Selection never
 		// creates a new result, and an unknown/stale receipt is never promoted.
@@ -187,7 +198,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				completeness = evidence.Incomplete
 			}
 		}
-		e := Entry{Label: label(state, completeness), Name: string(r.ID), Sections: []Section{document("receipt: producer, bindings, timestamps, limits", r)}}
+		e := Entry{State: state, Completeness: completeness, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: []Section{document("receipt: producer, bindings, timestamps, limits", r)}}
 		if r.Bindings != nil {
 			scenario, err := store.Get[evidence.Scenario](s, r.Bindings.Scenario)
 			if err != nil {
@@ -195,6 +206,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			}
 			e.Sections = append(e.Sections, document("frozen scenario", scenario), Section{Name: "exact frozen input", Blob: scenario.Input})
 		}
+		var report compare.Report
 		if comparison != nil {
 			e.Sections = append(e.Sections, document("comparison outcome and limits", comparison))
 			if comparison.Details != nil {
@@ -202,7 +214,6 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				if err != nil {
 					return nil, err
 				}
-				var report compare.Report
 				if decode(raw, &report) != nil || report.Receipt != r.ID || report.Snapshots != r.Snapshots || report.Outcome != comparison.Outcome {
 					return nil, errors.New("misbound comparison details")
 				}
@@ -236,8 +247,27 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				if len(counts["base"]) == 0 || len(counts["candidate"]) == 0 {
 					continue
 				}
-				summary := fmt.Sprintf("%ds: provider requests base=%v candidate=%v; finite recorded samples only", sec, counts["base"], counts["candidate"])
-				row := Entry{Label: e.Label, Name: summary, Sections: append([]Section{document("measured provider-request counts (original receipt scope)", summary)}, e.Sections...)}
+				summary := "provider requests " + countText(counts["base"]) + " → " + countText(counts["candidate"])
+				row := e
+				row.Name = delayText(sec) + " same-key retry"
+				if comparison != nil {
+					row.State.Comparison = report.CaseOutcome(sec, completeness)
+					if row.State.Comparison != evidence.Incomparable {
+						responses := "same"
+						for _, w := range report.Witnesses {
+							if w.Before.Seconds == sec && w.Channel == "responses" && w.Outcome == evidence.Different {
+								responses = "different"
+								if w.Relation == "repetition" {
+									responses = "unstable"
+									break
+								}
+							}
+						}
+						summary += " · responses " + responses
+					}
+				}
+				row.Summary = summary
+				row.Sections = append([]Section{document("measured provider-request counts (original receipt scope; finite samples only)", summary)}, e.Sections...)
 				same := true
 				for _, count := range counts["candidate"] {
 					if count != counts["candidate"][0] {
@@ -296,19 +326,45 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			Effects         string                 `json:"effects"`
 		}{card.Package, card.Test, card.Scope, card.Attempt, card.State, card.OutputTruncated, card.FirstEventAt, card.LastEventAt, card.Inputs, card.ExpectedValues, card.Effects}
 		sections := []Section{document("reported case: inputs/effects unavailable, not observations", metadata), {Name: "reported output", Content: []byte(card.Output)}, summary}
-		entries = append(entries, Entry{Label: label(state, report.Completeness), Name: card.Package + " / " + card.Test, Sections: sections})
+		name := card.Test
+		if card.Scope == "package" {
+			name = card.Package + " (package)"
+		}
+		entries = append(entries, Entry{State: state, Completeness: report.Completeness, Name: name, Sections: sections})
 	}
 	if len(entries) == 0 {
-		entries = append(entries, Entry{Label: "not checked | unknown | no reported cases", Name: string(id), Sections: []Section{summary}})
+		entries = append(entries, Entry{Summary: "no reported cases", Name: string(id), Sections: []Section{summary}})
 	}
 	return entries, nil
 }
-func label(s evidence.EvidenceState, complete evidence.Completeness) string {
-	kind := string(s.Kind)
-	if s.Kind == evidence.NoEvidence {
-		kind = "not checked"
+func delayText(seconds int64) string {
+	h, m, s := seconds/3600, seconds%3600/60, seconds%60
+	text := ""
+	if h != 0 {
+		text += fmt.Sprintf("%dh", h)
 	}
-	return fmt.Sprintf("%s | %s | %s | %s | %s | report=%s", kind, s.Applicability, s.Execution, s.Comparison, complete, s.Report)
+	if m != 0 {
+		text += fmt.Sprintf("%dm", m)
+	}
+	if s != 0 || text == "" {
+		text += fmt.Sprintf("%ds", s)
+	}
+	return text
+}
+
+func countText(counts []int) string {
+	same := true
+	values := make([]string, len(counts))
+	for i, n := range counts {
+		values[i] = strconv.Itoa(n)
+		if n != counts[0] {
+			same = false
+		}
+	}
+	if same && len(values) > 0 {
+		return values[0]
+	}
+	return strings.Join(values, ",")
 }
 
 // ReadSection returns the exact captured bytes, never a live path or formatted

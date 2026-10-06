@@ -3,7 +3,7 @@
 `after review --tui` opens the stored engine records, not a demo or a live checkout.
 It does not run Git, import a report, build code or contact Docker on open.
 The existing headless `review <pin-revision-id>` remains unchanged.
-This page documents current behavior; the remaining redesign (AFTER-22–33) is
+This page documents current behavior; the remaining redesign (AFTER-23–33) is
 specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
@@ -42,11 +42,36 @@ Unknown/corrupt evidence IDs do not hide the raw inventory.
 | `x`                                         | Request cancellation of the active job                                                                                  |
 | `q` / Ctrl-C                                | Quit, cancel and join owned work, restore terminal                                                                      |
 
-The text-only `STATE` row comes from validated engine enums, not test names or
-logs. Reported outcomes remain reported with unknown applicability; a binding to
-a different selected snapshot is stale. Receipts for another pair are stale,
-never rebound. Failed/not-run, incomplete, incomparable and unstable results are
-not equality. A job completion is not an observation or acceptance.
+Each evidence row has a bracketed badge derived only from typed engine fields,
+a plain-text name and summary, and a trailing kind/freshness column at widths
+of 80 or more. Selection is marked by `>` and bold; color is optional.
+`NO_COLOR` (any non-empty value) or `TERM=dumb` disables styling.
+Narrow rows clip explicitly; Enter retains the complete record and scope.
+
+The first matching badge wins:
+
+| Row                          | Precedence                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Observation                  | UNAVAILABLE → STALE → UNKNOWN → FAILED → CANCELLED → INCOMPLETE → UNSTABLE → DIFFERENT → EQUAL → NOT COMPARED |
+| Report                       | UNAVAILABLE → STALE → REPORTED                                                                                |
+| Pin                          | UNAVAILABLE → REOPENED → STALE → UNKNOWN → ACCEPTED → PINNED                                                  |
+| Inventory or absent evidence | NOT CHECKED                                                                                                   |
+
+UNAVAILABLE means a missing, corrupt or unsupported stored ID. INCOMPLETE
+includes incomparable comparisons. EQUAL requires current, complete evidence;
+a receipt opened without a comparison is NOT COMPARED. Payment cases use their
+own paired and repetition witnesses: the 12h case may be DIFFERENT while the
+30s control is EQUAL. A differing repetition makes only its case UNSTABLE.
+Incomplete/incomparable comparisons never become equal case rows.
+
+Rows read, for example, `12h same-key retry · provider requests 1 → 2 · responses same`.
+When repetitions disagree, every count is listed (`1 → 2,1`).
+Reports show the package with `(package)` or the test name, with
+`reported · pass/fail/skip` in the trailing column. These are reported outcomes,
+not AFTER observations: applicability remains unknown unless the binding is to
+another selected snapshot, which is stale. Receipts for another pair are stale,
+never rebound. Pin decisions remain separate from evidence freshness and execution.
+A job completion is not an observation or acceptance.
 
 Receipt sections expose producer, both snapshot bindings, timestamps, execution
 and environment metadata, frozen scenario/input, exact comparison witnesses,
@@ -131,8 +156,9 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
 ## Verification
 
 - `mise exec -- task test:terminal`: real Git captures, full inventory, immutable
-  source, exact-byte hex round trips, state labels, stale documents, responsive
+  source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, responsive
   cancellation and persisted denied-run receipts, plus terminal foundation tests.
+- `mise exec -- task test:views`: six deterministic no-color golden views. Regenerate only with `mise exec -- task test:views -- -update` and review the diff.
 - `mise exec -- task test:cli`: actual CLI capture/import followed by PTY browsing,
   inspector/diff/help, background capture/import, 32×8 resize and termios,
   alternate-screen and cursor restoration. No payload terminal controls escape.

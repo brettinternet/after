@@ -107,7 +107,7 @@ func TestBrowserPTY(t *testing.T) {
 	go func() {
 		done <- run(t.Context(), []string{"review", captured.Data.Candidate.ID, "--tui", "--base", captured.Data.Base.ID, "--evidence", imported.Data.ID, "--project", project, "--import-file", report, "--producer", "PTY Go report"}, slave, &stderr, slave, true)
 	}()
-	expect("STATE reported")
+	expect("[REPORTED]")
 	send("\r")
 	expect("reported case")
 	send("\x1b")
@@ -117,7 +117,7 @@ func TestBrowserPTY(t *testing.T) {
 	send("\t")
 	expect("captured raw diff")
 	send("?")
-	expect("STATE is engine metadata")
+	expect("Badges are engine metadata")
 	send("c")
 	expect("Job finished; stored result retained")
 	send("i")
