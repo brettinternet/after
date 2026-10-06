@@ -3,6 +3,8 @@
 `after review --tui` opens the stored engine records, not a demo or a live checkout.
 It does not run Git, import a report, build code or contact Docker on open.
 The existing headless `review <pin-revision-id>` remains unchanged.
+This page documents current behavior; the planned redesign (AFTER-21–33) is
+specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after capture --project /path/to/project

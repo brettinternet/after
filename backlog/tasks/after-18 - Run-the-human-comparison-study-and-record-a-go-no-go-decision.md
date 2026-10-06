@@ -4,6 +4,7 @@ title: Run the human comparison study and record a go/no-go decision
 status: To Do
 assignee: []
 created_date: '2026-10-03 05:44'
+updated_date: '2026-10-06 20:30'
 labels:
   - follow-up
   - evaluation
@@ -11,6 +12,9 @@ labels:
 milestone: m-2
 dependencies:
   - AFTER-17
+  - AFTER-27
+  - AFTER-29
+  - AFTER-32
 documentation:
   - docs/IMPLEMENTATION.md
   - docs/behavior-and-evidence.md
