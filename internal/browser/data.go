@@ -1,4 +1,4 @@
-// Package browser adapts immutable engine records to read-only terminal pages.
+// Package browser adapts immutable engine records to read-only terminal documents.
 // It never executes project code or derives evidence from repository prose.
 package browser
 
@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
@@ -19,10 +21,19 @@ import (
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/store"
+	"github.com/brettinternet/after/internal/terminal"
 )
 
 const MaxEvidence = 32
-const PageBytes = 4096
+
+type documentFormat uint8
+
+const (
+	formatVerbatim documentFormat = iota
+	formatObservation
+	formatSample
+	formatComparison
+)
 
 type Selection struct {
 	Project  string
@@ -33,6 +44,7 @@ type Section struct {
 	Name    string
 	Content []byte
 	Blob    evidence.Digest
+	format  documentFormat
 }
 type Entry struct {
 	Receipt     evidence.Digest
@@ -194,13 +206,13 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				if decode(raw, &report) != nil || report.Receipt != r.ID || report.Snapshots != r.Snapshots || report.Outcome != comparison.Outcome {
 					return nil, errors.New("misbound comparison details")
 				}
-				e.Sections = append(e.Sections, Section{Name: "exact before/after channel witnesses", Blob: comparison.Details.Content})
+				e.Sections = append(e.Sections, Section{Name: "exact before/after channel witnesses", Blob: comparison.Details.Content, format: formatComparison})
 			}
 		}
 		// Retain every sample, observation and diagnostic, including failed runs
 		// and all unstable repetitions. Channel names remain untrusted data.
 		for _, a := range r.Artifacts {
-			e.Sections = append(e.Sections, Section{Name: "artifact: " + a.Channel, Blob: a.Content})
+			e.Sections = append(e.Sections, Section{Name: "artifact: " + a.Channel, Blob: a.Content, format: artifactFormat(a.Channel)})
 		}
 		rows := []Entry{}
 		if r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
@@ -270,7 +282,21 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		if report.Metadata.Snapshot != "" && report.Metadata.Snapshot != pair.Candidate {
 			state.Applicability = evidence.Stale
 		}
-		entries = append(entries, Entry{Label: label(state, report.Completeness), Name: card.Package + " / " + card.Test, Sections: []Section{document("reported case: inputs/effects unavailable, not observations", card), summary}})
+		metadata := struct {
+			Package         string                 `json:"package"`
+			Test            string                 `json:"test,omitempty"`
+			Scope           string                 `json:"scope"`
+			Attempt         int                    `json:"attempt"`
+			State           evidence.EvidenceState `json:"state"`
+			OutputTruncated bool                   `json:"output_truncated"`
+			FirstEventAt    *time.Time             `json:"first_event_at,omitempty"`
+			LastEventAt     *time.Time             `json:"last_event_at,omitempty"`
+			Inputs          string                 `json:"inputs"`
+			ExpectedValues  string                 `json:"expected_values"`
+			Effects         string                 `json:"effects"`
+		}{card.Package, card.Test, card.Scope, card.Attempt, card.State, card.OutputTruncated, card.FirstEventAt, card.LastEventAt, card.Inputs, card.ExpectedValues, card.Effects}
+		sections := []Section{document("reported case: inputs/effects unavailable, not observations", metadata), {Name: "reported output", Content: []byte(card.Output)}, summary}
+		entries = append(entries, Entry{Label: label(state, report.Completeness), Name: card.Package + " / " + card.Test, Sections: sections})
 	}
 	if len(entries) == 0 {
 		entries = append(entries, Entry{Label: "not checked | unknown | no reported cases", Name: string(id), Sections: []Section{summary}})
@@ -285,33 +311,200 @@ func label(s evidence.EvidenceState, complete evidence.Completeness) string {
 	return fmt.Sprintf("%s | %s | %s | %s | %s | report=%s", kind, s.Applicability, s.Execution, s.Comparison, complete, s.Report)
 }
 
-type Page struct {
-	Bytes         []byte
-	Offset, Total int
-}
-
-// ReadPage uses stored content only, never paths from the live checkout. An
-// unavailable/corrupt artifact is a visible error, not an empty/equal result.
-func ReadPage(ctx context.Context, project string, section Section, offset int) (Page, error) {
+// ReadSection returns the exact captured bytes, never a live path or formatted
+// representation. Callers doing document indexing must keep it off the event loop.
+func ReadSection(ctx context.Context, project string, section Section) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
-		return Page{}, err
+		return nil, err
 	}
 	raw := section.Content
 	if section.Blob != "" {
 		s, err := store.Open(project, false, nil)
 		if err != nil {
-			return Page{}, err
+			return nil, err
 		}
 		defer s.Close()
 		raw, err = s.ReadBlob(section.Blob)
 		if err != nil {
-			return Page{}, err
+			return nil, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return Page{}, err
+		return nil, err
 	}
-	offset = min(max(offset, 0), len(raw))
-	end := min(offset+PageBytes, len(raw))
-	return Page{Bytes: append([]byte(nil), raw[offset:end]...), Offset: offset, Total: len(raw)}, nil
+	return append([]byte(nil), raw...), nil
+}
+
+func artifactFormat(channel string) documentFormat {
+	parts := strings.Split(channel, "/")
+	if len(parts) != 4 || (parts[0] != "base" && parts[0] != "candidate") {
+		return formatVerbatim
+	}
+	if parts[1] != "43200" && parts[1] != "30" {
+		return formatVerbatim
+	}
+	repetition, err := strconv.Atoi(parts[2])
+	if err != nil || repetition < 0 || repetition > 4 {
+		return formatVerbatim
+	}
+	switch parts[3] {
+	case "observation":
+		return formatObservation
+	case "sample":
+		return formatSample
+	default:
+		return formatVerbatim
+	}
+}
+
+// displayJSON indents only explicitly typed AFTER artifacts. It first decodes
+// with the matching type and falls back to exact bytes on any schema, size or
+// line-limit issue; the hex representation always uses the original bytes.
+func displayJSON(raw []byte, format documentFormat) []byte {
+	// These AFTER-produced artifacts are each stored under a 1 MiB producer
+	// budget. Never allocate from a larger or unrecognized local artifact.
+	if len(raw) > 1<<20 {
+		return raw
+	}
+	switch format {
+	case formatObservation:
+		observation := new(runner.Observation)
+		if err := decode(raw, observation); err != nil || observation.Version != 1 || (observation.Seconds != 30 && observation.Seconds != 43200) || len(observation.Responses) != 2 || observation.Calls == nil || len(observation.Calls) > 128 {
+			return raw
+		}
+	case formatSample:
+		sample := new(runner.Sample)
+		if err := decode(raw, sample); err != nil || len(sample.Artifacts) > 3 {
+			return raw
+		}
+	case formatComparison:
+		report := new(compare.Report)
+		if err := decode(raw, report); err != nil || len(report.Artifacts) > 256 || len(report.Witnesses) > 4096 || len(report.Limits) > 100 {
+			return raw
+		}
+		totalChanges := 0
+		for _, witness := range report.Witnesses {
+			totalChanges += len(witness.Changes)
+			if totalChanges > 2048 {
+				return raw
+			}
+		}
+	default:
+		return raw
+	}
+	formatted, ok := indentJSON(raw)
+	if !ok {
+		return raw
+	}
+	return formatted
+}
+
+// indentJSON inserts bounded whitespace while preserving each JSON token's raw
+// bytes. It is called only after strict decoding into the artifact's typed AFTER
+// record; excess output bytes or lines fall back to the untouched stored bytes.
+func indentJSON(raw []byte) ([]byte, bool) {
+	out := make([]byte, 0, min(len(raw)+len(raw)/4, terminal.MaxTextBytes))
+	lines := 1
+	write := func(text []byte) bool {
+		if len(text) > terminal.MaxTextBytes-len(out) {
+			return false
+		}
+		for _, b := range text {
+			if b == '\n' {
+				lines++
+				if lines > terminal.MaxLines {
+					return false
+				}
+			}
+		}
+		out = append(out, text...)
+		return true
+	}
+	indent := func(depth int) bool {
+		spaces := depth * 2
+		if spaces > terminal.MaxTextBytes-len(out) {
+			return false
+		}
+		for i := 0; i < spaces; i++ {
+			out = append(out, ' ')
+		}
+		return true
+	}
+	var stack []byte
+	for i := 0; i < len(raw); {
+		b := raw[i]
+		switch b {
+		case ' ', '\t', '\r', '\n':
+			i++
+		case '{', '[':
+			close := byte('}')
+			if b == '[' {
+				close = ']'
+			}
+			next := i + 1
+			for next < len(raw) && (raw[next] == ' ' || raw[next] == '\t' || raw[next] == '\r' || raw[next] == '\n') {
+				next++
+			}
+			if !write(raw[i : i+1]) {
+				return nil, false
+			}
+			if next < len(raw) && raw[next] == close {
+				if !write(raw[next : next+1]) {
+					return nil, false
+				}
+				i = next + 1
+				continue
+			}
+			stack = append(stack, close)
+			if !write([]byte{'\n'}) || !indent(len(stack)) {
+				return nil, false
+			}
+			i++
+		case '}', ']':
+			if len(stack) == 0 || stack[len(stack)-1] != b {
+				return nil, false
+			}
+			if !write([]byte{'\n'}) || !indent(len(stack)-1) || !write(raw[i:i+1]) {
+				return nil, false
+			}
+			stack = stack[:len(stack)-1]
+			i++
+		case ',':
+			if !write([]byte{',', '\n'}) || !indent(len(stack)) {
+				return nil, false
+			}
+			i++
+		case ':':
+			if !write([]byte{':', ' '}) {
+				return nil, false
+			}
+			i++
+		case '"':
+			start := i
+			i++
+			for i < len(raw) {
+				if raw[i] == '\\' {
+					i += 2
+					continue
+				}
+				if raw[i] == '"' {
+					i++
+					break
+				}
+				i++
+			}
+			if i > len(raw) || !write(raw[start:i]) {
+				return nil, false
+			}
+		default:
+			start := i
+			for i < len(raw) && raw[i] != ',' && raw[i] != ']' && raw[i] != '}' && raw[i] != ':' && raw[i] != ' ' && raw[i] != '\t' && raw[i] != '\r' && raw[i] != '\n' {
+				i++
+			}
+			if i == start || !write(raw[start:i]) {
+				return nil, false
+			}
+		}
+	}
+	return out, len(stack) == 0
 }

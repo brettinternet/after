@@ -29,7 +29,8 @@ cat >&2 <<'EOF'
 Try in the TUI:
   d          complete inventory: deleted, added (a rename is both), binary, mode change, excluded .env.local
   j/k Enter  inspect one entry; Tab/Shift+Tab move between sections
-  Tab        (from inventory) the captured raw patch; [ and ] page through bytes
+  Tab        (from inventory) the captured raw patch; j/k, PgUp/PgDn, g/G scroll
+  b          toggle exact hex bytes; h/l pan long lines
   Esc        back to the list; the STATE row says "not checked" - no evidence was supplied
   ?          every key;  q quits and restores the terminal
 EOF

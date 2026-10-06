@@ -3,7 +3,7 @@
 `after review --tui` opens the stored engine records, not a demo or a live checkout.
 It does not run Git, import a report, build code or contact Docker on open.
 The existing headless `review <pin-revision-id>` remains unchanged.
-This page documents current behavior; the planned redesign (AFTER-21–33) is
+This page documents current behavior; the remaining redesign (AFTER-22–33) is
 specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
@@ -20,26 +20,27 @@ Unknown/corrupt evidence IDs do not hide the raw inventory.
 
 ## Keys and evidence
 
-| Key                                     | Action                                                                                                                  |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Up/down or `j`/`k`, PgUp/PgDn, Home/End | Select a record or scroll the focused pane                                                                              |
-| Enter                                   | Inspect the selected record or inventory entry                                                                          |
-| `d`                                     | Open the complete unclassified inventory, including unknown, excluded, unsupported, binary and potential-oracle entries |
-| Tab in inventory                        | Open the captured raw patch                                                                                             |
-| Tab / Shift+Tab in inspector or patch   | Next/previous section                                                                                                   |
-| `[` / `]`                               | Previous/next 4096-byte page; all available stored bytes remain reachable                                               |
-| Left/right or `h`/`l`                   | Pan clipped data/help text                                                                                              |
-| Escape                                  | Return to list, preserving selection                                                                                    |
-| `?`                                     | Scrollable help                                                                                                         |
-| `c`                                     | Explicitly capture HEAD versus working tree in the background; untracked files stay excluded                            |
-| `i`                                     | Explicitly import the file configured at launch, if any                                                                 |
-| `p`                                     | Pin the selected measured candidate provider-request count as a finite expectation (list only)                          |
-| `a`                                     | Accept the pending captured candidate, retaining the original review base; not behavior acceptance                      |
-| `r`                                     | Prepare and display the exact frozen offline execution plan, without executing                                          |
-| `y` / `n`                               | In the preview only: approve this plan once / deny without execution                                                    |
-| `s`                                     | Inspect selected snapshot IDs, immutable pin revisions and retained result IDs for restart                              |
-| `x`                                     | Request cancellation of the active job                                                                                  |
-| `q` / Ctrl-C                            | Quit, cancel and join owned work, restore terminal                                                                      |
+| Key                                         | Action                                                                                                                  |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Up/down or `j`/`k`, PgUp/PgDn, Home/End     | Select a record or scroll the focused document continuously                                                             |
+| Enter                                       | Inspect the selected record or inventory entry                                                                          |
+| `d`                                         | Open the complete unclassified inventory, including unknown, excluded, unsupported, binary and potential-oracle entries |
+| Tab in inventory                            | Open the captured raw patch                                                                                             |
+| Tab / Shift+Tab in inspector, patch or plan | Next/previous section                                                                                                   |
+| `g` / `G`                                   | Move to the start/end of the complete text or hex document                                                              |
+| `b`                                         | Toggle exact-byte hex view for any document; NUL in the first 8,000 bytes opens hex automatically                       |
+| Left/right or `h`/`l`                       | Pan text by grapheme-safe columns through the first 4 KiB of each line; `[b]` marks longer lines                        |
+| Escape                                      | Return to list, preserving selection                                                                                    |
+| `?`                                         | Scrollable help                                                                                                         |
+| `c`                                         | Explicitly capture HEAD versus working tree in the background; untracked files stay excluded                            |
+| `i`                                         | Explicitly import the file configured at launch, if any                                                                 |
+| `p`                                         | Pin the selected measured candidate provider-request count as a finite expectation (list only)                          |
+| `a`                                         | Accept the pending captured candidate, retaining the original review base; not behavior acceptance                      |
+| `r`                                         | Prepare and display the exact frozen offline execution plan, without executing                                          |
+| `y` / `n`                                   | In the preview only: approve this plan once / deny without execution                                                    |
+| `s`                                         | Inspect selected snapshot IDs, immutable pin revisions and retained result IDs for restart                              |
+| `x`                                         | Request cancellation of the active job                                                                                  |
+| `q` / Ctrl-C                                | Quit, cancel and join owned work, restore terminal                                                                      |
 
 The text-only `STATE` row comes from validated engine enums, not test names or
 logs. Reported outcomes remain reported with unknown applicability; a binding to
@@ -56,11 +57,21 @@ calls. Report sections show caller provenance and unavailable inputs/effects;
 they do not reconstruct observations from test names. No screen asserts more
 than the recorded finite inputs and supported channels.
 
-Every untrusted line is prefixed `data |`. Artifact bytes are quoted in chunks
-of at most 32 bytes, including escaped newlines and binary/control bytes; page
-boundaries and clipping are explicit. This is a deliberately plain inspector,
-not syntax highlighting. Source sections read immutable captured blobs, never
-live paths. Use [headless export](CLI.md) for machine-readable/raw artifact pages.
+Documents render one captured line per row behind a trusted numbered gutter;
+payload newlines cannot create rows or chrome. Tabs expand at four-column stops,
+and controls, bidi formats, invalid UTF-8, and leading combining marks are made
+safe by the shared terminal renderer. Long lines show a `[b]` marker after the
+first 4 KiB; horizontal pan never splits a grapheme.
+
+A NUL in the first 8,000 stored bytes opens exact hex view. Press `b` to switch
+between text and hex for any document. Hex offsets make CR, BOM, trailing
+whitespace, and every stored byte inspectable. Text documents index at most
+250,000 lines; an explicit limitation directs the reviewer to hex, which still
+reaches the full blob. Stored bytes never change. Only typed AFTER observation,
+sample, comparison-detail, and execution-plan JSON is indented; captured source,
+diagnostics, and imported test output remain verbatim. Source sections read
+immutable captured blobs, never live paths. Use [headless export](CLI.md) for
+machine-readable/raw artifact pages.
 
 ## Background actions and limits
 
@@ -74,8 +85,9 @@ One capture and one run can progress together; one short pin/selection/preview
 operation runs at a time. They share a lazy, process-owned store writer whose
 individual publications are serialized. A run never blocks the UI event loop.
 Active/completed/cancellation status is visible; there is no invented percentage.
-Page loads run off the UI loop. Late page/request results cannot replace a newer
-view, and discarding a UI completion never deletes a stored receipt.
+Whole-document reads and indexing run off the UI loop. Late document/request
+results cannot replace a newer view, and discarding a UI completion never deletes
+a stored receipt.
 
 ## Pin, edit, reopen, rerun
 
@@ -94,9 +106,10 @@ The original base stays selected even if HEAD has moved. When the selected pair
 has no shared captured patch, the patch page says so; complete stored inventory
 and both captured sources remain available, not a patch for the wrong pair.
 
-Press `r`, inspect the paged plan (images, inputs, argv, mounts, offline network
-and resource limits), then `y` to approve it once or `n`/Escape to deny. Paste cannot
-authorize execution. A new preview or accepted snapshot invalidates old consent.
+Press `r`, continuously inspect the complete exact plan (images, inputs, argv,
+mounts, offline network and resource limits), then `y` to approve it once or
+`n`/Escape to deny. `b` switches to exact hex when needed. Paste cannot authorize
+execution. A new preview or accepted snapshot invalidates old consent.
 Execution reconstructs the exact preview before checking its digest. Docker settings
 must be supplied explicitly as for the [headless run command](CLI.md); configuration
 never grants consent, and there is no host fallback. `x` cancels the run and retains
@@ -111,14 +124,14 @@ automatic refresh or filesystem watcher. Keep these references private.
 
 The viewport is capped at 240 columns and 100 rows; extremely narrow terminals
 clip explicitly. Storage/capture/report bounds still apply. Artifact reads verify
-the whole bounded blob before serving a page. An unavailable artifact produces a
-limitation, never an empty successful result. The browser is not an authenticated
+the whole bounded blob before indexing a document. An unavailable artifact
+produces a limitation, never an empty successful result. The browser is not an authenticated
 producer verifier: content-addressed records bind bytes, not producer honesty.
 
 ## Verification
 
 - `mise exec -- task test:terminal`: real Git captures, full inventory, immutable
-  source, byte-page round trips, state labels, stale messages, responsive
+  source, exact-byte hex round trips, state labels, stale documents, responsive
   cancellation and persisted denied-run receipts, plus terminal foundation tests.
 - `mise exec -- task test:cli`: actual CLI capture/import followed by PTY browsing,
   inspector/diff/help, background capture/import, 32×8 resize and termios,

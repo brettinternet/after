@@ -78,9 +78,8 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		m.preview, m.digest, m.planPair = msg.raw, msg.digest, msg.pair
 		m.screen = "plan"
 		m.section = 0
-		m.offset = 0
-		m.status = "No execution yet. Read all byte pages; y approves this exact plan once; n denies"
-		return m.loadPage(), true
+		m.status = "Nothing has run. y approves this exact plan once; n denies"
+		return m.loadDocument(), true
 	case changed:
 		m.actionBusy = false
 		if msg.err != nil {
@@ -95,8 +94,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		m.status = msg.status + "; s session IDs for restart"
 		if m.screen == "inspector" || m.screen == "patch" {
 			m.section = 0
-			m.offset = 0
-			return m.loadPage(), true
+			return m.loadDocument(), true
 		}
 		if m.screen == "plan" {
 			m.screen = "examples"
@@ -157,8 +155,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			m.returnTo = "examples"
 			m.screen = "inspector"
 			m.section = 0
-			m.offset = 0
-			return m.loadPage(), true
+			return m.loadDocument(), true
 		case "c":
 			if m.capturing || m.data == nil {
 				return nil, true

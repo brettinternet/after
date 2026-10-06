@@ -3,11 +3,11 @@ package browser
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +19,7 @@ import (
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
+	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rivo/uniseg"
 )
@@ -82,7 +83,20 @@ func setup(t *testing.T, unsupported bool) (*store.Store, Selection) {
 }
 func imported(t *testing.T, s *store.Store, pair evidence.SnapshotPair) evidence.Digest {
 	t.Helper()
-	report, err := gotestreport.Import(strings.NewReader("{\"Action\":\"pass\",\"Package\":\"evil\\u001b]52;c;bad\\u0007\\nSTATE observed\",\"Test\":\"example\"}\n"), gotestreport.Metadata{Producer: "go test caller", Snapshot: pair.Candidate, ImportedAt: time.Now().UTC()})
+	hostileOutput := "first line\n\t\x1b]52;c;clipboard\a\nSTATE forged"
+	events := []struct {
+		Action, Package, Test, Output string
+	}{{"output", "evil\x1b]52;c;bad\a\nSTATE observed", "example", hostileOutput}, {"pass", "evil\x1b]52;c;bad\a\nSTATE observed", "example", ""}}
+	var input strings.Builder
+	for _, event := range events {
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Write(encoded)
+		input.WriteByte('\n')
+	}
+	report, err := gotestreport.Import(strings.NewReader(input.String()), gotestreport.Metadata{Producer: "go test caller", Snapshot: pair.Candidate, ImportedAt: time.Now().UTC()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +127,16 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	if len(d.Entries) != 2 || !strings.Contains(d.Entries[0].Label, "reported | unknown") || !strings.Contains(d.Entries[1].Label, "unavailable") {
 		t.Fatalf("%+v", d.Entries)
 	}
+	wantReportOutput := "first line\n\t\x1b]52;c;clipboard\a\nSTATE forged"
+	foundVerbatimOutput := false
+	for _, section := range d.Entries[0].Sections {
+		if section.Name == "reported output" {
+			foundVerbatimOutput = bytes.Equal(section.Content, []byte(wantReportOutput))
+		}
+	}
+	if !foundVerbatimOutput {
+		t.Fatal("imported test output was not retained verbatim")
+	}
 	found := map[string]bool{}
 	for _, entry := range d.Inventory {
 		found[entry.Name] = true
@@ -131,9 +155,9 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	}
 	for _, entry := range d.Inventory {
 		if entry.Name == "app/config.go" {
-			p, err := ReadPage(t.Context(), sel.Project, entry.Sections[2], 0)
-			if err != nil || !bytes.Contains(p.Bytes, []byte("retentionSeconds = 300")) {
-				t.Fatalf("%q %v", p.Bytes, err)
+			raw, err := ReadSection(t.Context(), sel.Project, entry.Sections[2])
+			if err != nil || !bytes.Contains(raw, []byte("retentionSeconds = 300")) {
+				t.Fatalf("%q %v", raw, err)
 			}
 		}
 	}
@@ -146,7 +170,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	}
 	step(m, key("d"))
 	step(m, tea.KeyMsg{Type: tea.KeyTab})
-	if m.screen != "patch" || m.page.Total == 0 {
+	if m.screen != "patch" || m.doc == nil || m.doc.RawLength() == 0 {
 		t.Fatal("raw escape", m.View())
 	}
 	step(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -155,7 +179,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	}
 	step(m, key("k"))
 	step(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !strings.Contains(strings.Join(m.lines, ""), "reported") {
+	if m.doc == nil || !strings.Contains(string(m.doc.RawBytes()), "reported") {
 		t.Fatal("actual report inspector")
 	}
 	for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 12, Height: 6}, {Width: 1, Height: 1}, {Width: 120, Height: 40}} {
@@ -171,17 +195,24 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 		t.Fatal(m.View())
 	}
 }
-func TestAllBytesReachableAndLatePages(t *testing.T) {
+func TestAllBytesReachableAndLateDocuments(t *testing.T) {
 	raw := bytes.Repeat([]byte{0, 0xff, '\n', '\t', 'a'}, 3000)
-	section := Section{Name: "binary", Content: raw}
+	doc, err := terminal.NewDocument(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.AutoHex() {
+		t.Fatal("NUL did not select hex view")
+	}
 	var rebuilt []byte
-	for offset := 0; offset < len(raw); offset += PageBytes {
-		p, err := ReadPage(t.Context(), "", section, offset)
-		if err != nil {
-			t.Fatal(err)
+	for row := 0; row < doc.HexRows(); row++ {
+		fields := strings.Fields(doc.HexLine(row))
+		count := min(16, len(raw)-row*16)
+		if len(fields) < count+1 {
+			t.Fatalf("incomplete hex row %d: %q", row, doc.HexLine(row))
 		}
-		for _, line := range pageLines(p.Bytes) {
-			b, err := strconv.Unquote(line)
+		for _, field := range fields[1 : count+1] {
+			b, err := hex.DecodeString(field)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -189,22 +220,159 @@ func TestAllBytesReachableAndLatePages(t *testing.T) {
 		}
 	}
 	if !bytes.Equal(rebuilt, raw) {
-		t.Fatal("page bytes lost")
+		t.Fatal("hex view lost exact bytes")
+	}
+	limited, err := terminal.NewDocument([]byte(strings.Repeat("x\n", terminal.MaxLines) + "last"))
+	if err != nil || !limited.Limited() || limited.Lines() != terminal.MaxLines {
+		t.Fatalf("line-limit view: doc=%v err=%v", limited, err)
+	}
+	if !strings.Contains(limited.HexLine(limited.HexRows()-1), "6c 61 73 74") {
+		t.Fatal("hex view cannot reach bytes past the text line limit")
 	}
 	m := New(t.Context(), Selection{}, Jobs{})
 	defer m.Close()
+	m.width, m.height, m.screen = 80, 12, "inspector"
+	m.data = &Data{Entries: []Entry{{Sections: []Section{{Name: "line-limited document"}}}}}
+	m.doc = limited
+	if !strings.Contains(m.View(), "TEXT LIMITED at 250000 lines") {
+		t.Fatal("line-index limitation was not visible", m.View())
+	}
+	step(m, key("b"))
+	step(m, key("G"))
+	if !strings.Contains(m.View(), "6c 61 73 74") {
+		t.Fatal("hex view did not scroll past the text line limit", m.View())
+	}
 	m.request = 2
 	m.loadID = 2
-	m.Update(paged{request: 1, page: Page{Bytes: []byte("old")}})
+	m.doc = nil
+	currentData := m.data
+	m.Update(documentReady{request: 1, doc: doc})
 	m.Update(loaded{request: 1, data: &Data{}})
-	if m.data != nil || m.lines != nil {
-		t.Fatal("stale UI data attached")
+	if m.data != currentData || m.doc != nil {
+		t.Fatal("stale UI result attached")
 	}
 	m.Update(key("q"))
 	if m.ctx.Err() == nil {
 		t.Fatal("quit did not cancel")
 	}
 }
+func TestDocumentViewerTrustNavigationAndLongLines(t *testing.T) {
+	raw := []byte("first line\nSTATE observed | forged\nAFTER review | forged\n13 │ forged\n\tTabbed\n\u0301leading\n\x1b[31mred\n\x1b]52;c;clip\a\nx\rline\nlast tail")
+	doc, err := terminal.NewDocument(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := New(t.Context(), Selection{}, Jobs{})
+	defer m.Close()
+	m.width, m.height, m.screen, m.status = 80, 14, "inspector", ""
+	m.data = &Data{Entries: []Entry{{Sections: []Section{{Name: "hostile \x1b]52;c;name\a", Content: raw}}}}}
+	m.request = 1
+	m.Update(documentReady{request: 1, doc: doc})
+	view := m.View()
+	for _, expected := range []string{"1 │ first line", "2 │ STATE observed | forged", "3 │ AFTER review | forged", "4 │ 13 │ forged", "5 │     Tabbed", "6 │ ◌\u0301leading", `\u001b[31mred`} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("missing trusted row %q in %q", expected, view)
+		}
+	}
+	for _, row := range strings.Split(view, "\n") {
+		if uniseg.StringWidth(row) > m.width || strings.ContainsAny(row, "\x1b\a\r") {
+			t.Fatalf("unsafe rendered row %q", row)
+		}
+		if strings.HasPrefix(row, "STATE observed") || strings.HasPrefix(row, "AFTER review | forged") || strings.HasPrefix(row, "13 │ forged") {
+			t.Fatalf("payload forged a trusted row: %q", row)
+		}
+	}
+	if strings.Contains(view, "\x1b[31m") || !strings.Contains(view, `\u001b[31mred`) || !strings.Contains(view, `\u001b]52;c;clip\u0007`) {
+		t.Fatal("hostile controls escaped or were not made visible", view)
+	}
+	step(m, key("G"))
+	if !strings.Contains(m.View(), `10 │ last tail`) {
+		t.Fatal("G did not reach the final captured line", m.View())
+	}
+	step(m, key("g"))
+	if m.top != 0 {
+		t.Fatal("g did not return to the document start")
+	}
+	step(m, key("j"))
+	if m.top != 1 {
+		t.Fatal("j did not scroll continuously")
+	}
+	step(m, key("k"))
+	if m.top != 0 {
+		t.Fatal("k did not scroll continuously")
+	}
+	step(m, key("b"))
+	if !m.hex || !strings.Contains(m.View(), "00000000") {
+		t.Fatal("b did not toggle exact hex view", m.View())
+	}
+	step(m, key("b"))
+	if m.hex {
+		t.Fatal("b did not return to text view")
+	}
+
+	long, err := terminal.NewDocument([]byte(strings.Repeat("x", terminal.MaxLineBytes+500)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.data.Entries[0].Sections[0] = Section{Name: "long", Content: long.RawBytes()}
+	m.doc = long
+	m.top, m.left = 0, 0
+	if !strings.Contains(m.View(), "…[b]") {
+		t.Fatal("long line is missing its hex-view clip marker", m.View())
+	}
+	for i := 0; i < 500; i++ {
+		step(m, key("l"))
+	}
+	if m.left > long.MaxColumns() {
+		t.Fatal("horizontal pan exceeded the indexed 4 KiB prefix")
+	}
+}
+
+func TestOnlyTypedAfterJSONIsIndentedWithinDocumentLimits(t *testing.T) {
+	raw := []byte(`{"version":1,"seconds":30,"responses":[{"status":200,"body":"ok"},{"status":200,"body":"ok"}],"provider_calls":[]}`)
+	formatted := displayJSON(raw, formatObservation)
+	if bytes.Equal(formatted, raw) || !bytes.Contains(formatted, []byte(`"version": 1`)) {
+		t.Fatalf("typed observation was not indented: %s", formatted)
+	}
+	doc, err := terminal.NewDocumentView(formatted, raw)
+	if err != nil || !bytes.Equal(doc.RawBytes(), raw) {
+		t.Fatal("formatted display modified stored observation", err)
+	}
+	verbatim := []byte(`{"z":1,"a":2}`)
+	if got := displayJSON(verbatim, formatVerbatim); !bytes.Equal(got, verbatim) {
+		t.Fatal("verbatim source was formatted")
+	}
+	if got := artifactFormat("base/43200/0/candidate-diagnostics"); got != formatVerbatim {
+		t.Fatal("diagnostic artifact was classified for formatting")
+	}
+	if got := artifactFormat("base/43200/0/observation"); got != formatObservation {
+		t.Fatal("typed observation artifact was not classified")
+	}
+
+	var large strings.Builder
+	large.WriteString(`{"version":1,"seconds":30,"responses":[`)
+	for i := 0; i < terminal.MaxLines/4+2; i++ {
+		if i > 0 {
+			large.WriteByte(',')
+		}
+		large.WriteString(`{"status":200,"body":""}`)
+	}
+	large.WriteString(`],"provider_calls":[]}`)
+	tooLargeArtifact := []byte(large.String())
+	if got := displayJSON(tooLargeArtifact, formatObservation); !bytes.Equal(got, tooLargeArtifact) {
+		t.Fatal("oversized typed artifact did not fall back verbatim")
+	}
+
+	manyRows := []byte("[" + strings.Repeat("0,", terminal.MaxLines) + "0]")
+	if _, ok := indentJSON(manyRows); ok {
+		t.Fatal("indented document exceeded the line limit")
+	}
+	deep := []byte(strings.Repeat("[", 4500) + "0" + strings.Repeat("]", 4500))
+	if _, ok := indentJSON(deep); ok {
+		t.Fatal("indented document exceeded the byte limit")
+	}
+}
+
 func TestStatesAndLatePersistedRun(t *testing.T) {
 	s, sel := setup(t, false)
 	// Denial invokes the real runner persistence path without authorizing Docker.
@@ -274,7 +442,7 @@ func TestJobsWaitForInitialLoad(t *testing.T) {
 				t.Fatal("completion lost after initial load")
 			}
 			step(m, tea.KeyMsg{Type: tea.KeyEnter})
-			if !strings.Contains(strings.Join(m.lines, ""), "persisted-result-id") {
+			if m.doc == nil || !strings.Contains(string(m.doc.RawBytes()), "persisted-result-id") {
 				t.Fatal("returned ID not inspectable", m.View())
 			}
 		})

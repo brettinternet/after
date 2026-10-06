@@ -12,7 +12,7 @@ mise exec -- task terminal:fuzz
 
 ## Retained boundary
 
-`internal/terminal` contains an immutable captured-text line index, a bounded selectable viewport, one terminal-safe text boundary, and Bubble Tea lifecycle handling. Construct `NewDocument` in background preparation, not `Update` or `View`. It copies bytes once; keypresses and resize reuse the same index and render only visible rows. Neither rendering nor event updates has a repository/store/process dependency.
+`internal/terminal` contains an immutable captured-text line index, bounded text/hex document access, a terminal-safe text boundary, and Bubble Tea lifecycle handling. Construct `NewDocument` in background preparation, not `Update` or `View`. It copies bytes once; keypresses and resize reuse the same index and render only visible rows. Neither rendering nor event updates has a repository/store/process dependency.
 
 Background work belongs in Bubble Tea commands, not the event loop. `Result` carries snapshot and request identities; a mismatched result cannot change the displayed job status. Completion does not claim observed/fresh/preserved/accepted evidence or replace a document. The test-only fake command waits on cancellation while input, resize and quit continue through the actual event loop. The runner remains responsible for bounded execution and joining its owned jobs: **Bubble Tea does not join commands**. `Model.Context` is cancelled on quit; `Run` also cancels it on every error/exit. The program uses the parent context so ordinary quit is not incorrectly returned as an external-cancellation error.
 
@@ -20,9 +20,9 @@ All untrusted title, patch and error text passes `Line`. It renders control/form
 
 Bounds and limitations are explicit:
 
-- Input: at most 16 MiB and 250,000 lines; larger documents return an error referring to raw artifact export, not an incomplete silent view.
+- Input: at most 16 MiB. Text indexes at most 250,000 lines; a larger document retains its exact bytes and reports the text-index limitation instead of silently dropping the remainder. Hex rows are computed directly from byte offsets, without a line index.
 - Viewport: at most 240 columns and 100 rows, clipped to the actual smaller dimensions. Tiny terminals may show only the header; quit still works.
-- Each visible line examines at most 4,096 input bytes and clips at a grapheme boundary to its cell width with `…`. Raw captured bytes remain untouched. Full long-line inspection/export is a later UI responsibility; this foundation has no horizontal scrolling.
+- Each text row examines at most 4,096 source bytes and clips at a grapheme boundary with `…`. `LineAt` pans by display columns (including tab stops) without splitting clusters. Content-viewer callers point long-line clipping to exact hex view. Captured bytes remain untouched.
 - Format controls, including emoji joiners, are escaped rather than preserved. Width follows uniseg's Unicode tables; terminal-specific ambiguous-width/font differences are not solved. Invalid UTF-8 becomes replacement characters.
 - `Run` returns errors without printing them after terminal restoration. Future callers must also use safe rendering for untrusted diagnostics. The headless CLI is not changed by this task.
 - SIGKILL, a broken terminal device and non-cooperative external jobs cannot be made safe by a TUI library. No project execution or signal/process sandbox is added here.

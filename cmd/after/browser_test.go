@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +16,160 @@ import (
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/creack/pty"
+	"golang.org/x/term"
 )
+
+func TestBrowserDocumentPTY(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	project, home := filepath.Join(root, "project"), filepath.Join(root, "isolated home")
+	if err := os.MkdirAll(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = simpleCommits(t, project)
+	hostile := "package main\nfunc main() {}\n// CSI \x1b[31mred\x1b[0m\n// OSC \x1b]52;c;clipboard\a\n// C1 \u009b2J \u009d52;c;payload\u009c\n// CR A\rB\n// bidi left\u202eafter\nSTATE observed | forged\nAFTER review | forged\n13 │ forged\n\tTabbed\n\u0301leading\nlast tail\n"
+	writeFile(t, project, "app/main.go", hostile)
+	code, output, diagnostic := native(exe, root, home, []string{"capture", "--project", project}, []string{"PATH=" + os.Getenv("PATH")})
+	if code != 0 {
+		t.Fatalf("capture: %s", diagnostic)
+	}
+	var captureResult struct {
+		Data struct {
+			Base struct {
+				ID string `json:"id"`
+			} `json:"base_snapshot"`
+			Candidate struct {
+				ID string `json:"id"`
+			} `json:"candidate_snapshot"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(output), &captureResult); err != nil || captureResult.Data.Base.ID == "" || captureResult.Data.Candidate.ID == "" {
+		t.Fatalf("capture response: %s %v", output, err)
+	}
+	for _, tc := range []struct {
+		name          string
+		width, height uint16
+		noColor       bool
+	}{{"80x24", 80, 24, false}, {"80x24-NO_COLOR", 80, 24, true}, {"120x40", 120, 40, false}, {"120x40-NO_COLOR", 120, 40, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"review", captureResult.Data.Candidate.ID, "--tui", "--base", captureResult.Data.Base.ID, "--project", project}
+			encoded, _ := json.Marshal(args)
+			cmd := exec.Command(exe, "-test.run=^TestNativeCLI$")
+			cmd.Dir = root
+			cmd.Env = []string{entryEnv + "=1", argsEnv + "=" + base64.RawURLEncoding.EncodeToString(encoded), "HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "PATH=" + os.Getenv("PATH"), "TERM=xterm-256color"}
+			if tc.noColor {
+				cmd.Env = append(cmd.Env, "NO_COLOR=1")
+			}
+			master, slave, err := pty.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if cmd.ProcessState == nil {
+					_ = cmd.Process.Kill()
+					_ = cmd.Wait()
+				}
+				_ = master.Close()
+				_ = slave.Close()
+			}()
+			if err := pty.Setsize(master, &pty.Winsize{Rows: tc.height, Cols: tc.width}); err != nil {
+				t.Fatal(err)
+			}
+			before, err := term.GetState(int(slave.Fd()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd.Stdin, cmd.Stdout = slave, slave
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			chunks := make(chan string, 128)
+			go func() {
+				defer close(chunks)
+				buf := make([]byte, 4096)
+				for {
+					n, err := master.Read(buf)
+					if n > 0 {
+						chunks <- string(buf[:n])
+					}
+					if err != nil {
+						return
+					}
+				}
+			}()
+			var transcript strings.Builder
+			expect := func(want string) {
+				t.Helper()
+				deadline := time.After(10 * time.Second)
+				for !strings.Contains(transcript.String(), want) {
+					select {
+					case chunk, ok := <-chunks:
+						if !ok {
+							t.Fatalf("PTY closed before %q; output=%q stderr=%q", want, transcript.String(), stderr.String())
+						}
+						transcript.WriteString(chunk)
+					case <-deadline:
+						t.Fatalf("no %q in PTY output %q stderr=%q", want, transcript.String(), stderr.String())
+					}
+				}
+			}
+			send := func(key string) {
+				t.Helper()
+				if _, err := master.Write([]byte(key)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			expect("AFTER review | examples")
+			send("d")
+			expect("AFTER review | inventory")
+			send("\r")
+			expect("Section 1/3")
+			send("\t")
+			expect("captured base source")
+			send("\t")
+			expect("captured candidate source")
+			expect("1 │ package main")
+			expect("8 │ STATE observed | forged")
+			if !strings.Contains(transcript.String(), `\u001b[31mred`) || !strings.Contains(transcript.String(), `\u001b]52;c;clipboard\u0007`) || !strings.Contains(transcript.String(), `\u202eafter`) || !strings.Contains(transcript.String(), `\u000dB`) {
+				t.Fatal("hostile controls/bidi/CR were not escaped behind the trusted gutter")
+			}
+			send("b")
+			expect("hex | pan 0")
+			expect("00000000  70 61 63 6b 61 67 65 20 6d 61 69 6e")
+			send("q")
+			if err := cmd.Wait(); err != nil {
+				t.Fatalf("browser exit: %v stderr=%s", err, stderr.String())
+			}
+			after, err := term.GetState(int(slave.Fd()))
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("terminal state not restored", err)
+			}
+			slave.Close()
+			for chunk := range chunks {
+				transcript.WriteString(chunk)
+			}
+			for _, hostile := range []string{"\x1b]52;", "\x1b]8;", "\u009b", "\u009d", "\x1b[31m"} {
+				if strings.Contains(transcript.String(), hostile) {
+					t.Fatalf("hostile control escaped terminal renderer: %q", hostile)
+				}
+			}
+			excerpt := []string{"1 │ package main", "8 │ STATE observed | forged", "13 │ last tail"}
+			for _, row := range excerpt {
+				if !strings.Contains(transcript.String(), row) {
+					t.Fatalf("PTY excerpt row missing %q", row)
+				}
+			}
+			if tc.name == "80x24" {
+				t.Logf("synthetic PTY excerpt (%s, NO_COLOR unset):\n  %s\n  %s\n  %s", tc.name, excerpt[0], excerpt[1], excerpt[2])
+			}
+		})
+	}
+}
 
 func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, r evidence.Receipt, c evidence.Comparison) {
 	t.Helper()
@@ -31,19 +187,16 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 		if section.Name != "exact frozen input" && !strings.HasSuffix(section.Name, "/observation") {
 			continue
 		}
-		page, err := browser.ReadPage(t.Context(), project, section, 0)
+		raw, err := browser.ReadSection(t.Context(), project, section)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if page.Total > len(page.Bytes) {
-			t.Fatal("unexpected large fixture")
-		}
 		if section.Name == "exact frozen input" {
-			input = strings.Contains(string(page.Bytes), `"seconds":[43200,30]`)
+			input = strings.Contains(string(raw), `"seconds":[43200,30]`)
 			continue
 		}
 		var o runner.Observation
-		if err := json.Unmarshal(page.Bytes, &o); err != nil {
+		if err := json.Unmarshal(raw, &o); err != nil {
 			t.Fatal(err)
 		}
 		want := 1

@@ -10,6 +10,7 @@ import (
 
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/rivo/uniseg"
 )
 
 // Job persists its own engine results before returning IDs. Cancellation or a
@@ -24,9 +25,9 @@ type loaded struct {
 	data    *Data
 	err     error
 }
-type paged struct {
+type documentReady struct {
 	request uint64
-	page    Page
+	doc     *terminal.Document
 	err     error
 }
 type finished struct {
@@ -37,22 +38,22 @@ type finished struct {
 
 type Model struct {
 	loopState
-	selected                                     Selection
-	data                                         *Data
-	jobs                                         Jobs
-	ctx, parent                                  context.Context
-	cancel                                       context.CancelFunc
-	workers                                      sync.WaitGroup
-	jobCancel                                    context.CancelFunc
-	jobID, request, loadID                       uint64
-	busy                                         bool
-	width, height                                int
-	screen                                       string
-	returnTo                                     string
-	index, inventory, section, offset, top, left int
-	page                                         Page
-	lines                                        []string
-	status                                       string
+	selected                             Selection
+	data                                 *Data
+	jobs                                 Jobs
+	ctx, parent                          context.Context
+	cancel                               context.CancelFunc
+	workers                              sync.WaitGroup
+	jobCancel                            context.CancelFunc
+	jobID, request, loadID               uint64
+	busy                                 bool
+	width, height                        int
+	screen                               string
+	returnTo                             string
+	index, inventory, section, top, left int
+	doc                                  *terminal.Document
+	hex                                  bool
+	status                               string
 }
 
 func New(ctx context.Context, selected Selection, jobs Jobs) *Model {
@@ -84,6 +85,13 @@ func (m *Model) Init() tea.Cmd {
 	return m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })
 }
 func (m *Model) rows() int { return max(m.height-5, 1) }
+func (m *Model) contentRows() int {
+	reserved := 5 // header, document details, section name, status and key hints
+	if m.doc != nil && m.doc.Limited() && !m.hex {
+		reserved++
+	}
+	return max(m.height-reserved, 1)
+}
 func (m *Model) entries() []Entry {
 	if m.data == nil {
 		return nil
@@ -116,21 +124,28 @@ func (m *Model) sections() []Section {
 	}
 	return entries[i].Sections
 }
-func (m *Model) loadPage() tea.Cmd {
+func (m *Model) loadDocument() tea.Cmd {
 	m.request++
 	id := m.request
-	m.lines = nil
-	m.page = Page{}
+	m.doc = nil
 	m.top = 0
 	m.left = 0
+	m.hex = false
 	sections := m.sections()
 	if len(sections) == 0 {
 		return nil
 	}
 	section := sections[m.section]
-	offset := m.offset
 	project := m.selected.Project
-	return m.spawn(func() tea.Msg { p, err := ReadPage(m.ctx, project, section, offset); return paged{id, p, err} })
+	return m.spawn(func() tea.Msg {
+		raw, err := ReadSection(m.ctx, project, section)
+		if err != nil {
+			return documentReady{request: id, err: err}
+		}
+		display := displayJSON(raw, section.format)
+		doc, err := terminal.NewDocumentView(display, raw)
+		return documentReady{request: id, doc: doc, err: err}
+	})
 }
 func (m *Model) startJob(name string, job Job) tea.Cmd {
 	if m.data == nil {
@@ -167,16 +182,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.data = msg.data
 			m.status = "Stored records only; no new observation. c capture | i import configured file"
 		}
-	case paged:
+	case documentReady:
 		if msg.request != m.request {
 			return m, nil
 		}
-		if msg.err != nil {
-			m.lines = []string{"Artifact unavailable; no conclusion. Use after inspect for this stored ID."}
+		if msg.err != nil || msg.doc == nil {
+			unavailable := "Artifact unavailable; no conclusion. Use after inspect for this stored ID."
+			m.doc, _ = terminal.NewDocument([]byte(unavailable))
+			m.hex = false
+			m.status = unavailable
 		} else {
-			m.page = msg.page
-			m.offset = msg.page.Offset
-			m.lines = pageLines(msg.page.Bytes)
+			m.doc = msg.doc
+			m.hex = msg.doc.AutoHex()
+			if msg.doc.Limited() {
+				m.status = "Text index limited at 250000 lines; b opens exact hex for every stored byte"
+			}
 		}
 	case finished:
 		if msg.request != m.jobID {
@@ -190,7 +210,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Job failed/cancelled; stored results retained if published"
 			result += "\n" + msg.err.Error()
 		}
-		// Keep full IDs and errors in a paged data view, never a clipped-only toast.
+		// Keep full IDs and errors in a data view, never a clipped-only toast.
 		if m.data != nil {
 			m.data.Entries = append(m.data.Entries, Entry{Label: "not checked | job completion, not evidence", Name: "background result", Sections: []Section{{Name: "stored result IDs / diagnostic", Content: []byte(result)}}})
 		}
@@ -235,15 +255,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.returnTo = m.screen
 				m.screen = "inspector"
 				m.section = 0
-				m.offset = 0
-				return m, m.loadPage()
+				return m, m.loadDocument()
 			}
 		case "tab", "shift+tab":
 			if m.screen == "inventory" {
 				m.screen = "patch"
 				m.section = 0
-				m.offset = 0
-				return m, m.loadPage()
+				return m, m.loadDocument()
 			}
 			if m.screen == "patch" || m.screen == "inspector" || m.screen == "plan" {
 				count := len(m.sections())
@@ -255,25 +273,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delta = -1
 				}
 				m.section = (m.section + delta + count) % count
-				m.offset = 0
-				return m, m.loadPage()
+				return m, m.loadDocument()
 			}
-		case "]", "[":
-			if m.screen == "patch" || m.screen == "inspector" || m.screen == "plan" {
-				next := m.offset + PageBytes
-				if msg.String() == "[" {
-					next = max(0, m.offset-PageBytes)
-				}
-				if next < m.page.Total && next != m.offset {
-					m.offset = next
-					return m, m.loadPage()
-				}
+		case "b":
+			if m.isDocumentScreen() && m.doc != nil {
+				m.hex = !m.hex
+				m.top = 0
+				m.left = 0
 			}
 		case "right", "l":
-			m.left = min(m.left+16, 240)
+			if m.isDocumentScreen() && m.doc != nil && !m.hex {
+				m.left = min(m.left+16, m.doc.MaxColumns())
+			} else if m.screen == "examples" || m.screen == "inventory" || m.screen == "help" {
+				m.left = min(m.left+16, 240)
+			}
 		case "left", "h":
-			m.left = max(m.left-16, 0)
-		case "j", "down", "k", "up", "pgdown", "pgup", "home", "end":
+			if (m.isDocumentScreen() && !m.hex) || m.screen == "examples" || m.screen == "inventory" || m.screen == "help" {
+				m.left = max(m.left-16, 0)
+			}
+		case "j", "down", "k", "up", "pgdown", "pgup", "home", "end", "g", "G":
 			delta := 1
 			switch msg.String() {
 			case "k", "up":
@@ -286,24 +304,38 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.screen == "examples" || m.screen == "inventory" {
 				p := m.cursor()
 				*p += delta
-				if msg.String() == "home" {
+				if msg.String() == "home" || msg.String() == "g" {
 					*p = 0
 				}
-				if msg.String() == "end" {
+				if msg.String() == "end" || msg.String() == "G" {
 					*p = len(m.entries()) - 1
 				}
 				*p = min(max(*p, 0), max(len(m.entries())-1, 0))
-			} else {
+			} else if m.screen == "help" {
 				m.top += delta
-				if msg.String() == "home" {
+				if msg.String() == "home" || msg.String() == "g" {
 					m.top = 0
 				}
-				if msg.String() == "end" {
-					m.top = len(m.lines) - 1
-					if m.screen == "help" {
-						m.top = len(helpLines) - 1
-					}
+				if msg.String() == "end" || msg.String() == "G" {
+					m.top = len(helpLines) - 1
 				}
+				m.top = min(max(m.top, 0), max(len(helpLines)-m.rows(), 0))
+			} else if m.isDocumentScreen() && m.doc != nil {
+				rows := m.contentRows()
+				if msg.String() == "pgdown" {
+					delta = rows
+				} else if msg.String() == "pgup" {
+					delta = -rows
+				}
+				total := m.documentRows()
+				m.top += delta
+				if msg.String() == "home" || msg.String() == "g" {
+					m.top = 0
+				}
+				if msg.String() == "end" || msg.String() == "G" {
+					m.top = max(total-rows, 0)
+				}
+				m.top = min(max(m.top, 0), max(total-rows, 0))
 			}
 		}
 	}
@@ -311,31 +343,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Every data line is JSON-quoted in <=32-byte chunks. This makes binary/control
-// bytes inspectable, bounds expensive grapheme work, and stops a payload newline
-// from forging a trusted STATE or chrome row. Left/right reveals clipped text.
-func pageLines(raw []byte) []string {
-	out := []string{}
-	for len(raw) > 0 {
-		end := min(32, len(raw))
-		if n := strings.IndexByte(string(raw[:end]), '\n'); n >= 0 {
-			end = n + 1
-		}
-		out = append(out, strconv.Quote(string(raw[:end])))
-		raw = raw[end:]
-	}
-	if len(out) == 0 {
-		out = append(out, "(empty captured bytes; not an equality claim)")
-	}
-	return out
+func (m *Model) isDocumentScreen() bool {
+	return m.screen == "inspector" || m.screen == "patch" || m.screen == "plan"
 }
-func window(raw string, left, width int) string {
-	safe := []rune(terminal.Line(raw, 240))
-	left = min(left, len(safe))
-	return terminal.Line(string(safe[left:]), width)
+func (m *Model) documentRows() int {
+	if m.doc == nil {
+		return 0
+	}
+	if m.hex {
+		return m.doc.HexRows()
+	}
+	return m.doc.Lines()
 }
+func window(raw string, left, width int) string { return terminal.LineAt(raw, left, width) }
 
-var helpLines = []string{"Enter inspect | Esc back | d complete inventory", "Inventory: Tab raw patch; Enter captured source", "Inspector/patch: Tab/Shift+Tab section; [ ] byte page", "Up/down j/k scroll | PgUp/PgDn | Home/End", "Left/right h/l pan clipped text | ? help", "c capture | i import configured file | x cancel job", "q/Ctrl-C quit and cancel/join owned jobs", "STATE is engine metadata; data | rows are untrusted", "p pin selected measured count | c capture | a accept snapshot", "r exact preview | y approve once | n deny | x cancel", "Resume using pin revision IDs shown in session details (s)", "Evidence is finite measured inputs/channels, not safety"}
+var helpLines = []string{
+	"Enter inspect | Esc back | d complete inventory",
+	"Inventory: Tab raw patch; Enter captured source",
+	"Inspector/patch: Tab/Shift+Tab section; b text/hex",
+	"j/k move | PgUp/PgDn | Home/End | g/G document start/end",
+	"h/l pan safely through first 4 KiB; [b] links to hex view",
+	"Documents: NUL in first 8000 bytes starts in hex view",
+	"Hex: offset rows keep every original byte reachable",
+	"c capture | i import configured file | x cancel job",
+	"q/Ctrl-C quit and cancel/join owned jobs",
+	"STATE is engine metadata; payload lines cannot forge it",
+	"p pin selected measured count | c capture | a accept snapshot",
+	"r exact preview | y approve once | n deny | x cancel",
+	"Resume using pin revision IDs shown in session details (s)",
+	"Evidence is finite measured inputs/channels, not safety",
+}
 
 func (m *Model) View() string {
 	lines := []string{terminal.Line("AFTER review | "+m.screen, m.width)}
@@ -346,7 +383,7 @@ func (m *Model) View() string {
 			add(prefix)
 			return
 		}
-		lines = append(lines, prefix+window(s, m.left, m.width-len(prefix)))
+		add(prefix + window(s, m.left, m.width-len(prefix)))
 	}
 	switch m.screen {
 	case "help":
@@ -374,11 +411,49 @@ func (m *Model) View() string {
 	case "inspector", "patch", "plan":
 		sections := m.sections()
 		if len(sections) > 0 {
-			add(fmt.Sprintf("Section %d/%d | bytes %d..%d/%d | pan %d", m.section+1, len(sections), m.page.Offset, m.page.Offset+len(m.page.Bytes), m.page.Total, m.left))
-			data(strconv.Quote(sections[m.section].Name))
-			top := min(m.top, max(len(m.lines)-1, 0))
-			for n := top; n < min(top+m.rows()-1, len(m.lines)); n++ {
-				data(m.lines[n])
+			section := sections[m.section]
+			total := 0
+			if m.doc != nil {
+				total = m.doc.RawLength()
+			}
+			mode := "text"
+			if m.hex {
+				mode = "hex"
+			}
+			add(fmt.Sprintf("Section %d/%d | %d stored bytes | %s | pan %d", m.section+1, len(sections), total, mode, m.left))
+			data(section.Name)
+			if m.doc == nil {
+				add("Loading complete document off the event loop")
+			} else {
+				if m.doc.Limited() && !m.hex {
+					add("TEXT LIMITED at 250000 lines; b opens exact hex for every stored byte")
+				}
+				if m.doc.Lines() == 0 && m.doc.HexRows() == 0 {
+					add("(empty captured bytes; not an equality claim)")
+				} else {
+					count := m.documentRows()
+					for n := m.top; n < min(m.top+m.contentRows(), count); n++ {
+						if m.hex {
+							add(m.doc.HexLine(n))
+							continue
+						}
+						digits := len(strconv.Itoa(max(m.doc.Lines(), 1)))
+						gutter := fmt.Sprintf("%*d │ ", digits, n+1)
+						gutterWidth := uniseg.StringWidth(gutter)
+						if m.width <= gutterWidth {
+							lines = append(lines, terminal.Line(gutter, m.width))
+							continue
+						}
+						available := m.width - gutterWidth
+						marker := ""
+						if m.doc.LongLine(n) && available >= 4 {
+							marker = "[b]"
+							available -= len(marker)
+						}
+						row := m.doc.LineAt(n, m.left, available) + marker
+						lines = append(lines, gutter+row)
+					}
+				}
 			}
 		}
 	}
@@ -386,7 +461,11 @@ func (m *Model) View() string {
 		add("New captured snapshot available; a explicitly accepts; selection unchanged")
 	}
 	add(m.status)
-	add("Enter inspect | d diff | ? help | Esc back | q quit")
+	if m.isDocumentScreen() {
+		add("j/k move | PgUp/PgDn | Home/End | g/G start/end | h/l pan | b text/hex | Tab section | Esc back")
+	} else {
+		add("Enter inspect | d diff | ? help | Esc back | q quit")
+	}
 	return strings.Join(lines[:min(len(lines), m.height)], "\n")
 }
 func Run(m *Model, input io.Reader, output io.Writer) error {
