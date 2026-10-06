@@ -4,6 +4,7 @@ title: Print the captured change with after diff
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
+updated_date: '2026-10-06 21:41'
 labels:
   - poc
   - cli
@@ -36,7 +37,8 @@ Scope, per docs/CLI-DESIGN.md "diff": bare `after diff` prints the newest captur
 - [ ] #2 Output escapes control and format characters and invalid UTF-8 through `internal/terminal`, keeps tabs in a pipe, and colors only on a terminal without NO_COLOR; when sanitizing changed any byte, stderr says so and suggests `--raw`, and hostile-patch tests prove no raw control sequence reaches stdout.
 - [ ] #3 `after diff --raw` into a file or pipe writes bytes identical to the stored patch, so `git apply` reproduces the candidate for an ordinary capture, and is refused with exit 2 when stdout is a terminal.
 - [ ] #4 `--stat` prints the capture summary rows; the 100,000-line captured diff streams within the docs/TERMINAL.md memory budget.
-- [ ] #5 docs/CLI.md and docs/RAW-DIFF.md document the command.
+- [ ] #5 `after capture` and `after status` Next blocks offer `after diff` where the design shows it.
+- [ ] #6 docs/CLI.md and docs/RAW-DIFF.md document the command.
 <!-- AC:END -->
 
 ## Definition of Done

@@ -1,7 +1,7 @@
 # Command-line design
 
 **Status: target design, not implemented.** This is the design for backlog tasks
-AFTER-34 to AFTER-42, plus the `after review` launch in AFTER-24 (milestone M2).
+AFTER-34 to AFTER-45, plus the `after review` launch in AFTER-24 (milestone M2).
 [CLI.md](CLI.md) documents current behavior, and each task updates it as it lands.
 The CLI shares vocabulary, badges, styles, and formatting with the
 [review TUI design](TUI-DESIGN.md). The product invariants in
@@ -27,6 +27,7 @@ modified and one untracked file, then with typical arguments.
 | Import needs flags             | A report file is refused without `--producer`, and a pipe can't be read                                                                                                                                                   | 39     |
 | Running is laborious           | An interactive `run` dumps the whole plan JSON to stderr before asking. A non-interactive run needs `--plan-out`, then `--plan-file` with `--approve`. Missing Docker settings get no guidance                            | 40     |
 | Reviewing takes four steps     | Capture, copy two IDs, run `review --tui CANDIDATE --base BASE`, then rebuild that command with `--evidence` flags to resume                                                                                              | 24     |
+| Committed work reviews nothing | On a feature branch whose changes are committed, `after capture` records an empty change, and nothing suggests `--base main`                                                                                              | 44     |
 | No diff in the shell           | The patch is only available as base64 inside JSON                                                                                                                                                                         | 41     |
 | No completion                  | Commands, flags, and IDs must be typed in full                                                                                                                                                                            | 42     |
 
@@ -49,7 +50,7 @@ modified and one untracked file, then with typical arguments.
 | Command                 | With no arguments                                              | With arguments                                                                                         |
 | ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `after`, `after status` | Summarize this checkout's review and suggest the next command  | —                                                                                                      |
-| `after review`          | Capture the working tree, then open or resume the review       | `--staged`, `--base REF [--target REF]`, `--include-untracked PATH`; stored `ID…` or a pair            |
+| `after review`          | Capture the working tree, then open or resume the review       | `--new`, `--staged`, `--base REF [--target REF]`, `--include-untracked PATH`; stored `ID…` or a pair   |
 | `after capture`         | Capture HEAD versus the working tree (unchanged)               | `--staged`, `--base REF [--target REF]`, `--include-untracked PATH`                                    |
 | `after diff`            | Print the newest capture's patch                               | `BASE CANDIDATE`, `--stat`, `--raw`                                                                    |
 | `after log`             | List the 20 newest captures, runs, reports, and pin events     | `-n N`                                                                                                 |
@@ -98,6 +99,8 @@ the most recent capture record, however it was made.
   list, then a **Next** block with at most three runnable commands.
 - On a terminal, output uses the TUI theme and badges (`[DIFFERENT]`, `[REOPENED]`).
   `NO_COLOR`, `TERM=dumb`, or a pipe turns styling off; the words stay.
+- On a terminal, work still running after one second (a capture, an import, or a
+  run) shows elapsed time on stderr, with no percentage.
 - Untrusted text (paths, test names, expectations, producers, errors) is sanitized
   by `internal/terminal` and placed after trusted labels. On a terminal, rows clip to
   the width. In a pipe, nothing is clipped.
@@ -167,6 +170,7 @@ Next block:
 | State                                                    | Next                                                              |
 | -------------------------------------------------------- | ----------------------------------------------------------------- |
 | No capture                                               | `after review` — capture this checkout and open it                |
+| The saved review is on another pair                      | `after review` — resume it, `after review --new` — start over     |
 | A pin needs another look                                 | `after review`, plus `after pin <id> --accept` when it can accept |
 | The pair has no run, but earlier pairs in the project do | `after run` — prepare a rerun (asks before running)               |
 | Otherwise                                                | `after review`, `after diff`                                      |
@@ -175,13 +179,30 @@ Next block:
 
 ## review
 
-`after review` is the one command a reviewer needs. It captures exactly as
-`after capture` does, with the same flags, then opens the TUI. With a saved review,
-it reopens that pair, and a changed capture waits as pending (`u`). Explicit IDs
-open stored records without capturing. The TUI design's
-[Launch and resume](TUI-DESIGN.md#launch-and-resume) specifies sessions, evidence
-discovery, and the quit message. Without a terminal, `after review` exits 2 and
-points to `after status --json`.
+`after review` is the one command a reviewer needs. Without a saved review, it
+captures exactly as `after capture` does, with the same flags, then opens the TUI.
+With a saved review, it opens that pair at once and captures in the background; a
+changed capture waits as pending (`u`). `--new` starts a new saved review from the
+fresh capture instead. Explicit IDs open stored records without capturing. The TUI
+design's [Launch and resume](TUI-DESIGN.md#launch-and-resume) specifies sessions,
+evidence discovery, and the quit message. Without a terminal, `after review` exits
+2 and points to `after status --json`.
+
+When the fresh capture has no changes and there is no saved review, `after review`
+opens nothing, exits 0, and suggests capture flags that would find a change:
+
+```text
+$ after review
+Nothing to review: the working tree matches HEAD (commit 9b1e2d4).
+This branch is 3 commits ahead of main.
+
+Next  after review --base main   review the branch's commits
+```
+
+It suggests `--base` with the default branch when HEAD is ahead of it, and
+`--include-untracked` when untracked files were excluded. The default branch is the
+remote default (`origin/HEAD`), else a local `main`, else `master`. Nothing is
+chosen automatically.
 
 ## capture
 
@@ -198,6 +219,8 @@ Next  after review   open this change
 ```
 
 An unchanged tree says `Unchanged since the capture at 19:50:58 (same snapshots)`.
+A capture with no changes is still recorded, and its Next block makes the same
+suggestions as [`after review`](#review).
 Path rows use the [Changes](TUI-DESIGN.md#changes) letters, counts, and flags.
 `after inspect` with no arguments prints the same summary for the newest capture.
 
@@ -263,6 +286,10 @@ Next  after review                  compare the reopened pin with its current re
 - `after pin RECEIPT --expectation TEXT` creates a pin; without `RECEIPT`, it pins
   the newest run of the newest capture. `--scope` defaults to `finite_example`; a
   receipt that can't support it gets an error suggesting `--scope human_intent`.
+- On a terminal, `after pin RECEIPT` without `--expectation` asks for it. It lists
+  the TUI's suggested expectation for each pinnable case, numbered, and reads one
+  line: a number picks a suggestion, other text is the expectation, and an empty
+  line cancels. Without a terminal, it exits 2 with a runnable example.
 - `after pin PIN` prints the pin's card. `--accept`, `--attach RECEIPT`, and
   `--select SNAPSHOT [--mode original_base|last_inspected]` record decisions.
   `--mode` defaults to `original_base`.
@@ -399,6 +426,36 @@ Global
   --json          print the versioned JSON result
 ```
 
+Top-level help leads with the everyday commands:
+
+```text
+$ after --help
+See what a change does differently before you accept it. Nothing in your project
+runs unless you approve an exact plan.
+
+Everyday
+  after              what to do next in this checkout
+  after review       capture your change and review it
+  after diff         print the captured patch
+  after log          recent captures, runs, reports, and pin events
+
+Evidence
+  after run          prepare a run of both sides, then ask before running it
+  after import       read go test -json from a pipe
+  after compare      compare a run's results
+  after pin          list pins, or pin an expectation
+  after inspect      show any record
+  after export       print a comparison as JSON
+
+Setup
+  after capture      capture without opening the review
+  after config       settings and setup problems
+  after completion   print a shell completion script
+
+Global options: --project DIR, --config FILE, --json
+Run after COMMAND --help for a command's options.
+```
+
 ### Grammar changes
 
 | Today                                                     | Planned                                                         |
@@ -413,10 +470,11 @@ Global
 | `capture --base REF --target REF`                         | `capture --base REF [--target REF]`                             |
 | `import FILE --producer TEXT`                             | `import [FILE] [--producer TEXT]`                               |
 | `run --plan-file FILE --approve DIGEST`                   | `run --approve DIGEST`                                          |
+| `review --tui … --import-file FILE --producer TEXT`       | `review … --import-file FILE [--producer TEXT]`                 |
 | `--base`: a snapshot ID or a Git ref                      | `--base`: a Git ref only                                        |
 
-AFTER-38 makes these changes, except the `import` row (AFTER-39) and the `run` row
-(AFTER-40). Removed forms fail with an error that shows the new form. Two IDs given
+AFTER-38 makes these changes, except the `import` row and the optional `--producer`
+(AFTER-39) and the `run` row (AFTER-40). Removed forms fail with an error that shows the new form. Two IDs given
 to `review`, `inspect`, `run`, or `diff` form a pair only when both resolve to
 snapshots. Otherwise, `review` treats each ID as a record to open.
 
@@ -476,9 +534,12 @@ These rules are non-negotiable. Each task keeps or extends their tests.
 | AFTER-40 | Readable `run` consent, stored plans, Docker guidance     | 29, 37     | Medium   |
 | AFTER-41 | `after diff`                                              | 32, 37     | Medium   |
 | AFTER-42 | Shell completion                                          | 36, 38     | Low      |
+| AFTER-43 | `after review --new`, the saved review in status          | 24, 37     | Medium   |
+| AFTER-44 | Guidance when the working tree matches HEAD               | 24, 37     | Medium   |
+| AFTER-45 | Pin expectation prompt on a terminal                      | 37         | Low      |
 
 AFTER-35 prints results without Next blocks. AFTER-37 adds them, suggesting only
-commands that exist, and AFTER-24, AFTER-40, and AFTER-41 add their own commands.
+commands that exist, and AFTER-40, AFTER-41, and AFTER-43 add their own commands.
 AFTER-27 also prints its evidence cards from `after inspect ID`, so it depends on
 AFTER-35. The [human study](EVALUATION.md) (AFTER-18) freezes the binary, so it
 waits for the high-priority CLI tasks as well as the TUI tasks.

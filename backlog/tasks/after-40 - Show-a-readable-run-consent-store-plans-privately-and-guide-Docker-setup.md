@@ -4,6 +4,7 @@ title: 'Show a readable run consent, store plans privately, and guide Docker set
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
+updated_date: '2026-10-06 21:41'
 labels:
   - poc
   - cli
@@ -37,6 +38,7 @@ Scope, per docs/CLI-DESIGN.md "run", "config" and "inspect": bare `after run` pr
 - [ ] #3 `after run --approve DIGEST` runs only a stored plan whose reconstruction matches its bytes and digest, refuses a prefix, mismatch or modified file with nothing run, and `--plan-out`/`--plan-file` behave as today; tests cover each refusal.
 - [ ] #4 Missing or invalid Docker settings are named with the configuration lines to add, may suggest a detected Docker CLI path and existing socket file, and tests prove no Docker contact or endpoint selection; `after config` lists the same setup problems.
 - [ ] #5 During an approved run, stderr on a terminal shows elapsed time with no percentage; `after inspect PLAN` prints the summary, then the indented, sanitized plan; docs/CLI.md and docs/RUNNER.md document the flow.
+- [ ] #6 `after status` suggests `after run` by the design's rule, and Next blocks offer it where the design shows it.
 <!-- AC:END -->
 
 ## Definition of Done

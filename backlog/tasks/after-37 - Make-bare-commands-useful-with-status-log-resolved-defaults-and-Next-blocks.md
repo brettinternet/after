@@ -4,7 +4,7 @@ title: 'Make bare commands useful with status, log, resolved defaults and Next b
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
-updated_date: '2026-10-06 21:14'
+updated_date: '2026-10-06 21:41'
 labels:
   - poc
   - cli
@@ -33,7 +33,7 @@ Scope, per docs/CLI-DESIGN.md "Commands", "IDs and defaults", "status", "log", "
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 In a checkout, `after` and `after status` print the design's summary from stored records only and choose the Next block by the first matching rule; with no capture they suggest capturing, outside a checkout bare `after` prints short help, and `after status --json` returns the same facts.
-- [ ] #2 `after log` lists the 20 newest captures, runs, reports and pin events newest first with the design's columns, `-n N` changes the count, and the footer says how many more exist.
+- [ ] #2 `after log` lists the 20 newest captures, runs, reports and pin events newest first with the design's columns, `-n N` changes the count, the footer says how many more exist, and `after log --json` returns the same rows with full IDs.
 - [ ] #3 Bare `inspect`, `compare`, `export` and `pin --expectation TEXT` resolve the newest capture, its newest receipt or comparison as the design's table says, print `Using …` naming each resolved record, and exit 2 naming the missing record and the command that creates it when none exists; bare `pin` lists pins by head revision.
 - [ ] #4 Every readable result ends with a Next block of at most three commands that exist, with suggested paths printable and single-quoted when needed; tests prove suggested commands run as written.
 - [ ] #5 Tests prove no default captures, runs, imports, or selects a pin revision, and that `--json` output names every resolved record by full ID; docs/CLI.md documents the bare forms.

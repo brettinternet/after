@@ -552,6 +552,7 @@ AFTER · payment · base a750186b (commit 3f2a1c9) → candidate 784eb013 (worki
 after review                 # capture HEAD vs the working tree, then open or resume
 after review --staged        # capture HEAD vs the index instead
 after review --base main     # capture the merge base with main vs HEAD
+after review --new           # start a new review from a fresh capture
 after review 784eb013        # open stored records, or a BASE CANDIDATE pair, without capturing
 ```
 
@@ -562,12 +563,17 @@ after review 784eb013        # open stored records, or a BASE CANDIDATE pair, wi
   the capture flags. It is UI state, not evidence. It is written atomically with
   mode 0600 after every selection change and on quit, and read as untrusted input
   (a bounded regular file with valid IDs).
-- With a saved review, `after review` reopens its pair. If the fresh capture
-  differs, it is pending (`u`); the selected pair never changes underneath the
-  reviewer. Without a saved review, the fresh capture opens directly.
-- Different capture flags (for example, `--staged` after a working-tree review)
-  start a new saved review, and stderr names the review it replaced. An invalid
-  session file is reported and replaced. No evidence is lost; it lives in the store.
+- With a saved review, `after review` opens its pair at once and captures in the
+  background, as `c` does. If the fresh capture differs, it is pending (`u`); the
+  selected pair never changes underneath the reviewer. Without a saved review,
+  stderr shows elapsed time while capturing, then the fresh capture opens. A capture
+  with no changes opens nothing; see [CLI-DESIGN.md](CLI-DESIGN.md#review).
+- `c` captures again with the saved review's capture flags, or HEAD against the
+  working tree when explicit IDs opened the review.
+- `--new`, or different capture flags (for example, `--staged` after a
+  working-tree review), starts a new saved review, and stderr names the review it
+  replaced. An invalid session file is reported and replaced. No evidence is lost;
+  it lives in the store.
 - Explicit IDs open those records, or a `BASE CANDIDATE` pair, without capturing
   and without reading or changing the saved review.
 - Evidence is discovered, not listed by hand: each pin's head revisions (forks show
@@ -632,7 +638,7 @@ hint priority.
 | `/`, `n`/`N`                 | lists, documents (not consent)       | Search; next or previous match                                 |
 | `]`/`[`, `}`/`{`             | Diff                                 | Next or previous file; next or previous hunk                   |
 | `d`                          | top level                            | Changes (the complete inventory)                               |
-| `c`                          | records loaded                       | Capture the working tree in the background                     |
+| `c`                          | records loaded                       | Capture again in the background, with the review's flags       |
 | `i`                          | `--import-file` given                | Import that report in the background                           |
 | `u`                          | a new capture is pending             | Use the new capture (confirms)                                 |
 | `p`                          | a pinnable current observation       | Pin its measured count (confirms)                              |

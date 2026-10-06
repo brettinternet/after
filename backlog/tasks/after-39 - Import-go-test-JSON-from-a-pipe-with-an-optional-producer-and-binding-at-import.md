@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
+updated_date: '2026-10-06 21:41'
 labels:
   - poc
   - cli
@@ -39,6 +40,7 @@ Scope, per docs/CLI-DESIGN.md "import": input from `FILE`, `-`, or a piped stdin
 - [ ] #3 Without `--snapshot`, import captures the working tree under the `after capture` policy, writes a capture record, binds the report to that candidate, and names it; when untracked files were excluded, output says the tests may have used them.
 - [ ] #4 A failed binding capture fails the import with the capture package's reason, suggests `--snapshot`, and stores no report.
 - [ ] #5 Readable output states that the binding and producer are caller claims and that AFTER did not run or observe the tests; hostile producer and test-name tests cover readable output.
+- [ ] #6 `after review --import-file FILE` no longer requires `--producer`, and the TUI's `i` import records no producer claim when it is omitted.
 <!-- AC:END -->
 
 ## Definition of Done

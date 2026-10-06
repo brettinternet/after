@@ -4,6 +4,7 @@ title: 'Use one grammar, honest help, and errors that say how to fix them'
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
+updated_date: '2026-10-06 21:41'
 labels:
   - poc
   - cli
@@ -38,6 +39,7 @@ Scope, per docs/CLI-DESIGN.md "Grammar changes" and "Errors and help": every gra
 - [ ] #4 Every error follows `after: <what is wrong> — <how to fix it>` with sanitized user input, missing arguments are named with a runnable example, and exit codes match today's for the same failures.
 - [ ] #5 Each command's help lists only its own options with defaults read from the configuration defaults (a test fails if a printed default differs), shows global options in a short group, and shows Docker and run limits only on `run`; golden help files cover every command.
 - [ ] #6 Examples, the demo, the study kit, the POC gate, Taskfile proofs, docs/CLI.md, docs/REVIEW.md, docs/DEMO.md and docs/EVALUATION.md use the new grammar; `task test`, `task examples`, `task demo:inspect` and `task study:check` pass, and Docker-gated proofs are rerun when Docker settings are available.
+- [ ] #7 `after --help` and `after help` start with one sentence, group the commands as the design's top-level help does with the everyday commands first, and list the global options once; a golden file covers it.
 <!-- AC:END -->
 
 ## Definition of Done
