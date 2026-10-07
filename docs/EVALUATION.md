@@ -136,14 +136,14 @@ Use an absolute native binary path after copying a store. Read IDs from the phas
 JSON; do not choose the newest receipt automatically. For missing:
 
 ```text
-after review --tui CANDIDATE --base BASE --project PARTICIPANT_MISSING_PROJECT
+after review BASE CANDIDATE --project PARTICIPANT_MISSING_PROJECT
 ```
 
 For initial or follow-up, take `capture.candidate_snapshot.id`,
 `capture.base_snapshot.id` and `pin` from the respective phase JSON:
 
 ```text
-after review CANDIDATE --base BASE --evidence PIN --tui --project PARTICIPANT_PHASE_PROJECT
+after review BASE CANDIDATE PIN --project PARTICIPANT_PHASE_PROJECT
 ```
 
 The facilitator handles any execution preview, with the participant's explicit

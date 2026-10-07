@@ -158,7 +158,7 @@ func TestProjectCommandsOutsideGitFailBeforeCreatingStorage(t *testing.T) {
 		{"export", []string{"export", id}},
 		{"run", []string{"run"}},
 		{"pin", []string{"pin", id, "--expectation", "test", "--scope", "finite_example", "--reason", "test"}},
-		{"review", []string{"review", id}},
+		{"review", []string{"review", id, id}},
 	}
 	for _, command := range commands {
 		t.Run(command.name, func(t *testing.T) {
@@ -191,9 +191,13 @@ func TestReadOnlyProjectCommandsDoNotCreateStore(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "checkout")
 	makeProject(t, project)
 	id := "sha256:" + strings.Repeat("a", 64)
-	for _, args := range [][]string{{"inspect", id, "--project", project}, {"export", id, "--project", project}, {"review", id, "--project", project}} {
+	for _, args := range [][]string{{"inspect", id, "--project", project}, {"export", id, "--project", project}, {"review", id, id, "--project", project}} {
 		code, stdout, stderr := invoke(args, false, "")
-		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "after log lists recent records") {
+		want := "no snapshot"
+		if args[0] == "review" {
+			want = "review requires a terminal"
+		}
+		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, want) {
 			t.Fatalf("%v: exit=%d stdout=%q stderr=%q", args, code, stdout, stderr)
 		}
 		if _, err := os.Stat(filepath.Join(project, ".after")); !errors.Is(err, os.ErrNotExist) {
@@ -212,7 +216,7 @@ func TestHelpVersionAndConfigWorkOutsideGit(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
 		want string
-	}{{[]string{"help"}, "COMMANDS:"}, {[]string{"--help"}, "capture"}, {[]string{"version"}, Version}, {[]string{"--version"}, Version}, {[]string{"config"}, "configuration"}} {
+	}{{[]string{"help"}, "Everyday"}, {[]string{"--help"}, "capture"}, {[]string{"version"}, Version}, {[]string{"--version"}, Version}, {[]string{"config"}, "configuration"}} {
 		code, stdout, stderr := invoke(tc.args, false, "")
 		if code != ExitOK || stderr != "" || !strings.Contains(stdout, tc.want) {
 			t.Errorf("%v: exit=%d stdout=%q stderr=%q", tc.args, code, stdout, stderr)

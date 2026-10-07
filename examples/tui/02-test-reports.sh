@@ -62,4 +62,4 @@ Try in the TUI:
                cd $PROJECT && echo '// free over \$75' >> shipping.go
   u          use that capture as the reviewed candidate; the original base stays selected
 EOF
-open_tui "$CANDIDATE" --base "$BASE" --evidence "$(jq -r .data.id <<<"$report")" --evidence "$(jq -r .data.id <<<"$frozen")"
+open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.id <<<"$report")" "$(jq -r .data.id <<<"$frozen")"

@@ -1,0 +1,16 @@
+Browse a captured snapshot pair in the terminal review; opening it runs no
+project code.
+
+Usage
+  after review BASE CANDIDATE [EVIDENCE ...]
+  after review BASE CANDIDATE --import-file FILE --producer TEXT
+
+Options
+  --import-file FILE   file to read only after the explicit TUI import action
+  --producer TEXT      caller provenance required with --import-file
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

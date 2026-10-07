@@ -1,0 +1,17 @@
+Import stock go test -json as reported evidence; AFTER does not run tests.
+
+Usage
+  after import FILE --producer TEXT [--snapshot ID]
+
+Options
+  --producer TEXT   caller-supplied producer and version provenance (required)
+  --captured-at RFC3339   optional caller-supplied capture time
+  --snapshot ID     bind the report to a stored snapshot
+  --offset N        first report card (default: 0)
+  --limit N         report cards to return (default: 128; range: 1–256)
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

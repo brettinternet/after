@@ -34,4 +34,4 @@ Try in the TUI:
   Esc        back to the previous view; no evidence was supplied
   ?          grouped contextual keys and unavailable reasons; q quits and restores the terminal
 EOF
-open_tui "$CANDIDATE" --base "$BASE"
+open_tui "$BASE" "$CANDIDATE"

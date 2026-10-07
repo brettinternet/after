@@ -92,7 +92,7 @@ func TestStudySetup(t *testing.T) {
 			}
 			checkpoint := d
 			checkpoint.project = filepath.Join(w.root, "missing-project")
-			if err = checkpoint.cli(0, nil, "inspect", string(phase.Capture.Candidate.ID), "--base", string(phase.Capture.Base.ID)); err != nil {
+			if err = checkpoint.cli(0, nil, "inspect", string(phase.Capture.Base.ID), string(phase.Capture.Candidate.ID)); err != nil {
 				t.Fatal("copied store not inspectable", err)
 			}
 			if err = d.studyEdit(c); err != nil {

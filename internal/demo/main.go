@@ -256,7 +256,7 @@ func (d *demo) walk(execute bool) error {
 	if err := d.cli(0, &c, "capture"); err != nil {
 		return err
 	}
-	if err := d.cli(0, nil, "inspect", string(c.Candidate.ID), "--base", string(c.Base.ID)); err != nil {
+	if err := d.cli(0, nil, "inspect", string(c.Base.ID), string(c.Candidate.ID)); err != nil {
 		return err
 	}
 	report, err := os.ReadFile("internal/gotestreport/testdata/tests.jsonl")
@@ -306,7 +306,7 @@ func (d *demo) walk(execute bool) error {
 		return err
 	}
 	var reopened review.View
-	if err = d.cli(0, &reopened, "review", string(pinned.Pin.ID), "--select", string(c.Candidate.ID), "--mode", "original_base", "--reason", "demo repair changes captured basis"); err != nil {
+	if err = d.cli(0, &reopened, "pin", string(pinned.Pin.ID), "--select", string(c.Candidate.ID), "--mode", "original_base", "--reason", "demo repair changes captured basis"); err != nil {
 		return err
 	}
 	if !reopened.MissingCurrentResult || reopened.CurrentReceipt != nil || reopened.Applicability != evidence.Stale {
@@ -321,7 +321,7 @@ func (d *demo) walk(execute bool) error {
 		return err
 	}
 	var attached review.View
-	if err = d.cli(0, &attached, "review", string(reopened.Pin.ID), "--receipt", string(second.Receipt.ID), "--reason", "attach real authorized rerun; not acceptance"); err != nil {
+	if err = d.cli(0, &attached, "pin", string(reopened.Pin.ID), "--attach", string(second.Receipt.ID), "--reason", "attach real authorized rerun; not acceptance"); err != nil {
 		return err
 	}
 	if attached.MissingCurrentResult || attached.Applicability != evidence.Current {

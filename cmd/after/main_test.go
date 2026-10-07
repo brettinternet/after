@@ -60,10 +60,10 @@ func TestNativeCLI(t *testing.T) {
 		args       []string
 		code       int
 	}{
-		{"help", "COMMANDS:", []string{"--help"}, 0},
+		{"help", "Everyday", []string{"--help"}, 0},
 		{"version", "0.1.0-dev", []string{"--version"}, 0},
 		{"version-command", "after 0.1.0-dev", []string{"version"}, 0},
-		{"invalid-arguments", "invalid input", []string{"capture", "unexpected"}, 2},
+		{"invalid-arguments", "unexpected arguments", []string{"capture", "unexpected"}, 2},
 		{"unknown-command", "unknown command", []string{"untrusted\x1b]52;c;clipboard\a"}, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestCLIWorkflowSubprocess(t *testing.T) {
 		t.Fatalf("invalid capture response: %q %v", captureOut, err)
 	}
 	inspectCode, inspectOut, inspectErr := native(exe, root, home, []string{
-		"inspect", captured.Data.Candidate.ID, "--base", captured.Data.Base.ID, "--project", project, "--config", configPath,
+		"inspect", captured.Data.Base.ID, captured.Data.Candidate.ID, "--project", project, "--config", configPath,
 	}, nil)
 	if inspectCode != 0 || inspectErr != "" || !strings.Contains(inspectOut, `"path":"app/main.go"`) || !strings.Contains(inspectOut, `"base64":`) {
 		t.Fatalf("raw diff inspection failed: %d %q %q", inspectCode, inspectErr, inspectOut)

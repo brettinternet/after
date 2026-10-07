@@ -277,7 +277,7 @@ result is also logged in Activity.
 | Otherwise                                        | blank                                                                          |
 
 Until AFTER-30 adds `a`, the accept rule says
-`Current result attached — accept it with after review --accept`.
+`Current result attached — accept it with after pin PIN --accept`.
 
 ## Detail
 
@@ -627,7 +627,7 @@ after review 784eb013        # open stored records, or a BASE CANDIDATE pair, wi
   happens at the next `u`.
 
 **Key change:** `a` moves from "accept snapshot" to "accept pin", matching
-`review --accept` and the `accepted` decision. AFTER-23 moves snapshot switching
+`pin --accept` and the `accepted` decision. AFTER-23 moves snapshot switching
 to `u`.
 
 ## Key map

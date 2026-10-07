@@ -48,12 +48,16 @@ Immutable records and atomic writes should survive crashes. One writer per revie
 
 ## CLI and TUI behavior contract
 
-The implemented headless command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, `inspect`, `compare`, `export`, `run`, `config`, and [headless pin/review actions](REVIEW.md); the [TUI browser](TUI.md) now supports stored evidence, raw inventory/source and explicit background capture/import. The TUI also supports finite-count pins, deliberate snapshot acceptance/reopening, and exact-plan consented reruns.
+The implemented command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, positional-pair `inspect`, `compare`, `export`, `run`, `config`, [pin inspection and decisions](REVIEW.md), and `review BASE CANDIDATE`; the [TUI browser](TUI.md) supports stored evidence, raw inventory/source and explicit background capture/import. The TUI also supports finite-count pins, deliberate snapshot acceptance/reopening, and exact-plan consented reruns.
 
 ```text
-after capture [--staged | --base REF --target REF]
+after capture [--staged | --base REF [--target REF]]
 after import <go-test-json-file> --producer <caller-provenance> [--snapshot <id>]
-after inspect <snapshot-or-record-id> [--base <snapshot-id>]
+after inspect <record-id>
+after inspect <base-snapshot-id> <candidate-snapshot-id>
+after review <base-snapshot-id> <candidate-snapshot-id> [evidence-ids ...]
+after pin <receipt-id> --expectation TEXT [--scope finite_example|human_intent]
+after pin <pin-id> [--accept | --attach RECEIPT | --select SNAPSHOT]
 after compare <receipt-id>
 after export <comparison-id>
 after run <base-id> <candidate-id> --plan-out <private-file>

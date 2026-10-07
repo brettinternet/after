@@ -23,7 +23,7 @@ as a smoke test.
 | [03-moved-oracle](cli/03-moved-oracle.sh)                | Discount changes and its test is edited to agree; the suite stays green     | `import` of `go test -json`, potential-oracle flag, a frozen-oracle run that fails |
 | [04-config](cli/04-config.sh)                            | Team YAML defaults overridden by environment and flags                      | `config` provenance, fail-fast validation, no consent setting                      |
 | [05-payment-experiment](cli/05-payment-experiment.sh) 🐳 | Four payment-service changes, run before and after in the offline sandbox   | `run` preview/approve, provider-request counts, `compare` witnesses, exit codes    |
-| [06-pin-reopen-rerun](cli/06-pin-reopen-rerun.sh) 🐳     | Reviewer pins "one charge per retry"; the fix reopens it; rerun; accept     | `pin`, `review --select/--receipt/--accept`, immutable revision history            |
+| [06-pin-reopen-rerun](cli/06-pin-reopen-rerun.sh) 🐳     | Reviewer pins "one charge per retry"; the fix reopens it; rerun; accept     | `pin --select/--attach/--accept`, immutable revision history                       |
 
 `05-payment-experiment.sh` takes a variant. Each runs the same frozen requests:
 `POST /payments`, then a retry with the same `Idempotency-Key` after 12 hours and after 30 seconds.
@@ -41,7 +41,7 @@ provider received and ignores what the app reports about itself.
 
 ## TUI
 
-Each script prepares state, prints a short key guide, then opens `after review --tui`
+Each script prepares state, prints a short key guide, then opens `after review BASE CANDIDATE`
 after you press Enter. Set `AFTER_EXAMPLES_PREPARE_ONLY=1` to prepare without opening.
 Use `1`/`2`/`3` or Tab/Shift+Tab for Overview/Changes/Diff; the frame identifies
 the project and snapshot sources. After an external edit, `c` captures and `u`

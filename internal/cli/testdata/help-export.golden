@@ -1,0 +1,23 @@
+Export a bounded machine-readable comparison or evidence page as JSON.
+
+Usage
+  after export ID
+  after export BASE CANDIDATE
+
+Options
+  --raw-diff               include a bounded captured patch (default: true)
+  --diff-bytes N           maximum raw patch bytes (default: 65536)
+  --diff-offset N          raw diff byte offset (default: 0)
+  --diff-size N            raw diff page bytes (default: 65536)
+  --inventory-offset N     first changed/unknown inventory entry (default: 0)
+  --inventory-limit N      entries to return (default: 128; range: 1–256)
+  --card-offset N          first report card (default: 0)
+  --card-limit N           report cards to return (default: 128; range: 1–256)
+  --artifact-offset N      stored artifact byte offset (default: 0)
+  --artifact-size N        stored artifact page bytes (default: 65536)
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

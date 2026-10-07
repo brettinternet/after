@@ -29,18 +29,13 @@ func validateIDInputs(ctx *ucli.Context) error {
 	switch ctx.Command.Name {
 	case "import":
 		flags = []string{"snapshot"}
-	case "inspect", "export":
-		flags = []string{"base"}
-	case "review":
-		flags = []string{"base", "select", "receipt"}
+	case "pin":
+		flags = []string{"select", "attach"}
 	}
 	for _, flag := range flags {
 		if ctx.IsSet(flag) {
 			values = append(values, ctx.String(flag))
 		}
-	}
-	if ctx.Command.Name == "review" {
-		values = append(values, ctx.StringSlice("evidence")...)
 	}
 	for _, value := range values {
 		if _, err := idPrefix(value); err != nil {
@@ -129,7 +124,22 @@ func noIDMatch(value string, kinds ...string) error {
 	if err != nil {
 		return err
 	}
-	return &exitError{code: ExitInvalid, diagnostic: fmt.Sprintf("after: no %s matches %s — after log lists recent records", strings.Join(kinds, " or "), prefix)}
+	fix := "verify the ID or create a matching record with an available command"
+	if len(kinds) == 1 {
+		switch kinds[0] {
+		case "snapshot":
+			fix = "use after capture to create a snapshot"
+		case "receipt":
+			fix = "use after run BASE CANDIDATE to create a receipt"
+		case "pin":
+			fix = "use after pin RECEIPT --expectation TEXT to create a pin"
+		case "comparison":
+			fix = "use after compare RECEIPT to create a comparison"
+		case "report":
+			fix = "use after import FILE --producer TEXT to import a report"
+		}
+	}
+	return &exitError{code: ExitInvalid, diagnostic: formatDiagnostic(fmt.Sprintf("no %s matches %s", strings.Join(kinds, " or "), prefix), fix)}
 }
 
 func resolveBrowserSelection(project, base, candidate string, ids []string) (browser.Selection, error) {

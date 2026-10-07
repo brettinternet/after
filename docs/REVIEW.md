@@ -1,7 +1,8 @@
 # Persistent expectations and conservative reopening
 
-`internal/review` and the headless `pin`/`review` commands separate human intent,
-immutable receipts, applicability, and explicit snapshot selection. They never
+`internal/review` and the `pin` command separate human intent, immutable
+receipts, applicability, and explicit snapshot selection. `review BASE CANDIDATE`
+opens the terminal browser. They never
 execute project code. The [runner](RUNNER.md) remains the only execution path,
 with its exact-plan authorization and offline isolation unchanged.
 
@@ -10,8 +11,8 @@ with its exact-plan authorization and offline isolation unchanged.
 ```sh
 ./bin/after pin RECEIPT_ID --project /work/payment \
   --expectation "Twelve-hour retries must not duplicate provider calls" \
-  --scope finite_example --reason "Preserve this concrete case"
-./bin/after review PIN_REVISION_ID --project /work/payment
+  --reason "Preserve this concrete case"
+./bin/after pin PIN_REVISION_ID --project /work/payment
 ```
 
 Every mutation returns a new immutable `data.pin.id`. Use that ID for the next
@@ -29,8 +30,9 @@ All CLI record IDs also accept [unique prefixes](CLI.md#short-ids-and-pin-heads)
 The first event binds the original scenario, receipt and snapshot pair. Neither
 later selection nor rerun can change the expectation or that original basis.
 
-`finite_example` requires a complete observed runner receipt. `human_intent`
-records a broader requirement and may start from an incomplete runner receipt.
+`--scope` defaults to `finite_example`, which requires a complete observed runner
+receipt; the error suggests `--scope human_intent` when that receipt is incomplete.
+`human_intent` records a broader requirement and may start from an incomplete runner receipt.
 Neither scope makes the prose an executable assertion or proves a universal
 property. Inspect the receipt's artifact IDs for actual outputs/effects and use
 `compare RECEIPT_ID` for deterministic witnesses. A human decision does not alter
@@ -40,7 +42,7 @@ test. Imported test names/statuses cannot serve as a bound runner basis.
 ## Select, rerun, then decide
 
 ```sh
-./bin/after review PIN_REVISION_ID --project /work/payment \
+./bin/after pin PIN_REVISION_ID --project /work/payment \
   --select NEW_CANDIDATE_ID --mode original_base --reason "Inspect new capture"
 # Use the returned revision ID, and the target snapshot pair from its last event.
 ./bin/after run BASE_ID NEW_CANDIDATE_ID --project /work/payment \
@@ -48,14 +50,15 @@ test. Imported test names/statuses cannot serve as a bound runner basis.
 # Read the preview, then explicitly authorize its exact digest:
 ./bin/after run --project /work/payment \
   --plan-file /work/payment/.after/rerun-preview.json --approve sha256:...
-./bin/after review REOPENED_REVISION_ID --project /work/payment \
-  --receipt NEW_RECEIPT_ID --reason "Attach authorized rerun"
-./bin/after review ATTACHED_REVISION_ID --project /work/payment \
+./bin/after pin REOPENED_REVISION_ID --project /work/payment \
+  --attach NEW_RECEIPT_ID --reason "Attach authorized rerun"
+./bin/after pin ATTACHED_REVISION_ID --project /work/payment \
   --accept --reason "Explicitly reviewed this finite result"
 ```
 
-Only one action is allowed per `review` command. Every mutation requires an
-explicit reason. Selection accepts a captured snapshot for inspection, **not its
+Only one action is allowed per `pin` command. `--mode` defaults to
+`original_base`; `--reason` is optional, and its command-line default is recorded
+verbatim in history. Selection accepts a captured snapshot for inspection, **not its
 behavior**. Changed selections reopen the pin, clear the current receipt and
 return `missing_current_result: true`; no predicted before/after values appear.
 Old receipts remain in history at their original IDs. An authorized rerun creates

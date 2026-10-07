@@ -1,0 +1,13 @@
+Compare a persisted execution receipt without running project code.
+
+Usage
+  after compare RECEIPT
+
+Options
+  No command-specific options.
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

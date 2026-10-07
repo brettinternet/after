@@ -89,7 +89,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 		noColor       bool
 	}{{"80x24", 80, 24, false}, {"80x24-NO_COLOR", 80, 24, true}, {"120x40", 120, 40, false}, {"120x40-NO_COLOR", 120, 40, true}} {
 		t.Run(tc.name, func(t *testing.T) {
-			args := []string{"review", captureResult.Data.Candidate.ID, "--tui", "--base", captureResult.Data.Base.ID, "--project", project, "--evidence", imported.Data.ID}
+			args := []string{"review", captureResult.Data.Base.ID, captureResult.Data.Candidate.ID, imported.Data.ID, "--project", project}
 			encoded, _ := json.Marshal(args)
 			cmd := exec.Command(exe, "-test.run=^TestNativeCLI$")
 			cmd.Dir = root
@@ -256,7 +256,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	if !input || observations != 8 {
 		t.Fatal("missing frozen input/repetitions", input, observations)
 	}
-	args := []string{"review", string(r.Snapshots.Candidate), "--tui", "--base", string(r.Snapshots.Base), "--evidence", string(c.ID), "--project", project, "--config", config}
+	args := []string{"review", string(r.Snapshots.Base), string(r.Snapshots.Candidate), string(c.ID), "--project", project, "--config", config}
 	encoded, _ := json.Marshal(args)
 	cmd := exec.CommandContext(t.Context(), exe, "-test.run=^TestNativeCLI$")
 	cmd.Dir = root

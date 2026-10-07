@@ -1,0 +1,24 @@
+Create or inspect a pin, or record one explicit decision. Pin actions never
+execute project code.
+
+Usage
+  after pin RECEIPT --expectation TEXT [--scope SCOPE] [--reason TEXT]
+  after pin PIN
+  after pin PIN --accept [--reason TEXT]
+  after pin PIN --attach RECEIPT [--reason TEXT]
+  after pin PIN --select SNAPSHOT [--mode MODE] [--reason TEXT]
+
+Options
+  --expectation TEXT   human expectation to pin (maximum 4096 bytes)
+  --scope SCOPE        finite_example or human_intent (default: finite_example)
+  --accept             accept the currently reviewed complete result
+  --attach RECEIPT     attach an authorized receipt without accepting it
+  --select SNAPSHOT    select a captured candidate snapshot
+  --mode MODE          original_base or last_inspected (default: original_base)
+  --reason TEXT        verbatim reason stored in pin history (optional)
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

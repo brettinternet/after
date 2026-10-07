@@ -182,7 +182,7 @@ func (d *demo) studyCase(c studyCase, execute bool) error {
 		return err
 	}
 	var reopened review.View
-	if err = d.cli(0, &reopened, "review", string(pinned.Pin.ID), "--select", string(key.Followup.Capture.Candidate.ID), "--mode", "original_base", "--reason", "controlled study follow-up"); err != nil {
+	if err = d.cli(0, &reopened, "pin", string(pinned.Pin.ID), "--select", string(key.Followup.Capture.Candidate.ID), "--mode", "original_base", "--reason", "controlled study follow-up"); err != nil {
 		return err
 	}
 	if !reopened.MissingCurrentResult || reopened.CurrentReceipt != nil || reopened.Applicability != evidence.Stale {

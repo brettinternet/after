@@ -61,7 +61,7 @@ capture_ids() {
 
 # inventory BASE CANDIDATE: print one line per changed path.
 inventory() {
-	after 0 inspect "$2" --base "$1" | jq -r '.data.inventory[] |
+	after 0 inspect "$1" "$2" | jq -r '.data.inventory[] |
 		"   \(.change | .[0:9] | . + " " * (9 - length)) \(.path)" +
 		(if .potential_oracle then "  [potential oracle]" else "" end) +
 		(if .binary then "  [binary]" else "" end) +
@@ -70,7 +70,7 @@ inventory() {
 }
 
 # patch BASE CANDIDATE: print the captured raw diff.
-patch() { after 0 inspect "$2" --base "$1" | jq -r .data.diff.base64 | base64 --decode >&2; }
+patch() { after 0 inspect "$1" "$2" | jq -r .data.diff.base64 | base64 --decode >&2; }
 
 # cards IMPORT_JSON: print imported report cards with their evidence state.
 cards() {
@@ -82,11 +82,11 @@ cards() {
 # AFTER_EXAMPLES_PREPARE_ONLY=1 to stop after preparing state (smoke tests).
 open_tui() {
 	printf '\nReopen later with:\n ' >&2
-	printf ' %q' "$AFTER_BIN" review --tui "$@" --project "$PROJECT" >&2
+	printf ' %q' "$AFTER_BIN" review "$@" --project "$PROJECT" >&2
 	echo >&2
 	[[ -z ${AFTER_EXAMPLES_PREPARE_ONLY:-} ]] || return 0
 	read -r -p "   Press Enter to open the TUI (q quits, ? shows keys)..." </dev/tty
-	exec "$AFTER_BIN" review --tui "$@"
+	exec "$AFTER_BIN" review "$@"
 }
 
 # payment_project: seed the synthetic payment app (24h idempotency retention).

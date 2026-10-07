@@ -18,11 +18,11 @@ diff_bytes: 0 # inventory only, no patch bytes (zero is a value, not "unset")
 EOF
 after 0 config | settings
 
-section "Environment overrides YAML; a flag overrides both"
+section "Environment overrides YAML; run options stay on the run command"
 note "AFTER_REPETITIONS=2 AFTER_INTERACTIVE=false"
 AFTER_REPETITIONS=2 AFTER_INTERACTIVE=false after 0 config | settings
-note "AFTER_REPETITIONS=2"
-AFTER_REPETITIONS=2 after 0 config --repetitions 5 | settings
+note "after run --help shows its command-scoped run options and configuration defaults"
+after 0 run --help | sed -n '/--repetitions/ p; /--run-seconds/ p; /--output-bytes/ p' >&2
 
 section "Invalid values fail fast with the setting and its source (exit 2)"
 note "AFTER_REPETITIONS=9"

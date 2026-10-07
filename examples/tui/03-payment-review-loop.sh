@@ -35,4 +35,4 @@ Try in the TUI:
      the 30s control is unchanged. Accepting or rejecting it remains your decision.
   7. s shows snapshot/pin/result IDs for restarting later; q quits.
 EOF
-open_tui "$CANDIDATE" --base "$BASE" --evidence "$(jq -r .data.comparison.id <<<"$result")"
+open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.comparison.id <<<"$result")"

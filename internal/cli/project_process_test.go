@@ -113,7 +113,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	}{
 		{"capture", captureArgs, ExitOK},
 		{"import", []string{"import", report, "--producer", "fixture", "--snapshot", candidateID}, ExitOK},
-		{"inspect-pair", []string{"inspect", candidateID, "--base", baseID}, ExitOK},
+		{"inspect-pair", []string{"inspect", baseID, candidateID}, ExitOK},
 		{"inspect-snapshot", []string{"inspect", candidateID}, ExitOK},
 		{"inspect-receipt", []string{"inspect", string(receiptID)}, ExitOK},
 		{"inspect-comparison", []string{"inspect", string(compared.Data.Comparison.ID)}, ExitOperational},
@@ -123,9 +123,9 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"export", []string{"export", string(compared.Data.Comparison.ID)}, ExitOperational},
 		{"run", []string{"run", baseID, candidateID, "--interactive=false"}, ExitDenied},
 		{"pin", []string{"pin", string(receiptID), "--expectation", "finite synthetic review", "--scope", "human_intent", "--reason", "process-mode fixture"}, ExitOK},
-		{"review", []string{"review", string(pinned.Data.Pin.ID)}, ExitOK},
-		{"review-select", []string{"review", string(pinned.Data.Pin.ID), "--select", candidateID, "--mode", "original_base", "--reason", "prefix selection"}, ExitOK},
-		{"review-receipt", []string{"review", string(pinned.Data.Pin.ID), "--receipt", string(receiptID), "--reason", "prefix attachment"}, ExitOK},
+		{"pin-inspect", []string{"pin", string(pinned.Data.Pin.ID)}, ExitOK},
+		{"pin-select", []string{"pin", string(pinned.Data.Pin.ID), "--select", candidateID, "--mode", "original_base", "--reason", "prefix selection"}, ExitOK},
+		{"pin-attach", []string{"pin", string(pinned.Data.Pin.ID), "--attach", string(receiptID), "--reason", "prefix attachment"}, ExitOK},
 		{"run-short-approval", []string{"run", "--plan-file", "not-read", "--approve", "abcd"}, ExitInvalid},
 		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitInvalid},
 		{"config", []string{"config"}, ExitOK},
@@ -180,6 +180,12 @@ func TestProjectCommandProcessModes(t *testing.T) {
 			}
 		}
 	}
+	for _, noColor := range []bool{false, true} {
+		code, stdout, stderr, err := runCLIPipe(nested, home, noColor, []string{"review", baseID, candidateID})
+		if err != nil || code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "after: review requires a terminal") || strings.ContainsAny(stderr, "\x1b\a") {
+			t.Errorf("review without a terminal (NO_COLOR=%v): exit=%d stdout=%q stderr=%q err=%v", noColor, code, stdout, stderr, err)
+		}
+	}
 
 	outside := t.TempDir()
 	for _, command := range []struct {
@@ -187,7 +193,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"help", []string{"help"}, "COMMANDS:"},
+		{"help", []string{"help"}, "Everyday"},
 		{"version", []string{"version"}, Version},
 		{"config", []string{"config"}, "configuration"},
 	} {
@@ -203,6 +209,30 @@ func TestProjectCommandProcessModes(t *testing.T) {
 				}
 				if err != nil || code != ExitOK || stderr != "" || !strings.Contains(stdout, command.want) {
 					t.Errorf("%s outside Git via %s (NO_COLOR=%v): exit=%d stdout=%q stderr=%q err=%v", command.name, mode, noColor, code, stdout, stderr, err)
+				}
+			}
+		}
+	}
+	for _, name := range helpNames() {
+		args := []string{name, "--help"}
+		if name == "" {
+			args = []string{"--help"}
+		}
+		for _, noColor := range []bool{false, true} {
+			for _, mode := range []string{"pipe", "pty"} {
+				var code int
+				var stdout, stderr string
+				var err error
+				if mode == "pty" {
+					code, stdout, stderr, err = runCLIPTY(outside, home, noColor, args)
+				} else {
+					code, stdout, stderr, err = runCLIPipe(outside, home, noColor, args)
+				}
+				if err != nil || code != ExitOK || stderr != "" || strings.ReplaceAll(stdout, "\r", "") != commandHelp(name) {
+					t.Errorf("%s help via %s (NO_COLOR=%v): exit=%d stdout=%q stderr=%q err=%v", name, mode, noColor, code, stdout, stderr, err)
+				}
+				if name == "run" && mode == "pty" && noColor {
+					t.Logf("80-column PTY run help excerpt (NO_COLOR): %s", trimExcerpt(stdout))
 				}
 			}
 		}

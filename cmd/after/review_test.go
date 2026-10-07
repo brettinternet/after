@@ -33,18 +33,18 @@ func paymentReviewProof(t *testing.T, exe, root, home, project, configPath strin
 	if p.Applicability != evidence.Current || p.Pin.Decision != evidence.Pinned || p.CurrentReceipt.ID != r.ID {
 		t.Fatalf("pin %+v", p)
 	}
-	accepted := command("review", string(p.Pin.ID), "--accept", "--reason", "operator reviewed this finite example")
-	selected := command("review", string(accepted.Pin.ID), "--select", string(r.Snapshots.Base), "--mode", "original_base", "--reason", "inspect captured original implementation again")
+	accepted := command("pin", string(p.Pin.ID), "--accept", "--reason", "operator reviewed this finite example")
+	selected := command("pin", string(accepted.Pin.ID), "--select", string(r.Snapshots.Base), "--mode", "original_base", "--reason", "inspect captured original implementation again")
 	if selected.Pin.Decision != evidence.Reopened || selected.Applicability != evidence.Stale || !selected.MissingCurrentResult || selected.CurrentReceipt != nil || selected.Pin.Expectation != p.Pin.Expectation {
 		t.Fatalf("selection predicted values %+v", selected)
 	}
-	restarted := command("review", string(selected.Pin.ID))
+	restarted := command("pin", string(selected.Pin.ID))
 	if restarted.Pin.ID != selected.Pin.ID || len(restarted.Pin.History) != 3 || !restarted.MissingCurrentResult {
 		t.Fatal("restart lost history")
 	}
 	for _, args := range [][]string{
-		{"review", string(selected.Pin.ID), "--receipt", string(r.ID), "--reason", "late prior result"},
-		{"review", string(selected.Pin.ID), "--accept", "--reason", "cannot accept missing result"},
+		{"pin", string(selected.Pin.ID), "--attach", string(r.ID), "--reason", "late prior result"},
+		{"pin", string(selected.Pin.ID), "--accept", "--reason", "cannot accept missing result"},
 	} {
 		code, _, _ := native(exe, root, home, append(args, "--project", project, "--config", configPath), nil)
 		if code != 2 {
@@ -81,19 +81,19 @@ func paymentReviewProof(t *testing.T, exe, root, home, project, configPath strin
 	if result.Data.Receipt.ID == r.ID || result.Data.Receipt.State.Kind != evidence.Observed {
 		t.Fatal("no new observed receipt")
 	}
-	attached := command("review", string(selected.Pin.ID), "--receipt", string(result.Data.Receipt.ID), "--reason", "attach authorized rerun")
+	attached := command("pin", string(selected.Pin.ID), "--attach", string(result.Data.Receipt.ID), "--reason", "attach authorized rerun")
 	if attached.Pin.Decision != evidence.Reopened || attached.Applicability != evidence.Current || attached.MissingCurrentResult || attached.Pin.BasisReceipt != r.ID {
 		t.Fatalf("rerun silently accepted %+v", attached)
 	}
-	final := command("review", string(attached.Pin.ID), "--accept", "--reason", "operator explicitly re-reviewed")
+	final := command("pin", string(attached.Pin.ID), "--accept", "--reason", "operator explicitly re-reviewed")
 	if final.Pin.Decision != evidence.Accepted || len(final.Pin.History) != 5 {
 		t.Fatal("acceptance/history missing")
 	}
-	original := command("review", string(p.Pin.ID))
+	original := command("pin", string(p.Pin.ID))
 	if original.CurrentReceipt.ID != r.ID || original.Pin.Expectation != final.Pin.Expectation {
 		t.Fatal("rewrote original basis")
 	}
-	follow := command("review", string(final.Pin.ID), "--select", string(r.Snapshots.Candidate), "--mode", "last_inspected", "--reason", "explicit follow-up")
+	follow := command("pin", string(final.Pin.ID), "--select", string(r.Snapshots.Candidate), "--mode", "last_inspected", "--reason", "explicit follow-up")
 	c := follow.Pin.History[len(follow.Pin.History)-1].Review
 	if c.Mode != evidence.FollowUp || c.Target.Snapshots.Base != r.Snapshots.Base || follow.CurrentReceipt != nil || !strings.Contains(follow.Reason, "no attached current result") {
 		t.Fatalf("follow-up %+v", follow)

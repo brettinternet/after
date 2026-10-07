@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/brettinternet/after/internal/compare"
+	"github.com/brettinternet/after/internal/config"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/review"
@@ -229,6 +230,76 @@ func TestReadableOutputGoldens(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCommandHelpGoldens(t *testing.T) {
+	for _, name := range helpNames() {
+		t.Run(map[bool]string{true: "top-level", false: name}[name == ""], func(t *testing.T) {
+			got := commandHelp(name)
+			file := "help-" + name + ".golden"
+			if name == "" {
+				file = "help.golden"
+			}
+			path := filepath.Join("testdata", file)
+			if *updateReadable {
+				if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("missing golden %s; regenerate explicitly with -update\\n%s", path, got)
+			}
+			if string(want) != got {
+				t.Fatalf("help differs from %s; regenerate explicitly with -update\\n%s", path, got)
+			}
+			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+				if width := uniseg.StringWidth(line); width > 80 {
+					t.Errorf("help exceeds 80 columns (%d): %q", width, line)
+				}
+			}
+		})
+	}
+}
+
+func TestHelpMatchesAvailableFlagsAndConfigurationDefaults(t *testing.T) {
+	for _, command := range commands(&invocation{}) {
+		if command.Name == "version" {
+			continue
+		}
+		text := commandHelp(command.Name)
+		for _, flag := range command.Flags {
+			for _, name := range flag.Names() {
+				if !strings.Contains(text, "--"+name) {
+					t.Errorf("%s flag --%s is missing from help", command.Name, name)
+				}
+			}
+		}
+		if strings.Count(text, "Global\n") != 1 {
+			t.Errorf("%s help must have one global options group", command.Name)
+		}
+		if command.Name != "run" && (strings.Contains(text, "--docker-") || strings.Contains(text, "--repetitions") || strings.Contains(text, "--run-seconds") || strings.Contains(text, "--output-bytes") || strings.Contains(text, "--interactive")) {
+			t.Errorf("%s help advertises run-only configuration", command.Name)
+		}
+	}
+	defaults := config.Defaults()
+	runHelp := commandHelp("run")
+	for _, value := range []any{defaults.Repetitions, defaults.RunSeconds, defaults.OutputBytes, defaults.Interactive} {
+		if !strings.Contains(runHelp, "default: "+fmt.Sprint(value)) {
+			t.Errorf("run help does not use configuration default %v", value)
+		}
+	}
+	for _, name := range []string{"inspect", "export"} {
+		text := commandHelp(name)
+		for _, value := range []any{defaults.RawDiff, defaults.DiffBytes} {
+			if !strings.Contains(text, "default: "+fmt.Sprint(value)) {
+				t.Errorf("%s help does not use configuration default %v", name, value)
+			}
+		}
+	}
+	if text := topLevelHelp(); strings.Count(text, "Global options:") != 1 || strings.Contains(text, "after status") || strings.Contains(text, "after log") || strings.Contains(text, "after diff") || strings.Contains(text, "after completion") {
+		t.Fatalf("top-level help advertises unavailable commands or repeats globals: %q", text)
 	}
 }
 

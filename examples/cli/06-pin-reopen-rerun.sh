@@ -26,7 +26,7 @@ section "3. Author fixes retention; the new capture reopens the pin"
 set_config "24 * 60 * 60" true 1
 echo "// Retention must outlive the 24h client retry window." >>app/config.go
 capture_ids "$(after 0 capture)"
-view=$(after 0 review "$(jq -r .data.pin.id <<<"$view")" --select "$CANDIDATE" \
+view=$(after 0 pin "$(jq -r .data.pin.id <<<"$view")" --select "$CANDIDATE" \
 	--mode original_base --reason "Review the retention fix")
 state "$view"
 note "Stale and missing: AFTER does not predict the fix's behavior from old receipts."
@@ -37,13 +37,13 @@ second=$(run_pair "$original_base" "$CANDIDATE" 0)
 provider_counts "$second"
 
 section "5. Attach the new receipt (still not accepted), then accept explicitly"
-view=$(after 0 review "$(jq -r .data.pin.id <<<"$view")" \
-	--receipt "$(jq -r .data.receipt.id <<<"$second")" --reason "Attach authorized rerun")
+view=$(after 0 pin "$(jq -r .data.pin.id <<<"$view")" \
+	--attach "$(jq -r .data.receipt.id <<<"$second")" --reason "Attach authorized rerun")
 state "$view"
-view=$(after 0 review "$(jq -r .data.pin.id <<<"$view")" --accept \
+view=$(after 0 pin "$(jq -r .data.pin.id <<<"$view")" --accept \
 	--reason "12h retry now makes one charge; 30s control unchanged")
 state "$view"
 
 section "History is append-only: every decision and its reason"
 jq -r '.data.pin.history[] | "   \(.decision | . + " " * (9 - length)) \(.review.action // "pin" | . + " " * (8 - length)) \(.reason)"' <<<"$view" >&2
-note "Reopen any revision read-only: after review <revision-id> --project $PROJECT"
+note "Inspect any pin revision read-only: after pin <revision-id> --project $PROJECT"

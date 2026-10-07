@@ -105,7 +105,7 @@ func TestBrowserPTY(t *testing.T) {
 	var stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
-		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Candidate.ID[7:19]), "--tui", "--base", strings.ToUpper(captured.Data.Base.ID[7:19]), "--evidence", strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, slave, &stderr, slave, true)
+		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, slave, &stderr, slave, true)
 	}()
 	expect("[REPORTED]")
 	if !strings.Contains(transcript.String(), "1 Overview") {

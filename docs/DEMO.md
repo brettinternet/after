@@ -62,7 +62,7 @@ no caller project, ignored files, credentials or production services are used.
 
 Each native CLI response is written to `step-NN.json` outside the fixture project.
 Use the capture step's base/candidate IDs with `after inspect` or
-`after review --tui CANDIDATE --base BASE --project PRINTED_WORKSPACE/payment`.
+`after review BASE CANDIDATE --project PRINTED_WORKSPACE/payment`.
 The no-Docker route has no observed receipt to pin as a finite example. In the
 TUI, `1`/`2`/`3` and Tab/Shift+Tab switch Overview, Changes, and Diff; the frame
 shows short snapshot IDs and sources. After an external edit, `c` captures in the

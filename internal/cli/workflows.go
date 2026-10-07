@@ -16,6 +16,7 @@ import (
 
 	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
+	"github.com/brettinternet/after/internal/config"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/rawdiff"
@@ -36,7 +37,7 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "capture", Usage: "capture a bounded local Git comparison without running project code",
 			Before:    outputBefore(state),
-			ArgsUsage: "[--staged | --base BASE --target TARGET]", Flags: append(commonFlags(),
+			ArgsUsage: "[--staged | --base REF [--target REF]]", Flags: append(globalFlags(),
 				&ucli.BoolFlag{Name: "staged", Usage: "capture HEAD versus the index"},
 				&ucli.StringFlag{Name: "base", Usage: "base commit for explicit merge-base capture"},
 				&ucli.StringFlag{Name: "target", Usage: "target commit for explicit merge-base capture"},
@@ -46,7 +47,7 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "import", Usage: "import bounded stock go test -json as reported evidence",
 			Before:    outputBefore(state),
-			ArgsUsage: "<go-test-json-file>", Flags: append(commonFlags(),
+			ArgsUsage: "<go-test-json-file>", Flags: append(globalFlags(),
 				&ucli.StringFlag{Name: "producer", Usage: "required caller-supplied producer/version provenance"},
 				&ucli.StringFlag{Name: "captured-at", Usage: "optional caller-supplied RFC3339 capture time"},
 				&ucli.StringFlag{Name: "snapshot", Usage: "bind the report to a validated snapshot ID (not proof of applicability)"},
@@ -57,26 +58,26 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "inspect", Usage: "inspect a snapshot, receipt, comparison, report, or artifact by stable ID",
 			Before:    outputBefore(state),
-			ArgsUsage: "<stable-id>", Flags: append(commonFlags(), inspectionFlags()...),
+			ArgsUsage: "<stable-id> OR <base-snapshot-id> <candidate-snapshot-id>", Flags: append(globalFlags(), inspectionFlags()...),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, false) },
 		},
 		{
 			Name: "compare", Usage: "compare a persisted execution receipt without running code",
 			Before:    outputBefore(state),
-			ArgsUsage: "<receipt-id>", Flags: commonFlags(),
+			ArgsUsage: "<receipt-id>", Flags: globalFlags(),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return compareCommand(state, ctx) },
 		},
 		{
 			Name: "export", Usage: "export a bounded machine-readable comparison or evidence page",
 			Before:    outputBefore(state),
-			ArgsUsage: "<stable-id>", Flags: append(commonFlags(), inspectionFlags()...),
+			ArgsUsage: "<stable-id> OR <base-snapshot-id> <candidate-snapshot-id>", Flags: append(globalFlags(), inspectionFlags()...),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, true) },
 		},
 		{
 			Name: "run", Usage: "preview, explicitly authorize, and compare the frozen offline payment experiment",
 			Before:    outputBefore(state),
 			ArgsUsage: "<base-snapshot-id> <candidate-snapshot-id> (or --plan-file FILE --approve DIGEST)",
-			Flags: append(commonFlags(),
+			Flags: append(runFlags(),
 				&ucli.StringFlag{Name: "plan-file", Usage: "reconstruct an exact previously saved execution preview"},
 				&ucli.StringFlag{Name: "plan-out", Usage: "create a private file containing the exact preview for later approval"},
 				&ucli.StringFlag{Name: "approve", Usage: "approve only this exact preview digest; never a blanket consent"},
@@ -85,7 +86,7 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "config", Usage: "show effective configuration and per-setting provenance without execution",
 			Before: outputBefore(state),
-			Flags:  commonFlags(), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return configCommand(state, ctx) },
+			Flags:  globalFlags(), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return configCommand(state, ctx) },
 		},
 		{
 			Name: "version", Usage: "print the AFTER version",
@@ -103,8 +104,10 @@ func commands(state *invocation) []*ucli.Command {
 }
 
 func inspectionFlags() []ucli.Flag {
+	defaults := config.Defaults()
 	return []ucli.Flag{
-		&ucli.StringFlag{Name: "base", Usage: "matching base snapshot ID for raw diff and complete inventory"},
+		&ucli.BoolFlag{Name: "raw-diff", Value: defaults.RawDiff, Usage: "include a bounded captured patch"},
+		&ucli.IntFlag{Name: "diff-bytes", Value: defaults.DiffBytes, Usage: "maximum raw patch bytes (0-65536)"},
 		&ucli.IntFlag{Name: "diff-offset", Usage: "raw diff byte offset (default 0)"},
 		&ucli.IntFlag{Name: "diff-size", Usage: "raw diff page bytes (1-65536; default 65536)"},
 		&ucli.IntFlag{Name: "inventory-offset", Usage: "first changed/unknown inventory entry (default 0)"},
@@ -173,11 +176,14 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		}
 		options.Mode = evidence.Index
 	} else if baseSet || targetSet {
-		if !baseSet || !targetSet || strings.TrimSpace(ctx.String("base")) == "" || strings.TrimSpace(ctx.String("target")) == "" {
-			return invalid("--base and --target are required together")
+		if !baseSet || strings.TrimSpace(ctx.String("base")) == "" || (targetSet && strings.TrimSpace(ctx.String("target")) == "") {
+			return invalidWithFix("--base REF is required when --target is used", "try: after capture --base main [--target HEAD]")
 		}
 		options.Mode = evidence.MergeBase
-		options.Base, options.Target = ctx.String("base"), ctx.String("target")
+		options.Base, options.Target = ctx.String("base"), "HEAD"
+		if targetSet {
+			options.Target = ctx.String("target")
+		}
 	}
 	if ctx.IsSet("include-untracked") {
 		options.IncludeUntracked = ctx.StringSlice("include-untracked")
@@ -213,7 +219,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		return err
 	}
 	if !ctx.IsSet("producer") || strings.TrimSpace(ctx.String("producer")) == "" {
-		return invalid("import requires caller-supplied --producer provenance")
+		return invalidWithFix("import requires caller-supplied --producer provenance", "try: after import FILE --producer TEXT")
 	}
 	producer := ctx.String("producer")
 	if strings.TrimSpace(producer) != producer || len(producer) > 256 {
@@ -284,6 +290,41 @@ func reportView(id evidence.Digest, report gotestreport.Report, offset, limit in
 }
 
 func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error {
+	if ctx.NArg() == 2 {
+		cfg, err := configFlags(ctx)
+		if err != nil {
+			return err
+		}
+		options, err := inspectionOptions(ctx)
+		if err != nil {
+			return err
+		}
+		s, err := store.Open(cfg.Project, false, nil)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return noIDMatch(ctx.Args().Get(0), "snapshot")
+			}
+			return operational("cannot open private evidence store for reading")
+		}
+		defer s.Close()
+		base, err := resolveID(s, ctx.Args().Get(0), "snapshot")
+		if err != nil {
+			return err
+		}
+		candidate, err := resolveID(s, ctx.Args().Get(1), "snapshot")
+		if err != nil {
+			return err
+		}
+		view, err := snapshotBundle(s, base, candidate, options, !state.jsonOutput && !state.forceJSON && !exporting)
+		if err != nil {
+			return operational("snapshot comparison page is unavailable")
+		}
+		kind := "snapshot"
+		if exporting {
+			kind = "export"
+		}
+		return writeResult(state, kind, view)
+	}
 	if err := requireArgs(ctx, 1); err != nil {
 		return err
 	}
@@ -306,13 +347,6 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	id, err := resolveID(s, ctx.Args().Get(0), inspectKinds...)
 	if err != nil {
 		return err
-	}
-	if ctx.IsSet("base") {
-		base, err := resolveID(s, ctx.String("base"), "snapshot")
-		if err != nil {
-			return err
-		}
-		options.base = string(base)
 	}
 	kind := "inspection"
 	if exporting {
@@ -367,25 +401,14 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	if value, ok, err := optionalGet[evidence.Snapshot](s, id); err != nil {
 		return operational("snapshot record is corrupt or unavailable")
 	} else if ok {
-		if options.base == "" {
-			if exporting {
-				return invalid("export requires a comparison ID")
-			}
-			inspection := snapshotInspection{Snapshot: value}
-			if !state.jsonOutput && !state.forceJSON {
-				inspection.CaptureHistory = captureHistoryForSnapshot(s, id)
-			}
-			return writeResult(state, "snapshot", inspection)
-		}
-		view, err := snapshotBundle(s, evidence.Digest(options.base), id, options, !state.jsonOutput && !state.forceJSON && !exporting)
-		if err != nil {
-			return operational("snapshot comparison page is unavailable")
-		}
-		kind := "snapshot"
 		if exporting {
-			kind = "export"
+			return invalidWithFix("export requires a comparison ID", "try: after export COMPARISON_ID")
 		}
-		return writeResult(state, kind, view)
+		inspection := snapshotInspection{Snapshot: value}
+		if !state.jsonOutput && !state.forceJSON {
+			inspection.CaptureHistory = captureHistoryForSnapshot(s, id)
+		}
+		return writeResult(state, "snapshot", inspection)
 	}
 	if raw, err := s.ReadBlob(id); err == nil {
 		var report gotestreport.Report
@@ -419,7 +442,6 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 }
 
 type inspectOptions struct {
-	base            string
 	diffOffset      int
 	diffSize        int
 	inventoryOffset int
@@ -435,7 +457,7 @@ func inspectionOptions(ctx *ucli.Context) (inspectOptions, error) {
 	if err != nil {
 		return inspectOptions{}, err
 	}
-	options := inspectOptions{base: ctx.String("base"), diffSize: cfg.DiffBytes, inventoryLimit: inventoryPageSize, cardLimit: reportPageSize}
+	options := inspectOptions{diffSize: cfg.DiffBytes, inventoryLimit: inventoryPageSize, cardLimit: reportPageSize}
 	options.artifactOffset, options.artifactSize, err = pageArgs(ctx, "artifact-offset", "artifact-size", rawdiff.MaxPageBytes, rawdiff.MaxPageBytes)
 	if err != nil {
 		return inspectOptions{}, err
@@ -710,10 +732,10 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	var s *store.Store
 	if planPath != "" {
 		if ctx.Args().Len() != 0 {
-			return invalid("saved-plan execution does not accept snapshot arguments")
+			return invalidWithFix("saved-plan execution does not accept snapshot arguments", "use after run --plan-file FILE --approve FULL_DIGEST")
 		}
 	} else if ctx.Args().Len() != 2 {
-		return invalid("run requires two snapshot IDs or --plan-file")
+		return invalidWithFix("run requires two snapshot IDs or --plan-file", "try: after run BASE CANDIDATE")
 	}
 	if approvalSet && planPath == "" {
 		return invalid("noninteractive approval requires --plan-file to reconstruct the exact saved preview")

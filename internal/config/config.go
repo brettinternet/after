@@ -53,6 +53,20 @@ type Error struct {
 	Reason  string
 }
 
+// Defaults returns the shipped configuration defaults without consulting the
+// environment, filesystem, or user configuration.
+func Defaults() Config {
+	return Config{
+		Repetitions: 1, RunSeconds: 180, OutputBytes: 65536,
+		Interactive: true, RawDiff: true, DiffBytes: 64 << 10,
+		Sources: map[string]string{
+			"config_path": "default", "project": "default", "repetitions": "default",
+			"run_seconds": "default", "output_bytes": "default", "interactive": "default",
+			"raw_diff": "default", "diff_bytes": "default", "docker_binary": "default", "docker_host": "default",
+		},
+	}
+}
+
 func (e *Error) Error() string {
 	return fmt.Sprintf("invalid configuration setting %s from %s: %s", e.Setting, e.Source, e.Reason)
 }
@@ -149,15 +163,9 @@ func Load(in Input) (Config, error) {
 			resolved[key] = value
 		}
 	}
-	cfg := Config{
-		ConfigPath: configPath, Repetitions: 1, RunSeconds: 180, OutputBytes: 65536,
-		Interactive: true, RawDiff: true, DiffBytes: 64 << 10,
-		Sources: map[string]string{
-			"config_path": configSource, "project": "default", "repetitions": "default",
-			"run_seconds": "default", "output_bytes": "default", "interactive": "default",
-			"raw_diff": "default", "diff_bytes": "default", "docker_binary": "default", "docker_host": "default",
-		},
-	}
+	cfg := Defaults()
+	cfg.ConfigPath = configPath
+	cfg.Sources["config_path"] = configSource
 	project := cwd
 	if err := setString("project", resolved, &project, cfg.Sources); err != nil {
 		return Config{}, err

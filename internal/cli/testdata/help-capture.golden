@@ -1,0 +1,20 @@
+Capture a bounded local Git comparison. Project code never runs; untracked
+files are excluded by default.
+
+Usage
+  after capture
+  after capture --staged
+  after capture --base main [--target HEAD]
+  after capture --include-untracked PATH
+
+Options
+  --staged                   capture HEAD versus the index
+  --base REF                 capture the merge base with a Git ref
+  --target REF               other side of a --base capture (default: HEAD)
+  --include-untracked PATH   include one non-ignored untracked file (repeatable)
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

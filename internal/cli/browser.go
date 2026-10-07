@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/brettinternet/after/internal/browser"
@@ -15,26 +14,15 @@ import (
 )
 
 func browseCommand(state *invocation, ctx *ucli.Context) error {
-	if !state.tty || !ctx.IsSet("base") {
-		return invalid("--tui requires a terminal, candidate ID and --base snapshot ID")
-	}
-	for _, flag := range []string{"select", "mode", "receipt", "accept", "reason"} {
-		if ctx.IsSet(flag) {
-			return invalid("TUI browsing cannot mutate a pin; use headless review")
-		}
-	}
-	ids := ctx.StringSlice("evidence")
-	if len(ids) > browser.MaxEvidence {
-		return invalid("at most 32 evidence IDs")
-	}
-	if ctx.IsSet("import-file") != ctx.IsSet("producer") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
-		return invalid("TUI import requires file and bounded caller producer")
-	}
 	cfg, err := configFlags(ctx)
 	if err != nil {
 		return err
 	}
-	selection, err := resolveBrowserSelection(cfg.Project, ctx.String("base"), ctx.Args().First(), ids)
+	if !state.tty {
+		return invalidWithFix("review requires a terminal", "run after review BASE CANDIDATE in a terminal")
+	}
+	args := ctx.Args().Slice()
+	selection, err := resolveBrowserSelection(cfg.Project, args[0], args[1], args[2:])
 	if err != nil {
 		return err
 	}

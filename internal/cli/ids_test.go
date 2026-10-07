@@ -92,7 +92,7 @@ func TestIDResolutionKindsAmbiguityAndHostileDescriptions(t *testing.T) {
 		t.Fatalf("ambiguity: %v", err)
 	}
 	_, err = resolveID(s, prefix, "receipt")
-	if !errors.As(err, &diagnostic) || diagnostic.code != ExitInvalid || !strings.Contains(err.Error(), "no receipt matches") || !strings.Contains(err.Error(), "after log") {
+	if !errors.As(err, &diagnostic) || diagnostic.code != ExitInvalid || !strings.Contains(err.Error(), "no receipt matches") || !strings.Contains(err.Error(), "after run BASE CANDIDATE") {
 		t.Fatalf("no match: %v", err)
 	}
 	if id, err := resolveID(s, prefixFor(collisions[0]), "artifact"); err != nil || id != collisions[0] {
@@ -134,7 +134,7 @@ func TestPinOlderRevisionReadableAndJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	args := []string{"review", prefixFor(p.ID), "--project", project}
+	args := []string{"pin", prefixFor(p.ID), "--project", project}
 	code, output, diagnostic = invoke(args, false, "")
 	if code != 0 || diagnostic != "" || !strings.Contains(output, "Pin "+shortID(p.ID)) || !strings.Contains(output, "Historical revision") || !strings.Contains(output, shortID(first.ID)) || !strings.Contains(output, shortID(second.ID)) {
 		t.Fatalf("readable %d %s %s", code, output, diagnostic)

@@ -1,22 +1,41 @@
 # Headless CLI
 
-This page documents current behavior; the planned redesign (AFTER-34
-to AFTER-45) is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
+This page documents current behavior. The broader CLI target, including commands
+that are not implemented yet, is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
 
-`after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `review --tui <candidate-id> --base <base-id>` instead opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
+`after` is the CLI entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, comparison and pin APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `after review BASE CANDIDATE` opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
 
 See [packaging, the repeatable demo and recovery](DEMO.md) for native distributions and a prepared-checkout walkthrough. Build with `mise exec -- task build`, then run commands from any directory with a selected project:
 
 ```sh
 ./bin/after capture --project "/work/payment" --include-untracked "fixtures/new case.json"
-./bin/after inspect CANDIDATE_ID --base BASE_ID --project "/work/payment"
+./bin/after inspect BASE_ID CANDIDATE_ID --project "/work/payment"
 ./bin/after import "go test output.jsonl" --producer "go1.27.1 on linux/amd64" --snapshot CANDIDATE_ID --project "/work/payment"
 ./bin/after inspect REPORT_ARTIFACT_ID --project "/work/payment"
 ./bin/after compare RECEIPT_ID --project "/work/payment"
 ./bin/after export COMPARISON_ID --project "/work/payment"
 ```
 
-Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. Explicit `--base REF --target REF` selects a merge-base capture. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import requires caller-supplied `--producer` provenance and accepts optional `--captured-at RFC3339`; these claims are retained but not authenticated. `--snapshot` is an optional validated content digest, not proof the report ran on that capture. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect CANDIDATE_ID --base BASE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
+## Grammar, help and diagnostics
+
+Snapshot pairs use `BASE CANDIDATE` in `inspect`, `review`, and `run`. `--base`
+is only a Git ref on `capture`; `--target` is optional and defaults to `HEAD`.
+Pin inspection and mutations all use `pin`: `pin PIN`, `pin PIN --accept`,
+`pin PIN --attach RECEIPT`, and `pin PIN --select SNAPSHOT [--mode MODE]`.
+Creation uses `pin RECEIPT --expectation TEXT`; scope defaults to
+`finite_example`, and reason is optional.
+
+`after --help` and `after help` list only commands available in this build. Run
+`after COMMAND --help` for that command's usage and options. Global options are
+`--project`, `--config`, and `--json`; Docker and run-limit options appear only on
+`run`, and inspection paging/raw-diff options appear only on `inspect` and
+`export`. Printed run/inspection defaults come from the same configuration
+package as runtime defaults. Unknown commands and flags suggest a unique closest
+match within two edits. Removed forms such as `inspect CANDIDATE --base BASE` and
+`review PIN --accept` exit 2 with the replacement syntax. Diagnostics sanitize
+input and give a corrective action; missing arguments include a runnable example.
+
+Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import requires caller-supplied `--producer` provenance and accepts optional `--captured-at RFC3339`; these claims are retained but not authenticated. `--snapshot` is an optional validated content digest, not proof the report ran on that capture. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
 
 Each successful capture also writes an immutable capture event with its time, mode,
 snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
@@ -32,21 +51,22 @@ with or without `sha256:`, in any case. For example, `after inspect A750186B` an
 `after inspect sha256:a750186b` select the same record when unique. JSON retains
 full IDs. Capture's `--base`/`--target` are Git references, not stored IDs.
 
-Resolution searches only kinds valid for that argument: snapshot bindings and
-run pairs search snapshots; compare/pin and review's `--receipt` search receipts;
-headless review searches pin revisions. Inspect/export search snapshots,
-receipts, comparisons, reports and artifacts. TUI evidence searches comparisons,
-receipts, reports and pins. Missing matches exit 2 naming the searched kinds;
-ambiguity exits 2 with at most ten short IDs, kinds and sanitized one-line
-summaries. Use more characters to disambiguate. The no-match guidance names
-`after log`, whose listing command is scheduled for AFTER-37, not implemented yet.
+Resolution searches only kinds valid for that argument: run and positional
+inspect/review pairs search snapshots; compare and pin creation search receipts;
+`pin --attach` searches receipts, and `pin PIN` plus pin decisions search pin
+revisions. Inspect/export search snapshots, receipts, comparisons, reports and
+artifacts. Trailing review IDs search comparisons, receipts, reports and pins.
+Missing matches exit 2 naming the searched kinds; ambiguity exits 2 with at most
+ten short IDs, kinds and sanitized one-line summaries. Use more characters to
+disambiguate. A no-match diagnostic tells you to verify the ID or create the
+record with an available capture, run, import or pin command.
 Lookup fails explicitly on unsafe storage or exceeded scan/read limits; it never
 chooses from a partial namespace (10,000 directory entries, 32 MiB of matching
 object data per lookup).
 
 Pin heads are computed from immutable histories, including every fork, without a
-stored latest pointer. `review OLD_REVISION` still opens exactly that revision;
-readable output names its newer descendant heads without selecting them. Head
+stored latest pointer. `pin OLD_REVISION` opens exactly that revision; readable
+output names its newer descendant heads without selecting them. Head
 lookup is bounded to 512 revisions and 16 MiB of pin records. When unavailable,
 readable output says so while retaining the requested revision. JSON is unchanged.
 
@@ -65,14 +85,16 @@ Stored artifacts (including observer response/effect channels referenced by rece
 
 ## Persistent expectations
 
-`pin RECEIPT_ID --expectation TEXT --scope finite_example|human_intent --reason TEXT`
-creates an immutable pin revision. `review PIN_REVISION_ID` opens it read-only.
-Mutations use exactly one of `--select SNAPSHOT_ID --mode original_base|last_inspected`,
-`--receipt RECEIPT_ID`, or `--accept`, always with `--reason TEXT`. Each returns a
-new revision ID; use that ID for the next operation. Selection reopens changed
-bindings without predicting results. Receipt attachment never accepts the pin;
-human acceptance is a separate action. No pin/review action executes code or
-grants run permission. See [the review workflow](REVIEW.md) for examples, exact
+`pin RECEIPT_ID --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`
+creates an immutable pin revision; `--scope` defaults to `finite_example`, and a
+receipt that cannot support it suggests `--scope human_intent`. `pin PIN_ID` opens a
+revision read-only. Decisions use exactly one of `--select SNAPSHOT_ID [--mode
+original_base|last_inspected]`, `--attach RECEIPT_ID`, or `--accept`; `--mode`
+defaults to `original_base`. `--reason` is optional; its command-line default is
+stored verbatim in history. Each decision returns a new revision ID; use that ID
+for the next operation. Selection reopens changed bindings without predicting
+results. Receipt attachment never accepts the pin; human acceptance is a separate
+action. No pin action executes code or grants run permission. See [the review workflow](REVIEW.md) for examples, exact
 reuse rules, broader-intent limits, historical revisions and rerun authorization.
 
 ## Execution authorization
@@ -128,7 +150,7 @@ Use `--json` on a command whose result a script consumes:
 
 ```sh
 ./bin/after capture --project /work/payment --json
-./bin/after inspect CANDIDATE_ID --base BASE_ID --project /work/payment --json
+./bin/after inspect BASE_ID CANDIDATE_ID --project /work/payment --json
 ./bin/after import report.jsonl --producer go1.27.1 --project /work/payment --json
 ./bin/after run BASE_ID CANDIDATE_ID --project /work/payment --json
 ./bin/after export COMPARISON_ID --project /work/payment # JSON is always emitted

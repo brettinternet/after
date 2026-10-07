@@ -45,14 +45,14 @@ func TestUrfaveHelpVersionAndInvalidInput(t *testing.T) {
 		text string
 	}{
 		{"empty", nil, ExitOK, "capture"},
-		{"help-command", []string{"help"}, ExitOK, "offline payment experiment"},
-		{"help-flag", []string{"--help"}, ExitOK, "COMMANDS:"},
+		{"help-command", []string{"help"}, ExitOK, "Everyday"},
+		{"help-flag", []string{"--help"}, ExitOK, "Everyday"},
 		{"short-help", []string{"-h"}, ExitOK, "import"},
 		{"version-command", []string{"version"}, ExitOK, "after " + Version},
 		{"version-flag", []string{"--version"}, ExitOK, Version},
 		{"unknown-command", []string{"untrusted\x1b]52;c;bad\a"}, ExitInvalid, "unknown command"},
-		{"extra-command-argument", []string{"capture", "unexpected"}, ExitInvalid, "invalid input"},
-		{"bad-flag", []string{"config", "--unknown-option"}, ExitInvalid, "invalid input"},
+		{"extra-command-argument", []string{"capture", "unexpected"}, ExitInvalid, "unexpected arguments"},
+		{"bad-flag", []string{"config", "--unknown-option"}, ExitInvalid, "unknown flag"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			code, stdout, stderr := invoke(tc.args, false, "")
@@ -140,7 +140,10 @@ func TestConfigCLIUsesExplicitFalseAndRedactsRuntimeValues(t *testing.T) {
 	project := filepath.Join(dir, "project with spaces")
 	t.Setenv("AFTER_DOCKER_BINARY", "/private/DO_NOT_PRINT/docker")
 	t.Setenv("AFTER_DOCKER_HOST", "unix:///private/DO_NOT_PRINT.sock")
-	code, stdout, stderr := invoke([]string{"config", "--config", configFile, "--project", project, "--interactive=false", "--raw-diff=false", "--diff-bytes", "0", "--json"}, false, "")
+	t.Setenv("AFTER_INTERACTIVE", "false")
+	t.Setenv("AFTER_RAW_DIFF", "false")
+	t.Setenv("AFTER_DIFF_BYTES", "0")
+	code, stdout, stderr := invoke([]string{"config", "--config", configFile, "--project", project, "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("exit=%d stderr=%q", code, stderr)
 	}
@@ -171,10 +174,10 @@ func TestConfigCLIUsesExplicitFalseAndRedactsRuntimeValues(t *testing.T) {
 			source string
 		}{item.Value, item.Source}
 	}
-	if settings["interactive"].value != false || settings["interactive"].source != "flag" {
+	if settings["interactive"].value != false || settings["interactive"].source != "env" {
 		t.Fatalf("explicit false lost: %+v", settings["interactive"])
 	}
-	if settings["raw_diff"].value != false || settings["raw_diff"].source != "flag" || settings["diff_bytes"].value != float64(0) || settings["diff_bytes"].source != "flag" {
+	if settings["raw_diff"].value != false || settings["raw_diff"].source != "env" || settings["diff_bytes"].value != float64(0) || settings["diff_bytes"].source != "env" {
 		t.Fatalf("false/zero CLI settings lost: %+v %+v", settings["raw_diff"], settings["diff_bytes"])
 	}
 	if settings["project"].value != "selected path hidden" || settings["project"].source != "flag" || strings.Contains(stdout, project) {
@@ -220,7 +223,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if captureEnvelope.SchemaVersion != 1 || captureEnvelope.Kind != "capture" || !validDigest(base) || !validDigest(candidate) {
 		t.Fatalf("bad capture result: %s", captured)
 	}
-	args := []string{"inspect", candidate, "--base", base, "--project", project, "--config", configFile, "--json"}
+	args := []string{"inspect", base, candidate, "--project", project, "--config", configFile, "--json"}
 	code, inspected, stderr := invoke(args, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("inspect exit=%d stderr=%q", code, stderr)
@@ -248,7 +251,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if err != nil || !bytes.Contains(diff, []byte("changed")) {
 		t.Fatalf("raw diff unavailable: %v %q", err, diff)
 	}
-	code, exported, stderr := invoke([]string{"export", candidate, "--base", base, "--project", project, "--config", configFile}, false, "")
+	code, exported, stderr := invoke([]string{"export", base, candidate, "--project", project, "--config", configFile}, false, "")
 	if code != ExitOK || stderr != "" || !strings.Contains(exported, `"kind":"export"`) {
 		t.Fatalf("export exit=%d stderr=%q output=%q", code, stderr, exported)
 	}
@@ -322,7 +325,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	// operational persistence failure.
 	for _, id := range []string{candidate, "sha256:" + strings.Repeat("0", 64)} {
 		code, stdout, stderr = invoke([]string{"compare", id, "--project", project, "--config", configFile}, false, "")
-		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "no receipt matches") || !strings.Contains(stderr, "after log") {
+		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "no receipt matches") || !strings.Contains(stderr, "after run BASE CANDIDATE") {
 			t.Fatalf("unknown receipt status: %d %q %q", code, stdout, stderr)
 		}
 	}

@@ -1,20 +1,20 @@
 # Captured evidence review loop
 
-`after review --tui` opens the stored engine records, not a demo or a live checkout.
+`after review BASE CANDIDATE [EVIDENCE ...]` opens the stored engine records, not a demo or a live checkout.
 It does not run Git, import a report, build code or contact Docker on open.
-The existing headless `review <pin-revision-id>` remains unchanged.
+Pin inspection and decisions use `after pin PIN`.
 The responsive frame and contextual key map from AFTER-23 are implemented; the
 remaining redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after capture --project /path/to/project
 # Use the returned candidate/base snapshot IDs. Evidence IDs are optional.
-after review --tui <candidate-id> --base <base-id> \
-  --project /path/to/project --evidence <comparison-or-receipt-or-report-or-pin-revision-id>
+after review <base-id> <candidate-id> <comparison-or-receipt-or-report-or-pin-revision-id> \
+  --project /path/to/project
 ```
 
-Repeat `--evidence` for up to 32 stored IDs. There is no automatic discovery or
-implicit selection of the newest result. Start without evidence to review the
+Add up to 32 stored evidence IDs as positional arguments after the snapshot pair.
+There is no automatic discovery or implicit selection of the newest result. Start without evidence to review the
 complete captured inventory and patch with an explicit **not checked** screen.
 Unknown/corrupt evidence IDs do not hide the raw inventory.
 
@@ -215,8 +215,8 @@ Late results stay at their originating pair and cannot replace the selected resu
 
 Pins are immutable revisions, shared with the [headless review API](REVIEW.md).
 Use `s` for full references; on normal quit, the screen remains readable by default.
-Pass `--json` to print the session JSON after terminal restoration. Restart with its
-pair and `--evidence <latest-pin-revision-id>` (and any comparison/history IDs desired).
+Pass `--json` to print the session JSON after terminal restoration. Restart with its pair and positional evidence IDs: `after review BASE CANDIDATE
+LATEST_PIN_REVISION_ID` (followed by any comparison/history IDs desired).
 There is no implicit newest-pin selection,
 automatic refresh or filesystem watcher. Keep these references private.
 

@@ -1,8 +1,10 @@
 # Command-line design
 
-**Status: target design, not implemented.** This is the design for backlog tasks
-AFTER-34 to AFTER-45, plus the `after review` launch in AFTER-24 (milestone M2).
-[CLI.md](CLI.md) documents current behavior, and each task updates it as it lands.
+**Status: staged target design.** AFTER-34 to AFTER-36 and AFTER-38 are implemented;
+AFTER-37 and the remaining command redesign tasks are still future work. This is
+the design for backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch
+in AFTER-24 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not
+copy future commands from this target into runtime help before they exist.
 The CLI shares vocabulary, badges, styles, and formatting with the
 [review TUI design](TUI-DESIGN.md). The product invariants in
 [AGENTS.md](../AGENTS.md) and [IMPLEMENTATION.md](IMPLEMENTATION.md) still apply.
@@ -461,7 +463,7 @@ Run after COMMAND --help for a command's options.
 | Today                                                     | Planned                                                         |
 | --------------------------------------------------------- | --------------------------------------------------------------- |
 | `inspect CANDIDATE --base BASE`                           | `inspect BASE CANDIDATE`                                        |
-| `review --tui CANDIDATE --base BASE [--evidence ID…]`     | `review [BASE CANDIDATE \| ID…]` (needs a terminal)             |
+| `review --tui CANDIDATE --base BASE [--evidence ID…]`     | `review BASE CANDIDATE [EVIDENCE_ID…]` (needs a terminal)       |
 | `review PIN`                                              | `pin PIN`                                                       |
 | `review PIN --select ID --mode MODE --reason TEXT`        | `pin PIN --select ID [--mode MODE] [--reason TEXT]`             |
 | `review PIN --receipt ID --reason TEXT`                   | `pin PIN --attach ID [--reason TEXT]`                           |
@@ -474,9 +476,10 @@ Run after COMMAND --help for a command's options.
 | `--base`: a snapshot ID or a Git ref                      | `--base`: a Git ref only                                        |
 
 AFTER-38 makes these changes, except the `import` row and the optional `--producer`
-(AFTER-39) and the `run` row (AFTER-40). Removed forms fail with an error that shows the new form. Two IDs given
-to `review`, `inspect`, `run`, or `diff` form a pair only when both resolve to
-snapshots. Otherwise, `review` treats each ID as a record to open.
+(AFTER-39), and the `run` row (AFTER-40). Removed forms fail with an error that
+shows the new form. `review`, `inspect`, and `run` accept snapshot pairs as
+positional `BASE CANDIDATE` IDs; `review` accepts trailing evidence IDs. Bare
+capture/resume selection and record-ID review remain later work.
 
 ## completion
 

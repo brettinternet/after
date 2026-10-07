@@ -75,6 +75,22 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 			state.columns = width
 		}
 	}
+	if name, requested, helpErr := helpRequest(args); requested {
+		if helpErr != nil {
+			fmt.Fprintln(stderr, helpErr.Error())
+			return ExitInvalid
+		}
+		_, _ = io.WriteString(stdout, commandHelp(name))
+		return ExitOK
+	}
+	if migration := removedForm(args); migration != nil {
+		fmt.Fprintln(stderr, migration.Error())
+		return ExitInvalid
+	}
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !knownCommand(args[0]) {
+		fmt.Fprintln(stderr, unknownCommandDiagnostic(args[0]))
+		return ExitInvalid
+	}
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
@@ -87,15 +103,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		HideHelpCommand:           false,
 		Action: func(ctx *ucli.Context) error {
 			if ctx.NArg() > 0 {
-				return invalid("unknown command; use --help")
+				return invalidWithFix("unexpected arguments", "run after --help to list available commands")
 			}
-			return ucli.ShowAppHelp(ctx)
+			_, err := io.WriteString(stdout, topLevelHelp())
+			return err
 		},
 		OnUsageError:   usageError,
 		ExitErrHandler: func(*ucli.Context, error) {},
-		CommandNotFound: func(*ucli.Context, string) {
+		CommandNotFound: func(_ *ucli.Context, name string) {
 			state.exit = ExitInvalid
-			state.diagnostic = "after: unknown command; use --help"
+			state.diagnostic = unknownCommandDiagnostic(name)
 		},
 		Commands: commands(state),
 	}
@@ -103,10 +120,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		if command.OnUsageError == nil {
 			command.OnUsageError = usageError
 		}
-	}
-	if len(args) > 0 && !knownCommand(args[0]) && !strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(stderr, "after: unknown command; use --help")
-		return ExitInvalid
 	}
 	err := app.RunContext(ctx, append([]string{"after"}, normalizeArgs(args)...))
 	if err != nil {
@@ -119,10 +132,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		}
 		var configErr *config.Error
 		if errors.As(err, &configErr) {
-			fmt.Fprintf(stderr, "after: invalid configuration setting %s (%s): %s\n", configErr.Setting, configErr.Source, configErr.Reason)
+			fmt.Fprintln(stderr, formatDiagnostic(fmt.Sprintf("invalid configuration setting %s (%s): %s", configErr.Setting, configErr.Source, configErr.Reason), "correct that setting and retry after config"))
 			return ExitInvalid
 		}
-		fmt.Fprintln(stderr, "after: operation failed")
+		fmt.Fprintln(stderr, "after: operation failed — check the local checkout and configuration, then retry")
 		return ExitOperational
 	}
 	if state.diagnostic != "" {
@@ -133,7 +146,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 
 func knownCommand(value string) bool {
 	switch value {
-	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "version", "help", "h":
+	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "version", "help":
 		return true
 	default:
 		return false
@@ -141,8 +154,8 @@ func knownCommand(value string) bool {
 }
 
 // urfave/cli uses Go's flag parser, which stops at the first positional value.
-// Move only recognized command flags before positionals so both common CLI
-// spellings work, without interpreting unknown or repository-controlled text.
+// Move flags before positionals so both common spellings work and unknown flags
+// reach the command parser for a useful suggestion. Use -- for dash-prefixed IDs.
 func normalizeArgs(args []string) []string {
 	if len(args) < 2 {
 		return args
@@ -157,7 +170,7 @@ func normalizeArgs(args []string) []string {
 		"--card-limit": true, "--plan-file": true, "--plan-out": true, "--approve": true,
 		"--artifact-offset": true, "--artifact-size": true,
 		"--evidence": true, "--import-file": true,
-		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true,
+		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true, "--attach": true,
 	}
 	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--json": true, "--help": true, "-h": true}
 	var flags, positionals []string
@@ -179,7 +192,7 @@ func normalizeArgs(args []string) []string {
 			}
 			continue
 		}
-		if strings.HasPrefix(token, "-") && len(positionals) == 0 {
+		if strings.HasPrefix(token, "-") {
 			flags = append(flags, token)
 			continue
 		}
@@ -192,20 +205,24 @@ func normalizeArgs(args []string) []string {
 	return out
 }
 
-func commonFlags() []ucli.Flag {
+func globalFlags() []ucli.Flag {
 	return []ucli.Flag{
 		&ucli.StringFlag{Name: "config", Usage: "select a YAML configuration file"},
 		&ucli.StringFlag{Name: "project", Usage: "select a checkout path; root is its nearest .git ancestor"},
+		&ucli.BoolFlag{Name: "json", Usage: "print the versioned JSON result"},
+	}
+}
+
+func runFlags() []ucli.Flag {
+	defaults := config.Defaults()
+	return append(globalFlags(),
 		&ucli.StringFlag{Name: "docker-binary", Usage: "trusted absolute Docker CLI path"},
 		&ucli.StringFlag{Name: "docker-host", Usage: "explicit local unix:/// Docker socket"},
-		&ucli.IntFlag{Name: "repetitions", Usage: "paired run repetitions (1-5)"},
-		&ucli.IntFlag{Name: "run-seconds", Usage: "sandbox time limit (1-300 seconds)"},
-		&ucli.IntFlag{Name: "output-bytes", Usage: "per-container output limit (1-1048576)"},
-		&ucli.BoolFlag{Name: "interactive", Usage: "allow an exact-plan confirmation prompt on a terminal"},
-		&ucli.BoolFlag{Name: "json", Usage: "print the versioned JSON result"},
-		&ucli.BoolFlag{Name: "raw-diff", Usage: "include a bounded captured patch"},
-		&ucli.IntFlag{Name: "diff-bytes", Usage: "maximum raw patch bytes (0-65536)"},
-	}
+		&ucli.IntFlag{Name: "repetitions", Value: defaults.Repetitions, Usage: "paired run repetitions (1-5)"},
+		&ucli.IntFlag{Name: "run-seconds", Value: defaults.RunSeconds, Usage: "sandbox time limit (1-300 seconds)"},
+		&ucli.IntFlag{Name: "output-bytes", Value: defaults.OutputBytes, Usage: "per-container output limit (1-1048576)"},
+		&ucli.BoolFlag{Name: "interactive", Value: defaults.Interactive, Usage: "allow an exact-plan confirmation prompt on a terminal"},
+	)
 }
 
 func configFlags(ctx *ucli.Context) (config.Config, error) {
@@ -273,23 +290,43 @@ func writeJSON(state *invocation, kind string, data any) error {
 	return nil
 }
 
-func usageError(_ *ucli.Context, _ error, _ bool) error {
-	return invalid("invalid command arguments or flags")
+func usageError(ctx *ucli.Context, err error, _ bool) error {
+	command := "after"
+	var flags []ucli.Flag
+	if ctx != nil && ctx.Command != nil {
+		command = ctx.Command.Name
+		flags = ctx.Command.Flags
+	}
+	if name, ok := unknownFlagName(err); ok {
+		return unknownFlagError(command, name, flags)
+	}
+	if command == "after" {
+		return invalidWithFix("invalid command arguments or flag value", "run after --help to list available commands")
+	}
+	return invalidWithFix("invalid command arguments or flag value", "check after "+command+" --help for valid syntax")
 }
 
 func requireArgs(ctx *ucli.Context, count int) error {
-	if ctx.NArg() != count {
-		return invalid("unexpected or missing command arguments")
+	if ctx.NArg() == count {
+		return nil
 	}
-	return nil
+	command := ctx.Command.Name
+	if ctx.NArg() < count {
+		return invalidWithFix(missingArgument(command, count-ctx.NArg()), "try: "+commandExample(command))
+	}
+	return invalidWithFix("unexpected arguments", "try: "+commandExample(command))
 }
 
 func invalid(message string) error {
-	return &exitError{code: ExitInvalid, diagnostic: "after: invalid input: " + message}
+	return invalidWithFix("invalid input: "+message, "check the command's --help for a valid form")
+}
+
+func invalidWithFix(problem, fix string) error {
+	return &exitError{code: ExitInvalid, diagnostic: formatDiagnostic(problem, fix)}
 }
 
 func operational(message string) error {
-	return &exitError{code: ExitOperational, diagnostic: "after: " + message}
+	return &exitError{code: ExitOperational, diagnostic: formatDiagnostic(message, "check the local checkout and configuration, then retry")}
 }
 
 func terminalInput(reader io.Reader) bool {

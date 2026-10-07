@@ -1,0 +1,23 @@
+Prepare the frozen offline experiment; exact consent is required before it runs.
+
+Usage
+  after run BASE CANDIDATE
+  after run BASE CANDIDATE --plan-out FILE
+  after run --plan-file FILE --approve FULL_DIGEST
+
+Options
+  --plan-file FILE       reconstruct an exact saved execution preview
+  --plan-out FILE        save a private preview without overwriting a file
+  --approve DIGEST       approve only this full lowercase sha256 digest
+  --docker-binary PATH   trusted Docker CLI path (default: not configured)
+  --docker-host SOCKET   local Unix socket (default: not configured)
+  --repetitions N        paired run repetitions (default: 1; range: 1–5)
+  --run-seconds N        sandbox time limit (default: 180; range: 1–300)
+  --output-bytes N       container output (default: 65536; range: 1–1048576)
+  --interactive BOOL     allow exact-plan terminal confirmation (default: true)
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

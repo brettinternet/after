@@ -1,0 +1,21 @@
+Review local changes and their evidence without running project code unless
+you approve an exact plan.
+
+Everyday
+  after review BASE CANDIDATE   browse a captured pair in the terminal review
+  after capture                 capture a local Git comparison
+  after inspect ID              inspect a stored record or snapshot pair
+
+Evidence
+  after run                     prepare a consented offline payment run
+  after import                  read a go test -json report file
+  after compare                 compare a stored execution receipt
+  after pin                     create, inspect, or update an expectation
+  after export                  print a comparison or evidence page as JSON
+
+Setup
+  after config                  show settings and their sources
+  after version                 print the AFTER version
+
+Global options: --project DIR, --config FILE, --json
+Run after COMMAND --help for that command's options.
