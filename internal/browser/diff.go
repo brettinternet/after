@@ -3,6 +3,7 @@ package browser
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,6 +46,9 @@ type DiffView struct {
 	Rows          []DiffRow
 	HunkRows      []int
 	Origin        string
+	Added         int
+	Deleted       int
+	SourceLimited bool
 	HunksComplete bool
 	Limited       bool
 }
@@ -74,11 +78,23 @@ func readRawDiff(v *rawdiff.View) ([]byte, error) {
 }
 
 func buildDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunks []rawdiff.Hunk, inventory []rawdiff.Entry) *DiffView {
+	hunkOffsets := make([]int, len(hunks))
+	for i, hunk := range hunks {
+		hunkOffsets[i] = hunk.Start
+	}
+	return buildDiffAt(raw, patchFiles, hunkOffsets, inventory, "captured patch")
+}
+
+func buildComputedDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, inventory []rawdiff.Entry) *DiffView {
+	return buildDiffAt(raw, patchFiles, hunkOffsets, inventory, rawdiff.ComputedOrigin)
+}
+
+func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, inventory []rawdiff.Entry, origin string) *DiffView {
 	byPath := make(map[string]rawdiff.Entry, len(inventory))
 	for _, item := range inventory {
 		byPath[item.Path] = item
 	}
-	view := &DiffView{Raw: raw, Origin: "captured patch", Files: make([]DiffFile, len(patchFiles)), FileByPath: make(map[string]int, len(patchFiles)), HunkRows: make([]int, 0, len(hunks))}
+	view := &DiffView{Raw: raw, Origin: origin, Files: make([]DiffFile, len(patchFiles)), FileByPath: make(map[string]int, len(patchFiles)), HunkRows: make([]int, 0, len(hunkOffsets))}
 	view.Rows = make([]DiffRow, 0, min(bytes.Count(raw, []byte("\n"))+1+len(patchFiles), terminal.MaxLines))
 	for i, indexed := range patchFiles {
 		file := DiffFile{Path: indexed.Path, Change: "unknown", Start: indexed.Start, End: indexed.End, StartRow: -1}
@@ -120,6 +136,16 @@ func buildDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunks []rawdiff.Hunk,
 			if entry.Change == "added" || entry.Change == "deleted" {
 				summaries = append(summaries, entry.Change)
 			}
+			if origin == rawdiff.ComputedOrigin {
+				switch {
+				case entry.Change == "unknown":
+					summaries = append(summaries, "unknown; no computed diff")
+				case slices.Contains(entry.Limits, "too large to diff here — open both sources"):
+					summaries = append(summaries, "too large to diff here — open both sources")
+				case slices.Contains(entry.Limits, "captured source unavailable; no computed diff"):
+					summaries = append(summaries, "captured source unavailable; no computed diff")
+				}
+			}
 			if len(summaries) > 0 {
 				file.Summary = "── " + strings.Join(summaries, " · ") + " · " + file.Path + " ──"
 			}
@@ -130,9 +156,9 @@ func buildDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunks []rawdiff.Hunk,
 		}
 	}
 
-	hunkAt := make(map[int]int, len(hunks))
-	for i, hunk := range hunks {
-		hunkAt[hunk.Start] = i
+	hunkAt := make(map[int]struct{}, len(hunkOffsets))
+	for _, offset := range hunkOffsets {
+		hunkAt[offset] = struct{}{}
 	}
 	fileAt := make(map[int]int, len(patchFiles))
 	for i, file := range patchFiles {
@@ -164,7 +190,7 @@ func buildDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunks []rawdiff.Hunk,
 			}
 		}
 		row := DiffRow{RawLine: rawLine, File: currentFile, Style: diffLineStyle(line)}
-		if _, ok := thunk(hunkAt, start); ok {
+		if _, ok := hunkAt[start]; ok {
 			if currentFile >= 0 {
 				row.File = currentFile
 			}
@@ -210,13 +236,11 @@ func buildDiff(raw []byte, patchFiles []rawdiff.PatchFile, hunks []rawdiff.Hunk,
 		}
 		start = end + 1
 	}
+	for _, file := range view.Files {
+		view.Added += file.Added
+		view.Deleted += file.Deleted
+	}
 	return view
-}
-
-// thunk is kept as a tiny helper so a hunk can be keyed by its exact indexed byte offset.
-func thunk(index map[int]int, offset int) (int, bool) {
-	value, ok := index[offset]
-	return value, ok
 }
 
 func parseHunk(line []byte) (int, int, bool) {
@@ -334,12 +358,13 @@ type inventoryRecord struct {
 	Binary          bool     `json:"binary"`
 	BaseMode        string   `json:"base_mode,omitempty"`
 	CandidateMode   string   `json:"candidate_mode,omitempty"`
-	Added           int      `json:"added_lines_from_captured_patch"`
-	Deleted         int      `json:"deleted_lines_from_captured_patch"`
+	DiffOrigin      string   `json:"diff_origin"`
+	Added           int      `json:"added_lines_in_displayed_diff"`
+	Deleted         int      `json:"deleted_lines_in_displayed_diff"`
 	Limits          []string `json:"recorded_limitations,omitempty"`
 }
 
-func diffHeader(file DiffFile, position, total int) string {
+func diffHeader(file DiffFile, position, total int, origin string) string {
 	name := file.Path
 	if name == "" {
 		name = "unmatched captured patch path"
@@ -348,7 +373,10 @@ func diffHeader(file DiffFile, position, total int) string {
 	if file.Change != "" && file.Change != "unknown" {
 		flags = append([]string{file.Change}, flags...)
 	}
-	return fmt.Sprintf("%s · file %d of %d · captured patch · %s", name, position+1, total, strings.Join(flags, " · "))
+	if origin == rawdiff.ComputedOrigin {
+		return fmt.Sprintf("%s · %s · file %d of %d · %s", origin, name, position+1, total, strings.Join(flags, " · "))
+	}
+	return fmt.Sprintf("%s · file %d of %d · %s · %s", name, position+1, total, origin, strings.Join(flags, " · "))
 }
 
 func diffPosition(rows []DiffRow, row int) int {

@@ -124,8 +124,12 @@ tasks:
     cmd: go test -race ./internal/config ./internal/cli ./cmd/after
 
   test:terminal:
-    desc: Check terminal safety, captured-diff budgets and actual PTY restoration
-    cmd: go test -race -v ./internal/terminal ./internal/browser
+    desc: Check terminal safety, computed/captured diffs, browser budgets and actual PTY restoration
+    cmd: go test -race -v ./internal/terminal ./internal/rawdiff ./internal/browser
+
+  test:computed:
+    desc: Check bounded computed source diffs, browser integration and responsive PTY review
+    cmd: go test -race -v ./internal/rawdiff ./internal/browser -run '^(FuzzUnifiedDiffAppliesAndIsDeterministic|TestComputed.*|TestPairWithoutSharedPatchNeverUsesAnotherPatch|TestChangesDiffNavigationAndCapturedBytes|TestResponsiveFramePTY)$'
 
   test:views:
     desc: Check deterministic browser golden views (pass -- -update only to regenerate)

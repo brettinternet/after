@@ -10,6 +10,7 @@ import (
 
 	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/rawdiff"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
@@ -172,8 +173,8 @@ func TestChangesDiffNavigationAndCapturedBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Diff == nil || len(d.Diff.Files) < 5 || len(d.Diff.HunkRows) < 2 {
-		t.Fatalf("fixture lacks indexed files/hunks: %+v", d.Diff)
+	if d.Diff == nil || d.Diff.Origin != "captured patch" || len(d.Diff.Files) < 5 || len(d.Diff.HunkRows) < 2 {
+		t.Fatalf("fixture lost captured patch/hunk accounting: %+v", d.Diff)
 	}
 	m := New(t.Context(), sel, Jobs{})
 	defer m.Close()
@@ -290,14 +291,17 @@ func TestPairWithoutSharedPatchNeverUsesAnotherPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Diff != nil {
-		t.Fatal("a cross-capture pair exposed an indexed patch")
+	if d.Diff == nil || d.Diff.Origin != rawdiff.ComputedOrigin {
+		t.Fatal("cross-capture pair did not receive a computed source diff", d.Diff)
 	}
-	if bytes.Contains(d.Patch.Content, []byte("diff --git")) || bytes.Contains(d.Patch.Content, foreignPatch) {
+	if !d.Diff.SourceLimited {
+		t.Fatal("unknown inventory limitations were not marked in the computed summary")
+	}
+	if bytes.Contains(d.Patch.Content, foreignPatch) {
 		t.Fatal("patch from another pair was shown")
 	}
-	if !strings.Contains(d.Patch.Name, "no shared captured patch") || !bytes.Contains(d.Patch.Content, []byte("No shared captured patch")) || !bytes.Contains(d.Patch.Content, []byte("AFTER-32")) {
-		t.Fatalf("honest fallback not stated: %s %s", d.Patch.Name, d.Patch.Content)
+	if !strings.Contains(d.Patch.Name, rawdiff.ComputedOrigin) || !bytes.Contains(d.Patch.Content, []byte("@@ -")) || !bytes.Contains(d.Patch.Content, []byte("retentionSeconds = 45")) {
+		t.Fatalf("computed retention diff missing: %s %s", d.Patch.Name, d.Patch.Content)
 	}
 	var config Entry
 	for _, entry := range d.Inventory {
@@ -305,8 +309,8 @@ func TestPairWithoutSharedPatchNeverUsesAnotherPatch(t *testing.T) {
 			config = entry
 		}
 	}
-	if config.Name == "" || !strings.Contains(string(config.Sections[0].Content), "No shared captured patch") {
-		t.Fatal("path detail did not preserve the pair-binding fallback", config)
+	if config.Name == "" || !bytes.Contains(config.Sections[0].Content, []byte("retentionSeconds = 45")) {
+		t.Fatal("path detail did not show the computed source diff", config)
 	}
 	baseSource, err := ReadSection(t.Context(), pair.Project, config.Sections[1])
 	if err != nil || !bytes.Contains(baseSource, []byte("retentionSeconds int64 = 24 * 60 * 60")) {
@@ -320,12 +324,17 @@ func TestPairWithoutSharedPatchNeverUsesAnotherPatch(t *testing.T) {
 	defer m.Close()
 	m.data, m.width, m.height = d, 120, 40
 	m.screen = "inventory"
-	if !strings.Contains(m.View(), "no shared captured patch") {
-		t.Fatal("Changes did not state the missing shared patch", m.View())
+	if !strings.Contains(m.View(), rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "limited inventory") {
+		t.Fatal("Changes counts did not label the computed origin and partial inventory", m.View())
 	}
+	step(m, key("1"))
+	if !strings.Contains(m.View(), "CHANGES · "+rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "limited inventory") {
+		t.Fatal("Overview CHANGES line did not label its computed origin and partial inventory", m.View())
+	}
+	step(m, key("2"))
 	step(m, key("3"))
-	if m.screen != "patch" || m.doc == nil || !strings.Contains(m.View(), "no shared captured patch") {
-		t.Fatal("Diff did not state the missing shared patch", m.View())
+	if m.screen != "patch" || m.doc == nil || !strings.Contains(m.diffStickyHeader(), rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "retentionSeconds = 45") {
+		t.Fatal("Diff did not show the computed source diff", m.View())
 	}
 }
 

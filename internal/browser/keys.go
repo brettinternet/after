@@ -233,31 +233,31 @@ func canOpen(m *Model) string {
 }
 func canNavigateFiles(m *Model) string {
 	if m.section != 0 {
-		return "switch to the captured patch section first"
+		return "switch to the displayed diff section first"
 	}
 	if m.hex {
 		return "return to text view with b before navigating files"
 	}
 	if m.data == nil || m.data.Diff == nil {
-		return "no shared captured patch is available"
+		return "no diff is available"
 	}
 	if m.data.Diff.VisibleFiles < 2 {
-		return "the captured patch has fewer than two indexed files"
+		return "the displayed diff has fewer than two indexed files"
 	}
 	return ""
 }
 func canNavigateHunks(m *Model) string {
 	if m.section != 0 {
-		return "switch to the captured patch section first"
+		return "switch to the displayed diff section first"
 	}
 	if m.hex {
 		return "return to text view with b before navigating hunks"
 	}
 	if m.data == nil || m.data.Diff == nil {
-		return "no shared captured patch is available"
+		return "no diff is available"
 	}
 	if len(m.data.Diff.HunkRows) < 2 {
-		return "the captured patch has fewer than two indexed hunks"
+		return "the displayed diff has fewer than two navigable hunks"
 	}
 	return ""
 }

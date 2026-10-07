@@ -720,8 +720,14 @@ func (m *Model) View() string {
 		i := *m.cursor()
 		if len(entries) == 0 {
 			add("Not checked: no evidence loaded")
+			if line := m.overviewChangesLine(); line != "" {
+				add(line)
+			}
 		} else {
 			add("Badges: finite evidence only · Enter for full state and scope")
+			if line := m.overviewChangesLine(); line != "" {
+				add(line)
+			}
 			top := max(0, i-m.rows()+1)
 			for n := top; n < min(len(entries), top+m.rows()); n++ {
 				body = append(body, m.entryLine(entries[n], n == i))

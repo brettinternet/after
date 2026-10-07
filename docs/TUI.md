@@ -86,14 +86,17 @@ Its sticky header names the current file, its position, typed flags, and the
 `captured patch` origin. Binary, mode-only, added, and deleted files receive
 trusted summary dividers while their raw patch lines remain visible. Added lines
 are green, deleted lines red, and `@@` lines cyan when color is enabled; `+` and
-`-` remain visible and meaningful with `NO_COLOR`. File and hunk jumps use the
-bounded `rawdiff` index, not a rescan of the visible text.
+`-` remain visible and meaningful with `NO_COLOR`. Captured file and hunk jumps use
+the bounded `rawdiff` index; computed-diff navigation uses its own display offsets
+and does not create hunk IDs or change captured counts.
 
-For pairs without a shared captured patch, Changes and Diff state that no patch
-is available. Both captured sources and the complete inventory remain usable;
-AFTER-28 does not compute a diff or borrow a patch from another pair. Computed
-source diffs are AFTER-32. At a 1×1
-terminal, `q` still quits even though the frame cannot show a useful hint.
+For pairs without a shared captured patch, AFTER-32 computes a deterministic,
+bounded unified presentation from both stored source manifests. The sticky header,
+Overview CHANGES line and Changes counts label it exactly
+`computed from captured sources — not Git's patch`. Unknown and over-bound paths
+keep explicit limitations, and both captured sources remain available. This is a
+display fallback, not a Git patch. At a 1×1 terminal, `q` still quits even though
+the frame cannot show a useful hint.
 
 Each evidence row has a bracketed badge derived only from typed engine fields,
 a plain-text name and summary, and a trailing kind/freshness column at widths
@@ -186,8 +189,8 @@ the inspector gives the exact reason and **missing current evidence** state.
 Prior observations, including the control, remain inspectable under their original
 snapshot IDs. Their values are history, not predictions for the new candidate.
 The original base stays selected even if HEAD has moved. When the selected pair
-has no shared captured patch, the patch page says so; complete stored inventory
-and both captured sources remain available, not a patch for the wrong pair.
+has no shared captured patch, the computed display is based on those stored
+sources, not a patch from another pair or a new observation.
 
 Press `r` to open a modal consent screen. Its **Summary** is strictly decoded from
 the same retained preview bytes whose digest approval uses. It shows the snapshot

@@ -100,3 +100,35 @@ additions/deletions, unsupported/oversized paths, excluded untracked files, froz
 context after live edits, hostile helper configuration, traversal rejection,
 missing artifacts, malformed reports, frozen scenarios, redaction, long lines,
 page bounds, hunk-index limits, stable IDs and deduplicated counts.
+
+## Computed source diffs
+
+For snapshot pairs that do not satisfy `CapturedPair`, `View.Compute(ctx)` builds a
+separate Git-style unified presentation from the two stored source manifests. It
+uses sorted inventory order, three context lines, and a deterministic pure-Go
+Myers line diff. It reads only content-addressed blobs; it never runs Git, shell
+commands, or another process. This is a display fallback, not Git's patch. Its
+navigation offsets have no hunk IDs, and computed hunks are not returned by
+`View.Hunks()` or included in `View.Count()`.
+
+The computation is explicitly bounded:
+
+- A text file pair may use at most 1 MiB combined source bytes and 20,000 combined
+  lines; an individual inventory path is capped at 4 KiB. The total source budget
+  is 8 MiB across the pair's changed known paths.
+- The Myers walk stops after 1,000,000 diagonal visits/line comparisons. A
+  pathological diff that reaches this work limit is shown as
+  `too large to diff here — open both sources`.
+- The generated output is capped at 16 MiB. After that, remaining inventory paths
+  retain their limitation in Changes/source details and the document states that
+  the output bound was reached.
+- Storage independently caps an individual source blob at 16 MiB. Binary
+  classification checks for NUL in the first 8,000 bytes of either side before
+  text diffing. Files with such a NUL display `binary`; mode-only changes display
+  their old/new modes; unknown paths preserve their captured limitation and have
+  no computed hunk.
+
+The shared browser `Load` job performs source reads, diff computation and document
+preparation off the event loop. `task test:computed` covers the applying-diff
+fuzz/property, source and output bounds, real capture/load integration, a bounded
+10-file/20,000-source-line performance fixture, and the payment-change PTY matrix.

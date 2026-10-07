@@ -7,9 +7,21 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/brettinternet/after/internal/rawdiff"
 	"github.com/brettinternet/after/internal/terminal"
 	"github.com/rivo/uniseg"
 )
+
+func (m *Model) overviewChangesLine() string {
+	if m.data == nil || m.data.Diff == nil || m.data.Diff.Origin != rawdiff.ComputedOrigin {
+		return ""
+	}
+	line := fmt.Sprintf("CHANGES · %s · %d paths · +%d −%d lines", m.data.Diff.Origin, len(m.data.Inventory), m.data.Diff.Added, m.data.Diff.Deleted)
+	if m.data.Diff.SourceLimited {
+		line += " · limited inventory"
+	}
+	return line
+}
 
 func (m *Model) inventorySummary() string {
 	if m.data == nil {
@@ -17,7 +29,14 @@ func (m *Model) inventorySummary() string {
 	}
 	paths := len(m.data.Inventory)
 	if m.data.Diff == nil {
-		return fmt.Sprintf("%d paths · no shared captured patch · per-path patch counts unavailable", paths)
+		return fmt.Sprintf("%d paths · no diff available · per-path patch counts unavailable", paths)
+	}
+	if m.data.Diff.Origin == rawdiff.ComputedOrigin {
+		summary := fmt.Sprintf("%s · %d paths · +%d −%d lines", m.data.Diff.Origin, paths, m.data.Diff.Added, m.data.Diff.Deleted)
+		if m.data.Diff.SourceLimited {
+			summary += " · limited inventory"
+		}
+		return summary
 	}
 	summary := fmt.Sprintf("%d paths · %d indexed hunks, all unclassified", paths, len(m.data.Diff.HunkRows))
 	if !m.data.Diff.HunksComplete {
@@ -107,6 +126,8 @@ func (m *Model) inventoryPreviewLines(entry Entry, limit int) []string {
 			}
 			offset = end + 1
 		}
+	} else if m.data.Diff.Origin == rawdiff.ComputedOrigin {
+		lines = append(lines, string(pathDiff(m.data, entry.Name)))
 	} else {
 		lines = append(lines, "No captured patch lines for this path")
 	}
@@ -118,7 +139,11 @@ func (m *Model) inventoryPreviewLines(entry Entry, limit int) []string {
 
 func (m *Model) diffStickyHeader() string {
 	if m.data == nil || m.data.Diff == nil || len(m.data.Diff.Files) == 0 {
-		return m.theme.Render("captured patch · file metadata unavailable", m.width, terminal.Muted, false)
+		origin := "captured patch"
+		if m.data != nil && m.data.Diff != nil {
+			origin = m.data.Diff.Origin
+		}
+		return m.theme.Render(origin+" · file metadata unavailable", m.width, terminal.Muted, false)
 	}
 	fileIndex := -1
 	if m.hex {
@@ -134,9 +159,9 @@ func (m *Model) diffStickyHeader() string {
 		fileIndex = diffPosition(m.data.Diff.Rows, m.top)
 	}
 	if fileIndex < 0 || fileIndex >= len(m.data.Diff.Files) {
-		return m.theme.Render("captured patch · file metadata unavailable", m.width, terminal.Muted, false)
+		return m.theme.Render(m.data.Diff.Origin+" · file metadata unavailable", m.width, terminal.Muted, false)
 	}
-	return m.theme.Render(diffHeader(m.data.Diff.Files[fileIndex], fileIndex, len(m.data.Diff.Files)), m.width, terminal.Strong, false)
+	return m.theme.Render(diffHeader(m.data.Diff.Files[fileIndex], fileIndex, len(m.data.Diff.Files), m.data.Diff.Origin), m.width, terminal.Strong, false)
 }
 
 func (m *Model) diffDocumentRow(rowIndex int) string {

@@ -136,11 +136,21 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 			d.Patch = document("captured patch unavailable; no patch is fabricated", raw.Limits())
 		}
 	} else {
-		message := "No shared captured patch for this pair. AFTER-32 has not computed a source diff. The complete inventory and both captured sources remain available."
-		if limits := raw.Limits(); len(limits) > 0 {
-			message += "\n\nCapture limitations:\n" + strings.Join(limits, "\n")
+		computed, err := raw.Compute(ctx)
+		if err != nil {
+			return nil, err
 		}
-		d.Patch = Section{Name: "no shared captured patch", Content: []byte(message)}
+		inventory = computed.Inventory
+		d.Diff = buildComputedDiff(computed.Raw, computed.Files, computed.HunkOffsets, inventory)
+		for _, entry := range inventory {
+			if entry.Change == "unknown" || len(entry.Limits) > 0 {
+				d.Diff.SourceLimited = true
+				break
+			}
+		}
+		d.Patch = Section{Name: rawdiff.ComputedOrigin, Content: computed.Raw}
+		limits := append(raw.Limits(), computed.Limits...)
+		d.Limits = document("capture and computed diff limits", limits)
 	}
 	counts := map[string][2]int{}
 	if d.Diff != nil {
@@ -165,7 +175,11 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 			candidateMode = item.Candidate.Mode
 		}
 		flags := pathSummary(item, added, deleted)
-		record := inventoryRecord{Path: item.Path, Change: item.Change, PotentialOracle: item.PotentialOracle, Binary: item.Binary, BaseMode: baseMode, CandidateMode: candidateMode, Added: added, Deleted: deleted, Limits: append([]string(nil), item.Limits...)}
+		diffOrigin := ""
+		if d.Diff != nil {
+			diffOrigin = d.Diff.Origin
+		}
+		record := inventoryRecord{Path: item.Path, Change: item.Change, PotentialOracle: item.PotentialOracle, Binary: item.Binary, BaseMode: baseMode, CandidateMode: candidateMode, DiffOrigin: diffOrigin, Added: added, Deleted: deleted, Limits: append([]string(nil), item.Limits...)}
 		sections := []Section{{Name: "Diff", Content: pathDiff(d, item.Path)}}
 		sections = append(sections, sourceSection("Base source", item.Path, item.Base, item.Change, true, item.Limits))
 		sections = append(sections, sourceSection("Candidate source", item.Path, item.Candidate, item.Change, false, item.Limits))
@@ -189,12 +203,25 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 
 func pathDiff(data *Data, path string) []byte {
 	if data.Diff == nil {
-		return []byte("No shared captured patch for this pair. AFTER-32 has not computed a source diff.")
+		return []byte("No diff is available for this pair. The captured inventory and both source sections remain available.")
 	}
 	for _, file := range data.Diff.Files {
 		if file.Path == path {
 			return data.Diff.Raw[file.Start:file.End]
 		}
+	}
+	if data.Diff.Origin == rawdiff.ComputedOrigin {
+		for _, entry := range data.Inventory {
+			if entry.Name == path {
+				if entry.Change == "unknown" {
+					return []byte("Unknown path; no computed diff. Recorded limitation: " + strings.Join(entry.Limits, "; "))
+				}
+				if len(entry.Limits) > 0 {
+					return []byte(strings.Join(entry.Limits, "; "))
+				}
+			}
+		}
+		return []byte("No computed diff lines for this path; both captured sources remain available.")
 	}
 	return []byte("No captured patch lines for this path. The captured inventory and source sections remain available.")
 }

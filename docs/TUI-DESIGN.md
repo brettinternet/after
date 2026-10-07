@@ -1,7 +1,7 @@
 # Review TUI design
 
-**Status: target design. AFTER-21–23, AFTER-28 and AFTER-29 are implemented as
-documented in [TUI.md](TUI.md); AFTER-24–27 and AFTER-30–33 remain target behavior.**
+**Status: target design. AFTER-21–23, AFTER-28, AFTER-29 and AFTER-32 are implemented as
+documented in [TUI.md](TUI.md); AFTER-24–27, AFTER-30–31 and AFTER-33 remain target behavior.**
 This is the design for backlog tasks AFTER-21 to AFTER-33 (milestone M2). The
 command line, including how `after review` launches, is designed in
 [CLI-DESIGN.md](CLI-DESIGN.md). The product
@@ -445,13 +445,22 @@ from the two stored file sets.
 - Labelled `computed from captured sources — not Git's patch` in the sticky header,
   the Overview CHANGES line, and Changes counts. Computed hunks are never counted as
   captured hunks.
-- Pure Go and deterministic, with no subprocess or new dependency. Bounded per file
-  and in total. Past a bound, a path shows
-  `too large to diff here — open both sources`. A NUL byte in the first 8,000 bytes of either side means `binary`.
-  Mode-only changes show `mode <old> → <new>`. Unknown paths keep their limitation
-  and get no diff.
-- A property test checks that applying the computed diff to the base yields the
-  candidate.
+- Pure Go and deterministic, with no subprocess or new dependency. Per changed
+  path, the base+candidate source pair is limited to 1 MiB and 20,000 combined
+  lines; paths are capped at 4 KiB and the whole pair at 8 MiB of source bytes.
+  The Myers edit walk
+  stops at 1,000,000 diagonal/comparison steps. The rendered computed patch is
+  capped at 16 MiB. A source blob read is already capped by storage at 16 MiB;
+  binary classification checks the first 8,000 bytes of either side before text
+  diffing. Paths over a computation/output bound show
+  `too large to diff here — open both sources`; unknown paths retain their recorded
+  limitation and have no computed hunk. Mode-only changes show
+  `mode <old> → <new>`.
+- Computation and document indexing run in the existing background `Load` job, not
+  in the TUI event loop. Computed navigation offsets do not create hunk IDs or
+  change captured `Hunks`/`Count` semantics.
+- A fuzz/property test applies the computed unified diff to the base and checks the
+  candidate bytes, while repeating the same inputs to verify deterministic output.
 
 ## Content viewer
 
