@@ -193,7 +193,7 @@ func TestReadOnlyProjectCommandsDoNotCreateStore(t *testing.T) {
 	id := "sha256:" + strings.Repeat("a", 64)
 	for _, args := range [][]string{{"inspect", id, "--project", project}, {"export", id, "--project", project}, {"review", id, "--project", project}} {
 		code, stdout, stderr := invoke(args, false, "")
-		if code != ExitOperational || stdout != "" || !strings.Contains(stderr, "cannot open private evidence store") {
+		if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "after log lists recent records") {
 			t.Fatalf("%v: exit=%d stdout=%q stderr=%q", args, code, stdout, stderr)
 		}
 		if _, err := os.Stat(filepath.Join(project, ".after")); !errors.Is(err, os.ErrNotExist) {

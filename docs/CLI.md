@@ -25,6 +25,34 @@ recorded capture times; legacy snapshots without an event say the time is unavai
 History lookup limits are shown when reached. No file modification time is used.
 The existing `--json` snapshot and capture response shapes remain unchanged.
 
+## Short IDs and pin heads
+
+Every stored-ID argument accepts a unique prefix of at least four hex characters,
+with or without `sha256:`, in any case. For example, `after inspect A750186B` and
+`after inspect sha256:a750186b` select the same record when unique. JSON retains
+full IDs. Capture's `--base`/`--target` are Git references, not stored IDs.
+
+Resolution searches only kinds valid for that argument: snapshot bindings and
+run pairs search snapshots; compare/pin and review's `--receipt` search receipts;
+headless review searches pin revisions. Inspect/export search snapshots,
+receipts, comparisons, reports and artifacts. TUI evidence searches comparisons,
+receipts, reports and pins. Missing matches exit 2 naming the searched kinds;
+ambiguity exits 2 with at most ten short IDs, kinds and sanitized one-line
+summaries. Use more characters to disambiguate. The no-match guidance names
+`after log`, whose listing command is scheduled for AFTER-37, not implemented yet.
+Lookup fails explicitly on unsafe storage or exceeded scan/read limits; it never
+chooses from a partial namespace (10,000 directory entries, 32 MiB of matching
+object data per lookup).
+
+Pin heads are computed from immutable histories, including every fork, without a
+stored latest pointer. `review OLD_REVISION` still opens exactly that revision;
+readable output names its newer descendant heads without selecting them. Head
+lookup is bounded to 512 revisions and 16 MiB of pin records. When unavailable,
+readable output says so while retaining the requested revision. JSON is unchanged.
+
+`--approve` is deliberately **not** a prefix: it requires the full lowercase
+`sha256:` digest with all 64 hex characters, copied from the exact preview.
+
 ## Checkout root and private storage
 
 Project commands resolve the checkout root by checking for a `.git` directory or worktree `.git` file in the selected directory and its parents. The default selected directory is the invocation directory; `--project`, `AFTER_PROJECT`, or the YAML `project` setting can select another path inside a checkout. Resolution is filesystem-only and runs no Git command. It is shared by capture, import, inspect, compare, export, run, pin and review. The capture API itself still requires its caller to pass the resolved repository root explicitly.

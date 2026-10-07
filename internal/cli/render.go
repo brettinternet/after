@@ -222,7 +222,19 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		if err := json.Unmarshal(raw, &view); err != nil {
 			return nil, err
 		}
-		return reviewLines(state, view), nil
+		lines := reviewLines(state, view)
+		if inspection, ok := original.(reviewInspection); ok {
+			if inspection.HeadsUnavailable {
+				lines = append(lines, textLine("Newer heads unavailable: pin history is corrupt or exceeds lookup limits; showing the requested revision.", terminal.Attention))
+			} else if len(inspection.NewerHeads) > 0 {
+				lines = append(lines, textLine("Historical revision — newer heads (not selected):", terminal.Attention))
+				for _, id := range inspection.NewerHeads {
+					lines = append(lines, readableRow("Head", shortID(id)))
+				}
+				lines = addIDs(lines, inspection.NewerHeads...)
+			}
+		}
+		return lines, nil
 	case "execution_preview":
 		var preview struct {
 			Authorization string          `json:"authorization_digest"`

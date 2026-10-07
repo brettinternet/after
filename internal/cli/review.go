@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"os"
 	"strings"
 
 	"github.com/brettinternet/after/internal/evidence"
@@ -20,7 +22,7 @@ func pinCommand(state *invocation) *ucli.Command {
 		if err := requireArgs(ctx, 1); err != nil {
 			return err
 		}
-		if !validDigest(ctx.Args().First()) || strings.TrimSpace(ctx.String("expectation")) == "" || !reviewReason(ctx.String("reason")) || len(ctx.String("expectation")) > 4096 || (ctx.String("scope") != string(evidence.FiniteExample) && ctx.String("scope") != string(evidence.HumanIntent)) {
+		if strings.TrimSpace(ctx.String("expectation")) == "" || !reviewReason(ctx.String("reason")) || len(ctx.String("expectation")) > 4096 || (ctx.String("scope") != string(evidence.FiniteExample) && ctx.String("scope") != string(evidence.HumanIntent)) {
 			return invalid("pin requires receipt ID, expectation, explicit scope, and bounded reason")
 		}
 		cfg, err := configFlags(ctx)
@@ -32,7 +34,11 @@ func pinCommand(state *invocation) *ucli.Command {
 			return operational("cannot open private evidence store")
 		}
 		defer s.Close()
-		p, err := review.Create(s, evidence.Digest(ctx.Args().First()), ctx.String("expectation"), evidence.PinScope(ctx.String("scope")), ctx.String("reason"))
+		id, err := resolveID(s, ctx.Args().First(), "receipt")
+		if err != nil {
+			return err
+		}
+		p, err := review.Create(s, id, ctx.String("expectation"), evidence.PinScope(ctx.String("scope")), ctx.String("reason"))
 		if err != nil {
 			return invalid("cannot pin this receipt with the requested scope")
 		}
@@ -66,10 +72,6 @@ func reviewCommand(state *invocation) *ucli.Command {
 				return invalid("browser flags require --tui")
 			}
 		}
-		id := evidence.Digest(ctx.Args().First())
-		if !validDigest(string(id)) {
-			return invalid("invalid pin revision ID")
-		}
 		actions := 0
 		for _, flag := range []string{"select", "receipt", "accept"} {
 			if ctx.IsSet(flag) {
@@ -80,14 +82,11 @@ func reviewCommand(state *invocation) *ucli.Command {
 			return invalid("choose at most one review action, with a bounded reason")
 		}
 		if ctx.IsSet("select") {
-			if !validDigest(ctx.String("select")) || (ctx.String("mode") != string(evidence.OriginalBase) && ctx.String("mode") != string(evidence.FollowUp)) {
+			if ctx.String("mode") != string(evidence.OriginalBase) && ctx.String("mode") != string(evidence.FollowUp) {
 				return invalid("selection requires snapshot ID and explicit comparison mode")
 			}
 		} else if ctx.IsSet("mode") {
 			return invalid("mode requires --select")
-		}
-		if ctx.IsSet("receipt") && !validDigest(ctx.String("receipt")) {
-			return invalid("invalid receipt ID")
 		}
 		cfg, err := configFlags(ctx)
 		if err != nil {
@@ -95,9 +94,29 @@ func reviewCommand(state *invocation) *ucli.Command {
 		}
 		s, err := store.Open(cfg.Project, actions > 0, nil)
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return noIDMatch(ctx.Args().First(), "pin")
+			}
 			return operational("cannot open private evidence store")
 		}
 		defer s.Close()
+		id, err := resolveID(s, ctx.Args().First(), "pin")
+		if err != nil {
+			return err
+		}
+		var selected, receipt evidence.Digest
+		if ctx.IsSet("select") {
+			selected, err = resolveID(s, ctx.String("select"), "snapshot")
+			if err != nil {
+				return err
+			}
+		}
+		if ctx.IsSet("receipt") {
+			receipt, err = resolveID(s, ctx.String("receipt"), "receipt")
+			if err != nil {
+				return err
+			}
+		}
 		if actions == 0 {
 			return writeReview(state, s, id)
 		}
@@ -108,7 +127,7 @@ func reviewCommand(state *invocation) *ucli.Command {
 			if err != nil || old.Scope == "" {
 				return invalid("pin revision unavailable or legacy scope is unknown")
 			}
-			pair := evidence.SnapshotPair{Base: old.BasisSnapshots.Base, Candidate: evidence.Digest(ctx.String("select"))}
+			pair := evidence.SnapshotPair{Base: old.BasisSnapshots.Base, Candidate: selected}
 			if evidence.ReviewMode(ctx.String("mode")) == evidence.FollowUp {
 				pair.Base = old.History[len(old.History)-1].Review.Target.Snapshots.Candidate
 			}
@@ -126,7 +145,7 @@ func reviewCommand(state *invocation) *ucli.Command {
 			}
 			p, err = review.Select(s, id, target, evidence.ReviewMode(ctx.String("mode")), ctx.String("reason"))
 		case ctx.IsSet("receipt"):
-			p, err = review.Attach(s, id, evidence.Digest(ctx.String("receipt")), ctx.String("reason"))
+			p, err = review.Attach(s, id, receipt, ctx.String("reason"))
 		case ctx.Bool("accept"):
 			p, err = review.Accept(s, id, ctx.String("reason"))
 		}
@@ -142,5 +161,15 @@ func writeReview(state *invocation, s *store.Store, id evidence.Digest) error {
 	if err != nil {
 		return invalid("pin revision or its bound evidence is unavailable")
 	}
-	return writeResult(state, "review", v)
+	if state.jsonOutput || state.forceJSON {
+		return writeResult(state, "review", v)
+	}
+	heads, headErr := review.NewerHeads(s, v.Pin)
+	return writeResult(state, "review", reviewInspection{View: v, NewerHeads: heads, HeadsUnavailable: headErr != nil})
+}
+
+type reviewInspection struct {
+	review.View
+	NewerHeads       []evidence.Digest `json:"-"`
+	HeadsUnavailable bool              `json:"-"`
 }

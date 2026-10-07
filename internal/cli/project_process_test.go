@@ -112,7 +112,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		code int
 	}{
 		{"capture", captureArgs, ExitOK},
-		{"import", []string{"import", report, "--producer", "fixture"}, ExitOK},
+		{"import", []string{"import", report, "--producer", "fixture", "--snapshot", candidateID}, ExitOK},
 		{"inspect-pair", []string{"inspect", candidateID, "--base", baseID}, ExitOK},
 		{"inspect-snapshot", []string{"inspect", candidateID}, ExitOK},
 		{"inspect-receipt", []string{"inspect", string(receiptID)}, ExitOK},
@@ -124,9 +124,20 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"run", []string{"run", baseID, candidateID, "--interactive=false"}, ExitDenied},
 		{"pin", []string{"pin", string(receiptID), "--expectation", "finite synthetic review", "--scope", "human_intent", "--reason", "process-mode fixture"}, ExitOK},
 		{"review", []string{"review", string(pinned.Data.Pin.ID)}, ExitOK},
+		{"review-select", []string{"review", string(pinned.Data.Pin.ID), "--select", candidateID, "--mode", "original_base", "--reason", "prefix selection"}, ExitOK},
+		{"review-receipt", []string{"review", string(pinned.Data.Pin.ID), "--receipt", string(receiptID), "--reason", "prefix attachment"}, ExitOK},
+		{"run-short-approval", []string{"run", "--plan-file", "not-read", "--approve", "abcd"}, ExitInvalid},
+		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitInvalid},
 		{"config", []string{"config"}, ExitOK},
 	}
 	for _, command := range commands {
+		// Exercise every ID argument/flag with uppercase optional-scheme prefixes
+		// in real 80-column terminals and OS pipes, not just in-memory writers.
+		for i, arg := range command.args {
+			if validDigest(arg) {
+				command.args[i] = "SHA256:" + prefixFor(evidence.Digest(arg))
+			}
+		}
 		for _, noColor := range []bool{false, true} {
 			for _, mode := range []string{"pipe", "pty"} {
 				t.Run(command.name+"/no-color="+map[bool]string{true: "yes", false: "no"}[noColor]+"/"+mode, func(t *testing.T) {
@@ -156,7 +167,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 					if command.name == "inspect-snapshot" && noColor && mode == "pty" {
 						t.Logf("80-column PTY snapshot inspect excerpt: %s", trimExcerpt(transcript))
 					}
-					if command.name == "compare" && !noColor && mode == "pipe" {
+					if (command.name == "compare" || command.name == "review" || command.name == "run-short-approval" || command.name == "inspect-no-match") && !noColor && mode == "pipe" {
 						t.Logf("pipe diagnostic excerpt: %s", trimExcerpt(transcript))
 					}
 					if _, err := os.Stat(filepath.Join(project, ".after", ".gitignore")); err != nil {

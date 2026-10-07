@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/brettinternet/after/internal/browser"
-	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
@@ -16,7 +15,7 @@ import (
 )
 
 func browseCommand(state *invocation, ctx *ucli.Context) error {
-	if !state.tty || !validDigest(ctx.Args().First()) || !validDigest(ctx.String("base")) {
+	if !state.tty || !ctx.IsSet("base") {
 		return invalid("--tui requires a terminal, candidate ID and --base snapshot ID")
 	}
 	for _, flag := range []string{"select", "mode", "receipt", "accept", "reason"} {
@@ -28,13 +27,6 @@ func browseCommand(state *invocation, ctx *ucli.Context) error {
 	if len(ids) > browser.MaxEvidence {
 		return invalid("at most 32 evidence IDs")
 	}
-	selection := browser.Selection{Pair: evidence.SnapshotPair{Base: evidence.Digest(ctx.String("base")), Candidate: evidence.Digest(ctx.Args().First())}}
-	for _, id := range ids {
-		if !validDigest(id) {
-			return invalid("invalid evidence ID")
-		}
-		selection.Evidence = append(selection.Evidence, evidence.Digest(id))
-	}
 	if ctx.IsSet("import-file") != ctx.IsSet("producer") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
 		return invalid("TUI import requires file and bounded caller producer")
 	}
@@ -42,7 +34,10 @@ func browseCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
-	selection.Project = cfg.Project
+	selection, err := resolveBrowserSelection(cfg.Project, ctx.String("base"), ctx.Args().First(), ids)
+	if err != nil {
+		return err
+	}
 	actions := &browser.Actions{Project: cfg.Project, Repetitions: cfg.Repetitions, Limits: sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes}, Docker: sandbox.Docker{Binary: cfg.DockerBinary, Host: cfg.DockerHost}}
 	jobs := browser.Jobs{Actions: actions}
 	if ctx.IsSet("import-file") {

@@ -237,12 +237,6 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		return err
 	}
 	var snapshot evidence.Digest
-	if ctx.IsSet("snapshot") && ctx.String("snapshot") != "" {
-		if !validDigest(ctx.String("snapshot")) {
-			return invalid("invalid snapshot ID")
-		}
-		snapshot = evidence.Digest(ctx.String("snapshot"))
-	}
 	file, err := openInput(ctx.Args().Get(0))
 	if err != nil {
 		return operational("cannot read Go test report file")
@@ -253,9 +247,10 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
-	if snapshot != "" {
-		if _, err := store.Get[evidence.Snapshot](s, snapshot); err != nil {
-			return invalid("snapshot ID is unavailable")
+	if ctx.IsSet("snapshot") {
+		snapshot, err = resolveID(s, ctx.String("snapshot"), "snapshot")
+		if err != nil {
+			return err
 		}
 	}
 	stopNotice := startElapsedNotice(state, "import", time.Second)
@@ -296,19 +291,29 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	if err != nil {
 		return err
 	}
-	if !validDigest(ctx.Args().Get(0)) {
-		return invalid("invalid stable ID")
-	}
 	options, err := inspectionOptions(ctx)
 	if err != nil {
 		return err
 	}
 	s, err := store.Open(cfg.Project, false, nil)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return noIDMatch(ctx.Args().Get(0), inspectKinds...)
+		}
 		return operational("cannot open private evidence store for reading")
 	}
 	defer s.Close()
-	id := evidence.Digest(ctx.Args().Get(0))
+	id, err := resolveID(s, ctx.Args().Get(0), inspectKinds...)
+	if err != nil {
+		return err
+	}
+	if ctx.IsSet("base") {
+		base, err := resolveID(s, ctx.String("base"), "snapshot")
+		if err != nil {
+			return err
+		}
+		options.base = string(base)
+	}
 	kind := "inspection"
 	if exporting {
 		kind = "export"
@@ -458,9 +463,6 @@ func inspectionOptions(ctx *ucli.Context) (inspectOptions, error) {
 	}
 	if options.diffOffset < 0 || options.diffSize < 0 || options.diffSize > rawdiff.MaxPageBytes || options.inventoryOffset < 0 || options.inventoryLimit < 1 || options.inventoryLimit > maxInventoryPageSize || options.cardOffset < 0 || options.cardLimit < 1 || options.cardLimit > maxReportPageSize {
 		return inspectOptions{}, invalid("inspection page is outside supported bounds")
-	}
-	if options.base != "" && !validDigest(options.base) {
-		return inspectOptions{}, invalid("invalid base snapshot ID")
 	}
 	return options, nil
 }
@@ -660,10 +662,6 @@ func compareCommand(state *invocation, ctx *ucli.Context) error {
 	if err := requireArgs(ctx, 1); err != nil {
 		return err
 	}
-	id := ctx.Args().Get(0)
-	if !validDigest(id) {
-		return invalid("invalid receipt ID")
-	}
 	cfg, err := configFlags(ctx)
 	if err != nil {
 		return err
@@ -673,12 +671,11 @@ func compareCommand(state *invocation, ctx *ucli.Context) error {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
-	if _, ok, err := optionalGet[evidence.Receipt](s, evidence.Digest(id)); err != nil {
-		return operational("receipt record is corrupt or unavailable")
-	} else if !ok {
-		return invalid("receipt ID was not found")
+	id, err := resolveID(s, ctx.Args().Get(0), "receipt")
+	if err != nil {
+		return err
 	}
-	comparisonRecord, err := compare.Run(s, evidence.Digest(id))
+	comparisonRecord, err := compare.Run(s, id)
 	if err != nil {
 		return operational("comparison could not be persisted")
 	}
@@ -704,8 +701,8 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	planPath := strings.TrimSpace(ctx.String("plan-file"))
 	planOut := strings.TrimSpace(ctx.String("plan-out"))
 	approvalSet := ctx.IsSet("approve") && strings.TrimSpace(ctx.String("approve")) != ""
-	if ctx.IsSet("approve") && !approvalSet {
-		return invalid("--approve requires a SHA-256 authorization digest")
+	if ctx.IsSet("approve") && !validDigest(ctx.String("approve")) {
+		return invalid("--approve requires the full digest: --approve sha256:<64 lowercase hex characters>; copy the authorization digest from the preview")
 	}
 	if planPath != "" && planOut != "" {
 		return invalid("--plan-file cannot be combined with --plan-out")
@@ -718,18 +715,8 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	} else if ctx.Args().Len() != 2 {
 		return invalid("run requires two snapshot IDs or --plan-file")
 	}
-	if planPath == "" {
-		for _, arg := range ctx.Args().Slice() {
-			if !validDigest(arg) {
-				return invalid("invalid snapshot ID")
-			}
-		}
-	}
 	if approvalSet && planPath == "" {
 		return invalid("noninteractive approval requires --plan-file to reconstruct the exact saved preview")
-	}
-	if approvalSet && !validDigest(ctx.String("approve")) {
-		return invalid("invalid authorization digest")
 	}
 	if planOut != "" && ctx.IsSet("approve") {
 		return invalid("--plan-out is only valid when preparing a preview")
@@ -750,13 +737,15 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 			return invalid("saved execution plan is invalid or no longer matches stored snapshots")
 		}
 	} else {
-		pair := evidence.SnapshotPair{Base: evidence.Digest(ctx.Args().Get(0)), Candidate: evidence.Digest(ctx.Args().Get(1))}
-		if _, err := store.Get[evidence.Snapshot](s, pair.Base); err != nil {
-			return invalid("base snapshot ID is unavailable")
+		base, err := resolveID(s, ctx.Args().Get(0), "snapshot")
+		if err != nil {
+			return err
 		}
-		if _, err := store.Get[evidence.Snapshot](s, pair.Candidate); err != nil {
-			return invalid("candidate snapshot ID is unavailable")
+		candidate, err := resolveID(s, ctx.Args().Get(1), "snapshot")
+		if err != nil {
+			return err
 		}
+		pair := evidence.SnapshotPair{Base: base, Candidate: candidate}
 		plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
 		if err != nil {
 			return operational("cannot prepare the bounded payment execution plan")

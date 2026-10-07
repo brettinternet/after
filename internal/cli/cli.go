@@ -78,7 +78,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
-		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports only the frozen offline payment experiment with exact consent.\n   No general application adapter, GitHub sync, or universal behavior guarantee.",
+		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports only the frozen offline payment experiment with exact consent.\n   No general application adapter, GitHub sync, or universal behavior guarantee.\n   Stored IDs accept unique 4+ hex prefixes (optional sha256:, any case).\n   --approve requires the full lowercase sha256: digest; prefixes never authorize execution.",
 		Version:                   Version,
 		Writer:                    stdout,
 		ErrWriter:                 stderr,
@@ -309,7 +309,7 @@ func outputBefore(state *invocation) func(*ucli.Context) error {
 	return func(ctx *ucli.Context) error {
 		state.jsonOutput = ctx.Bool("json")
 		state.forceJSON = ctx.Command != nil && ctx.Command.Name == "export"
-		return nil
+		return validateIDInputs(ctx)
 	}
 }
 

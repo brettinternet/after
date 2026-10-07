@@ -19,6 +19,13 @@ operation; an older ID deliberately opens historical state, never an implicit
 "latest" selection. Revisions contain the entire bounded chronological history;
 no mutable latest-pointer, file watcher, or title-based association exists.
 Branches from an old revision are explicit historical forks, not overwrites.
+`review.Heads` derives revisions that no other stored revision extends, retaining
+all forks. It compares the exact original basis and history events, not titles or
+timestamps. Readable inspection of an older revision lists its newer descendant
+heads without switching the requested revision; JSON remains unchanged. Each
+lookup scans at most 512 revisions and 16 MiB of pin records. Corruption or a
+reached bound is reported as unavailable, never as a complete head list.
+All CLI record IDs also accept [unique prefixes](CLI.md#short-ids-and-pin-heads).
 The first event binds the original scenario, receipt and snapshot pair. Neither
 later selection nor rerun can change the expectation or that original basis.
 
