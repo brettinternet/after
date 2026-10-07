@@ -98,7 +98,7 @@ var keyMap = []keyBinding{
 	{keys: []string{"p"}, hint: "p pin", label: "Pin the selected measured count", group: "Review", action: keyPin, contexts: []keyContext{contextOverview}, priority: 8, disabled: canPin},
 	{keys: []string{"a"}, hint: "a accept pin", label: "Accept a pin, not a snapshot", group: "Review", action: keyAcceptPin, contexts: allKeyContexts, priority: 10, disabled: func(*Model) string { return "pin acceptance is not available in this review yet" }},
 	{keys: []string{"r"}, hint: "r rerun", label: "Prepare an exact rerun preview; nothing runs", group: "Review", action: keyPreview, contexts: browseKeyContexts, priority: 8, disabled: canPreview},
-	{keys: []string{"y"}, hint: "y approve once", label: "Run this exact preview once", group: "Consent", action: keyApprove, contexts: []keyContext{contextPlan}, priority: 4, disabled: canApprove},
+	{keys: []string{"y"}, hint: "y approve", label: "Run this exact preview once", group: "Consent", action: keyApprove, contexts: []keyContext{contextPlan}, priority: 4, disabled: canApprove},
 	{keys: []string{"n"}, hint: "n deny", label: "Deny this preview without execution", group: "Consent", action: keyDeny, contexts: []keyContext{contextPlan}, priority: 5},
 	{keys: []string{"s"}, hint: "s session IDs", label: "Inspect restart references", group: "Session", action: keySession, contexts: []keyContext{contextOverview, contextChanges, contextDiff, contextInspector, contextHelp}, priority: 10, disabled: needsData},
 	{keys: []string{"x"}, hint: "x cancel", label: "Cancel an active owned job", group: "Jobs", action: keyCancel, contexts: allKeyContexts, priority: 11, disabled: canCancel},
@@ -197,7 +197,10 @@ func canMoveView(m *Model) string {
 		return ""
 	}
 	if screen == "plan" {
-		return "this preview has no other section"
+		if len(m.sections()) < 2 {
+			return "this preview has no other section"
+		}
+		return ""
 	}
 	if screen == "examples" || screen == "inventory" || screen == "patch" {
 		if m.data == nil {
@@ -268,6 +271,9 @@ func canPan(m *Model) string {
 func canHex(m *Model) string {
 	if m.doc == nil {
 		return "no document is open"
+	}
+	if m.screen == "plan" && m.section == 0 && !m.summaryUnavailable {
+		return "open Exact plan to inspect the approved preview bytes"
 	}
 	return ""
 }
@@ -359,6 +365,13 @@ func (m *Model) keyHints() string {
 		return "? help · q quit"
 	}
 	bindings := append([]keyBinding(nil), keyMap...)
+	if m.screen == "plan" {
+		for i := range bindings {
+			if bindings[i].action == keyApprove || bindings[i].action == keyDeny || bindings[i].action == keyHex {
+				bindings[i].priority = 3
+			}
+		}
+	}
 	// The static table is already priority ordered; stable sorting makes that
 	// property explicit if neighboring entries are later added.
 	for i := 1; i < len(bindings); i++ {
@@ -370,6 +383,9 @@ func (m *Model) keyHints() string {
 	used := 0
 	limit := m.width
 	for _, binding := range bindings {
+		if m.screen == "plan" && m.width < 100 && binding.action == keyPrevious {
+			continue
+		}
 		if m.keyReason(binding, false) != "" {
 			continue
 		}

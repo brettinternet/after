@@ -175,6 +175,7 @@ func TestGoldenViews(t *testing.T) {
 			})
 		}
 	}
+	consentGoldenViews(t)
 }
 
 func TestFrameThemeSequences(t *testing.T) {

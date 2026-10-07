@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -33,6 +34,10 @@ type loopPTY struct {
 }
 
 func startLoopPTY(t *testing.T, args []string) *loopPTY {
+	return startLoopPTYSize(t, args, 160, 30)
+}
+
+func startLoopPTYSize(t *testing.T, args []string, width, height int) *loopPTY {
 	t.Helper()
 	p := &loopPTY{t: t, chunks: make(chan string, 512), done: make(chan int, 1)}
 	var err error
@@ -40,7 +45,7 @@ func startLoopPTY(t *testing.T, args []string) *loopPTY {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = pty.Setsize(p.master, &pty.Winsize{Rows: 30, Cols: 160}); err != nil {
+	if err = pty.Setsize(p.master, &pty.Winsize{Rows: uint16(height), Cols: uint16(width)}); err != nil {
 		t.Fatal(err)
 	}
 	p.before, err = term.GetState(int(p.slave.Fd()))
@@ -83,6 +88,7 @@ func startLoopPTY(t *testing.T, args []string) *loopPTY {
 }
 func (p *loopPTY) send(keys string) {
 	p.t.Helper()
+	p.unread.Reset()
 	if _, err := p.master.Write([]byte(keys)); err != nil {
 		p.t.Fatal(err)
 	}
@@ -91,8 +97,10 @@ func (p *loopPTY) expect(want string) {
 	p.t.Helper()
 	deadline := time.After(4 * time.Minute)
 	for {
-		if strings.Contains(p.unread.String(), want) {
+		if index := strings.Index(p.unread.String(), want); index >= 0 {
+			remaining := p.unread.String()[index+len(want):]
 			p.unread.Reset()
+			p.unread.WriteString(remaining)
 			return
 		}
 		select {
@@ -139,6 +147,60 @@ func (p *loopPTY) finish() (browser.Selection, []evidence.Digest) {
 		p.t.Fatal(err)
 	}
 	return session.Selection, session.Results
+}
+
+func TestReviewConsentPTY(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "payment")
+	fixtureCommits(t, project)
+	actions := &browser.Actions{Project: project, Repetitions: 1, Limits: sandbox.Limits{Seconds: 180, OutputBytes: 65536}}
+	pair, err := actions.Capture(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions.Close()
+	config := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(config, []byte("repetitions: 1\nrun_seconds: 180\noutput_bytes: 65536\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"review", string(pair.Candidate), "--tui", "--base", string(pair.Base), "--project", project, "--config", config}
+	for _, variant := range []struct {
+		width, height int
+		noColor       bool
+	}{{120, 40, false}, {120, 40, true}, {80, 24, false}, {80, 24, true}} {
+		name := fmt.Sprintf("%dx%d-no-color-%t", variant.width, variant.height, variant.noColor)
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TERM", "xterm-256color")
+			if variant.noColor {
+				t.Setenv("NO_COLOR", "1")
+			} else {
+				t.Setenv("NO_COLOR", "")
+			}
+			p := startLoopPTYSize(t, args, variant.width, variant.height)
+			p.expect("AFTER · payment")
+			p.send("r")
+			p.expect("Run this exact plan?")
+			p.expect("Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1")
+			p.send("G")
+			p.expect("Container limits")
+			p.send("g")
+			p.send("\t")
+			p.expect("Exact plan")
+			p.expect("version")
+			transcript := p.transcript.String()
+			if variant.noColor {
+				if strings.Contains(transcript, "\x1b[7m[Summary]") {
+					t.Fatal("NO_COLOR PTY emitted theme reverse video")
+				}
+			} else if !strings.Contains(transcript, "\x1b[7m[Summary]") {
+				t.Fatal("color PTY did not style the active Summary section")
+			}
+			_, results := p.finish()
+			if len(results) != 0 {
+				t.Fatalf("quitting consent unexpectedly attached run results: %v", results)
+			}
+			t.Logf("PTY %dx%d NO_COLOR=%t: Run this exact plan? · Summary · Runs 2×2×1=4; Tab Exact plan · q denied; terminal restored", variant.width, variant.height, variant.noColor)
+		})
+	}
 }
 
 // This opt-in test uses real Docker observations, not manufactured receipt flags.
@@ -230,12 +292,12 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p = startLoopPTY(t, args(sel))
 	p.expect("[STALE]")
 	p.send("r")
-	p.expect("exact execution preview")
+	p.expect("Run this exact plan?")
 	p.send("n")
 	p.expect("Execution denied; no project execution")
 	// A second preview needs new consent; n did not execute or attach anything.
 	p.send("r")
-	p.expect("exact execution preview")
+	p.expect("Run this exact plan?")
 	p.send("y")
 	p.expect("Authorized run active")
 	responsive := time.Now()
@@ -254,7 +316,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("12h same-key retry · provider requests 1 → 2")
 	// Real authorized cancellation persists an incomplete result, not equality.
 	p.send("r")
-	p.expect("exact execution preview")
+	p.expect("Run this exact plan?")
 	p.send("y")
 	p.expect("Authorized run active")
 	p.send("x")

@@ -147,7 +147,10 @@ func (m *Model) cursor() *int {
 }
 func (m *Model) sections() []Section {
 	if m.screen == "plan" {
-		return []Section{{Name: "exact execution preview; y approve once / n deny", Content: m.preview}}
+		if m.summaryUnavailable {
+			return []Section{{Name: "Exact plan", Content: m.preview}}
+		}
+		return []Section{{Name: "Summary", Content: m.summary}, {Name: "Exact plan", Content: m.preview}}
 	}
 	if m.data == nil {
 		return nil
@@ -283,6 +286,11 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 	}
 	switch binding.action {
 	case keyQuit:
+		if m.screen == "plan" || m.screen == "help" && m.helpFrom == "plan" {
+			m.invalidatePlan()
+			m.screen, m.helpFrom = "examples", ""
+			m.status = "Execution denied; no project execution"
+		}
 		m.cancel()
 		return tea.Quit
 	case keyHelp:
@@ -582,12 +590,48 @@ func (m *Model) tabBar() string {
 	return line.String()
 }
 
+func (m *Model) planBreadcrumb() string {
+	const title = "Run this exact plan?"
+	var line strings.Builder
+	remaining := m.width
+	appendStyled := func(text string, style terminal.Style) bool {
+		if remaining == 0 {
+			return false
+		}
+		width := min(uniseg.StringWidth(text), remaining)
+		line.WriteString(m.theme.Render(text, width, style, false))
+		remaining -= width
+		return width == uniseg.StringWidth(text)
+	}
+	if !appendStyled(title, terminal.Strong) {
+		return line.String()
+	}
+	for index, section := range m.sections() {
+		if !appendStyled("  ", terminal.Plain) {
+			break
+		}
+		label := section.Name
+		if section.Name == "Exact plan" {
+			label += " " + previewSize(len(m.preview))
+		}
+		style := terminal.Plain
+		if index == m.section {
+			label = "[" + label + "]"
+			style = terminal.Reverse
+		}
+		if !appendStyled(label, style) {
+			break
+		}
+	}
+	return line.String()
+}
+
 func (m *Model) breadcrumb() string {
 	if m.screen == "help" {
 		return m.theme.Render("Help", m.width, terminal.Strong, false)
 	}
 	if m.screen == "plan" {
-		return m.theme.Render("Review › Exact execution preview", m.width, terminal.Strong, false)
+		return m.planBreadcrumb()
 	}
 	if m.screen != "inspector" {
 		return ""
@@ -699,6 +743,9 @@ func (m *Model) View() string {
 			}
 			add(fmt.Sprintf("Section %d/%d | %d stored bytes | %s | pan %d", m.section+1, len(sections), total, mode, m.left))
 			data(section.Name)
+			if m.screen == "plan" && m.summaryUnavailable {
+				add("Summary unavailable; exact preview bytes remain unchanged")
+			}
 			if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
 				body = append(body, m.diffStickyHeader())
 			}

@@ -4,7 +4,7 @@
 It does not run Git, import a report, build code or contact Docker on open.
 The existing headless `review <pin-revision-id>` remains unchanged.
 The responsive frame and contextual key map from AFTER-23 are implemented; the
-remaining redesign (AFTER-24–33) is specified in [TUI-DESIGN.md](TUI-DESIGN.md).
+remaining redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after capture --project /path/to/project
@@ -189,13 +189,24 @@ The original base stays selected even if HEAD has moved. When the selected pair
 has no shared captured patch, the patch page says so; complete stored inventory
 and both captured sources remain available, not a patch for the wrong pair.
 
-Press `r`, continuously inspect the complete exact plan (images, inputs, argv,
-mounts, offline network and resource limits), then `y` to approve it once or
-`n`/Escape to deny. `b` switches to exact hex when needed. Paste cannot authorize
-execution. A new preview or accepted snapshot invalidates old consent.
-Execution reconstructs the exact preview before checking its digest. Docker settings
-must be supplied explicitly as for the [headless run command](CLI.md); configuration
-never grants consent, and there is no host fallback. `x` cancels the run and retains
+Press `r` to open a modal consent screen. Its **Summary** is strictly decoded from
+the same retained preview bytes whose digest approval uses. It shows the snapshot
+pair; sides × cases × repetitions and concurrency; build/app argv and environment;
+and every distinct nested image, topology, mount, Docker policy, and limit value.
+Values are JSON-escaped data copied from the decoded preview; only counts are
+derived. Unknown nested fields or malformed previews show **Exact plan** with
+“summary unavailable”; the preview bytes and digest are unchanged. Tab/Shift+Tab
+switch between Summary and Exact plan. Exact plan uses the content viewer and
+`b` opens its exact-byte hex view.
+
+Consent is modal: only `y`, `n`, Esc, Tab/Shift+Tab, scrolling, `b`, `?`, `q`, and
+Ctrl-C act; search and other review actions are unavailable. `y` approves the
+retained bytes once, `n` and Esc deny, and quitting denies. Paste never authorizes.
+The selected pair and existing idle/action and invalidation checks still gate
+approval: a new preview or accepted snapshot invalidates old consent. Execution
+reconstructs the exact preview before checking its digest. Docker settings must be
+supplied explicitly as for the [headless run command](CLI.md); configuration never
+grants consent, and there is no host fallback. `x` cancels an active run and retains
 its incomplete receipt. Success adds the real comparison without accepting behavior.
 Late results stay at their originating pair and cannot replace the selected result.
 
@@ -213,8 +224,8 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
 
 ## Verification
 
-- `mise exec -- task test:views`: deterministic Changes and Diff goldens at 120×40,
-  80×24, and 40×12, alongside the existing Overview views.
+- `mise exec -- task test:views`: deterministic consent Summary and Changes/Diff
+  goldens at 120×40 and 80×24, alongside the existing Overview views through 40×12.
 - `mise exec -- task test:terminal`: real Git captures, full inventory, immutable
   source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, Changes/Diff navigation and summaries, responsive cancellation and persisted denied-run receipts, plus terminal foundation tests. The 100,250-line captured patch is measured against the terminal per-event budgets.
 - `mise exec -- task test:terminal` also drives the browser through real PTYs at
@@ -222,7 +233,9 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
   restoration, and safe styling.
 - `mise exec -- task test:cli`: actual CLI capture/import followed by PTY browsing,
   inspector/diff/help, background capture/import, 32×8 resize and termios,
-  alternate-screen and cursor restoration. No payload terminal controls escape.
+  alternate-screen and cursor restoration. Consent also runs in real PTYs at 120×40
+  and 80×24, with and without `NO_COLOR`, checking Summary, Exact plan, quit-denies,
+  styling, and terminal restoration. No payload terminal controls escape.
 - `mise exec -- task tui:proof` with explicit `AFTER_DOCKER_BINARY` and
   `AFTER_DOCKER_HOST`: real offline payment execution and PTY-driven inspect,
   raw diff, one-request pin, restart, retention edit, capture acceptance, reopening,

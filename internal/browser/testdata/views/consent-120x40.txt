@@ -1,0 +1,22 @@
+AFTER · payment · base aaaaaaaa (source loading) → candidate bbbbbbbb (source loading)
+Run this exact plan?  [Summary]  Exact plan 10.7 KiB
+Section 1/2 | 1634 stored bytes | text | pan 0
+data | Summary
+ 1 │ Snapshots: {"base":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","candidate":"sha256:b…
+ 2 │ Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1
+ 3 │ Build argv: ["/usr/local/go/bin/go","build","-trimpath","-o","/work/app","./app"]
+ 4 │ App argv: ["/work/app","http://127.0.0.1:18081","http://127.0.0.1:18082"]
+ 5 │ App environment: ["GOMAXPROCS=2"]
+ 6 │ Preparation: "copy bounded regular files to /input; commit input-only image; run read-only"
+ 7 │ Container snapshots: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | "sha256:ccccccccc…
+ 8 │ Input archives: "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+ 9 │ Container argv: ["/usr/local/go/bin/go","run","/input/after-launch.go"] | ["/usr/local/go/bin/go","run","/input/ob…
+10 │ Container environment: ["PATH=/usr/local/go/bin:/usr/bin:/bin","GOPROXY=off","GOSUMDB=off"]
+11 │ Images: "docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190"
+12 │ Topology: "app network=none; observer joins app network only; separate PID, IPC, filesystem and tmpfs; no host por…
+13 │ Mounts: "no host mounts, volumes, sockets or published ports; only bounded /work and /dev/shm tmpfs"
+14 │ Docker policy: ["--network=none","--read-only","--user=65534:65534","--cap-drop=ALL"]
+15 │ Run limits: {"seconds":180,"output_bytes":65536}
+16 │ Container limits: {"seconds":180,"output_bytes":65536}
+Nothing has run. y runs this exact plan once · n denies
+q quit · ? help · Esc back · Tab next view · Shift+Tab previous · y approve · n deny · ↓/j down · ↑/k up

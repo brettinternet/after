@@ -14,6 +14,8 @@ type loopState struct {
 	pending                        *evidence.SnapshotPair
 	preview                        []byte
 	digest                         string
+	summary                        []byte
+	summaryUnavailable             bool
 	planPair                       evidence.SnapshotPair
 	generation                     uint64
 	actionBusy, capturing, running bool
@@ -30,6 +32,8 @@ type prepared struct {
 	pair       evidence.SnapshotPair
 	raw        []byte
 	digest     string
+	summary    []byte
+	summaryErr error
 	err        error
 }
 type changed struct {
@@ -60,7 +64,13 @@ func (m *Model) change(work func() (Selection, error), status string) tea.Cmd {
 		return changed{sel, d, status, err}
 	})
 }
-func (m *Model) invalidatePlan() { m.generation++; m.preview = nil; m.digest = "" }
+func (m *Model) invalidatePlan() {
+	m.generation++
+	m.preview = nil
+	m.digest = ""
+	m.summary = nil
+	m.summaryUnavailable = false
+}
 func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 	a := m.jobs.Actions
 	switch msg := msg.(type) {
@@ -87,10 +97,13 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			m.status = "Preview unavailable: " + msg.err.Error()
 			return nil, true
 		}
-		m.preview, m.digest, m.planPair = msg.raw, msg.digest, msg.pair
+		m.preview = append([]byte(nil), msg.raw...)
+		m.digest, m.planPair = msg.digest, msg.pair
+		m.summary = append([]byte(nil), msg.summary...)
+		m.summaryUnavailable = msg.summaryErr != nil
 		m.screen = "plan"
 		m.section = 0
-		m.status = "Nothing has run. y approves this exact plan once; n denies"
+		m.status = "Nothing has run. y runs this exact plan once · n denies"
 		return m.loadDocument(), true
 	case changed:
 		m.actionBusy = false
@@ -182,7 +195,14 @@ func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
 		gen, pair := m.generation, m.selected.Pair
 		m.actionBusy = true
 		m.status = "Preparing exact offline plan; no execution"
-		return m.spawn(func() tea.Msg { raw, digest, err := a.Prepare(pair); return prepared{gen, pair, raw, digest, err} }), true
+		return m.spawn(func() tea.Msg {
+			raw, digest, err := a.Prepare(pair)
+			if err != nil {
+				return prepared{generation: gen, pair: pair, err: err}
+			}
+			summary, summaryErr := consentSummary(raw)
+			return prepared{generation: gen, pair: pair, raw: raw, digest: digest, summary: summary, summaryErr: summaryErr}
+		}), true
 	case keyApprove:
 		if a == nil || m.screen != "plan" || len(m.preview) == 0 || m.digest == "" || m.planPair != m.selected.Pair || m.running || m.actionBusy {
 			return nil, true

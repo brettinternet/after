@@ -1,9 +1,10 @@
 # Review TUI design
 
-**Status: target design. AFTER-21–23 and AFTER-28 are implemented as documented in
-[TUI.md](TUI.md); AFTER-24–27 and AFTER-29–33 remain target behavior.** This is the design for
-backlog tasks AFTER-21 to AFTER-33 (milestone M2). The command line, including how
-`after review` launches, is designed in [CLI-DESIGN.md](CLI-DESIGN.md). The product
+**Status: target design. AFTER-21–23, AFTER-28 and AFTER-29 are implemented as
+documented in [TUI.md](TUI.md); AFTER-24–27 and AFTER-30–33 remain target behavior.**
+This is the design for backlog tasks AFTER-21 to AFTER-33 (milestone M2). The
+command line, including how `after review` launches, is designed in
+[CLI-DESIGN.md](CLI-DESIGN.md). The product
 invariants in [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md),
 and [TERMINAL.md](TERMINAL.md) still apply. Where this document changes an earlier TUI
 decision, it says so. Values in mockups are illustrative.
@@ -29,7 +30,7 @@ honest, but the screen is hard to read and hard to act on.
 | Dead-end empty state       | With no evidence, the landing screen is two lines, and the change itself is hidden behind `d`                                                                         | 26     |
 | Raw JSON as the UI         | Enter opens `json.MarshalIndent` dumps of receipts, pins, and inventory entries, then up to 20 sections named like `artifact: base/43200/0/observation`               | 27     |
 | No diff viewer             | The patch is quoted text: no color, file jumps, line numbers, or summaries of binary or mode changes                                                                  | 28     |
-| Unreadable consent         | Approval shows 18 KiB of quoted, chunked plan JSON and says "Read all byte pages"                                                                                     | 29     |
+| Unreadable consent         | Approval shows the 18 KiB exact plan as quoted, chunked JSON instead of a readable summary                                                                            | 29     |
 | Unconfirmed mutations      | `p` twice creates two identical pins. `a` switches the reviewed snapshot (reopening pins) without confirmation. Reasons are canned                                    | 30     |
 | The loop can't close       | Accepting a pin against its current result works only headless                                                                                                        | 30     |
 | No search                  | No `/` in inventories, report lists, 100,000-line patches, or plans                                                                                                   | 31     |
@@ -507,7 +508,7 @@ AFTER · payment · base a750186b (commit 3f2a1c9) → candidate 784eb013 (worki
   counts are derived. If the experiments disagree on a copied value, show every
   distinct value. If decoding fails, open **Exact plan** with "summary
   unavailable", and `y` still approves exactly those bytes.
-- **Exact plan** uses the content viewer. Remove "read all byte pages".
+- **Exact plan** uses the content viewer; the old page-based consent flow is removed.
 - Consent is modal. Only `y`, `n`, Esc, Tab, scrolling, `b`, `?`, `q`, and Ctrl-C
   work there. Search is unavailable, so `y` and `n` only ever approve or deny.
   Quitting denies.
@@ -667,7 +668,7 @@ don't call an observation a `regression`.
 | `Stored records only; no new observation. c capture \| i import configured file`            | A blank next line; the hints show `c` and `i` when available                             |
 | `Job finished; stored result retained; a accepts new snapshot`                              | `New capture 9c01d2e4 — u reviews it`                                                    |
 | `Snapshot accepted; prior evidence is history, not a prediction; s session IDs for restart` | `Reviewing 9c01d2e4 · earlier results moved to history · pin reopened`                   |
-| `No execution yet. Read all byte pages; y approves this exact plan once; n denies`          | `Nothing has run. y runs this exact plan once · n denies`                                |
+| `No execution yet. The quoted plan is unreadable; y approves once; n denies`                | `Nothing has run. y runs this exact plan once · n denies`                                |
 | `Authorized run active; x cancel; navigation and capture remain available`                  | `Running the approved plan · 0:42 · x cancels`                                           |
 | `Action failed: select a complete current payment observation to pin`                       | The hints omit `p`; pressing it says `Can't pin: choose a current, complete observation` |
 | `data \| "example.com/cart / "`                                                             | `example.com/cart (package)`                                                             |

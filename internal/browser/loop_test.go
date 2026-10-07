@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -119,9 +120,10 @@ func TestLoopNoImplicitWriterAndPasteConsent(t *testing.T) {
 		t.Fatal("open acquired writer")
 	}
 	press(m, "r")
+	preview, digest := append([]byte(nil), m.preview...), m.digest
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y"), Paste: true})
-	if m.running {
-		t.Fatal("paste authorized execution")
+	if m.running || m.screen != "plan" || !bytes.Equal(m.preview, preview) || m.digest != digest {
+		t.Fatal("paste changed or authorized the retained plan")
 	}
 	press(m, "a") // no pending snapshot does not change the selection
 	press(m, "n")
