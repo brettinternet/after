@@ -30,7 +30,8 @@ in color mode and bracketed in `NO_COLOR` mode. A detail screen replaces tabs
 with a breadcrumb and the selected row's typed badge.
 
 Number keys `1`–`3` and Tab/Shift+Tab switch between Overview, Changes, and Diff.
-In a detail or preview, Tab/Shift+Tab moves between document sections. At fewer
+In a detail or preview, Tab/Shift+Tab moves between document sections. In Diff,
+`]`/`[` move through indexed files and `}`/`{` move through indexed hunks. At fewer
 than 12 rows the tab bar hides (number keys still work); below 7 rows the status
 line hides and hints shrink to `? help · q quit`. Below 60 columns the project
 and source words are omitted, tab labels shorten, and only high-priority hints
@@ -48,6 +49,8 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | Enter                                              | Inspect the selected record or inventory entry                                            |
 | `d` / `2`                                          | Open Changes: the complete unclassified inventory                                         |
 | `3`                                                | Open the captured raw Diff                                                                |
+| `]` / `[`                                          | Next / previous indexed file in Diff                                                      |
+| `}` / `{`                                          | Next / previous indexed hunk in Diff                                                      |
 | `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically          |
 | Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                        |
 | Esc                                                | Return from a detail, preview, or overlay; return to Overview from another top-level view |
@@ -63,7 +66,33 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | `q` / Ctrl-C                                       | Quit, cancel and join owned work, restore the terminal                                    |
 
 `a` no longer accepts a capture. It is reserved for pin acceptance, which is not
-yet available in this TUI; help reports that action as disabled. At a 1×1
+yet available in this TUI; help reports that action as disabled.
+
+## Changes and Diff
+
+Changes lists every path in the rawdiff inventory, including excluded and
+unsupported paths. It groups potential-oracle paths first, then other known
+changes, then unknown paths; order within each group follows the sorted inventory.
+Rows use `A`, `D`, `M`, or `?`, and show `oracle`, `binary`, mode transitions,
+recorded limitations verbatim, and added/deleted line counts from this pair's
+captured patch. At 110 columns the selected path has a preview pane. Enter opens
+four sections: Diff, Base source, Candidate source, and Inventory record. A side
+that has no captured bytes states whether it is absent because the path was added
+or deleted, or unavailable because capture did not retain it.
+
+Diff displays every captured patch line after a safe old/new line-number gutter;
+the stored patch bytes remain unchanged and are available in exact-byte view.
+Its sticky header names the current file, its position, typed flags, and the
+`captured patch` origin. Binary, mode-only, added, and deleted files receive
+trusted summary dividers while their raw patch lines remain visible. Added lines
+are green, deleted lines red, and `@@` lines cyan when color is enabled; `+` and
+`-` remain visible and meaningful with `NO_COLOR`. File and hunk jumps use the
+bounded `rawdiff` index, not a rescan of the visible text.
+
+For pairs without a shared captured patch, Changes and Diff state that no patch
+is available. Both captured sources and the complete inventory remain usable;
+AFTER-28 does not compute a diff or borrow a patch from another pair. Computed
+source diffs are AFTER-32. At a 1×1
 terminal, `q` still quits even though the frame cannot show a useful hint.
 
 Each evidence row has a bracketed badge derived only from typed engine fields,
@@ -184,10 +213,13 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
 
 ## Verification
 
+- `mise exec -- task test:views`: deterministic Changes and Diff goldens at 120×40,
+  80×24, and 40×12, alongside the existing Overview views.
 - `mise exec -- task test:terminal`: real Git captures, full inventory, immutable
-  source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, responsive
-  cancellation and persisted denied-run receipts, plus terminal foundation tests.
-- `mise exec -- task test:views`: six deterministic no-color golden views. Regenerate only with `mise exec -- task test:views -- -update` and review the diff.
+  source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, Changes/Diff navigation and summaries, responsive cancellation and persisted denied-run receipts, plus terminal foundation tests. The 100,250-line captured patch is measured against the terminal per-event budgets.
+- `mise exec -- task test:terminal` also drives the browser through real PTYs at
+  80×24 and 120×40 with color and `NO_COLOR`, checking Changes, Diff, terminal
+  restoration, and safe styling.
 - `mise exec -- task test:cli`: actual CLI capture/import followed by PTY browsing,
   inspector/diff/help, background capture/import, 32×8 resize and termios,
   alternate-screen and cursor restoration. No payload terminal controls escape.

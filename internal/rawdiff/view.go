@@ -51,6 +51,13 @@ type Hunk struct {
 	Start, End int
 }
 
+// PatchFile indexes one raw diff --git section. Path is empty only when the
+// captured patch contains a header that cannot be matched to the typed inventory.
+type PatchFile struct {
+	Path       string
+	Start, End int
+}
+
 // Page is a bounded byte window. More means another window is available, not
 // that bytes were discarded. Limits apply even when the final window is reached.
 type Page struct {
@@ -64,6 +71,7 @@ type View struct {
 	s               *store.Store
 	base, candidate map[string]evidence.File
 	entries         []Entry
+	files           []PatchFile
 	hunks           []Hunk
 	raw             []byte
 	available       bool
@@ -185,8 +193,9 @@ func (v *View) Inventory() []Entry {
 	}
 	return out
 }
-func (v *View) Hunks() []Hunk    { return append([]Hunk(nil), v.hunks...) }
-func (v *View) Limits() []string { return append([]string(nil), v.limits...) }
+func (v *View) Files() []PatchFile { return append([]PatchFile(nil), v.files...) }
+func (v *View) Hunks() []Hunk      { return append([]Hunk(nil), v.hunks...) }
+func (v *View) Limits() []string   { return append([]string(nil), v.limits...) }
 
 func window(data []byte, offset, size int, limits []string) (Page, error) {
 	if offset < 0 || offset > len(data) || size <= 0 || size > MaxPageBytes {
@@ -326,10 +335,18 @@ func (v *View) index(diff evidence.Digest) {
 	}
 	entry := -1
 	active := -1
+	activeFile := -1
 	finish := func(end int) {
 		if active >= 0 {
 			v.hunks[active].End = end
 			active = -1
+		}
+	}
+	finishFile := func(end int) {
+		finish(end)
+		if activeFile >= 0 {
+			v.files[activeFile].End = end
+			activeFile = -1
 		}
 	}
 	limited := func(reason string) {
@@ -348,13 +365,18 @@ func (v *View) index(diff evidence.Digest) {
 		line := v.raw[start:end]
 		switch {
 		case bytes.HasPrefix(line, []byte("diff --git ")):
-			finish(start)
+			finishFile(start)
 			var ok bool
 			entry, ok = headers[string(line)]
-			if !ok {
+			path := ""
+			if ok {
+				path = v.entries[entry].Path
+			} else {
 				entry = -1
 				limited("unmatched diff path; raw bytes retained")
 			}
+			v.files = append(v.files, PatchFile{Path: path, Start: start, End: len(v.raw)})
+			activeFile = len(v.files) - 1
 		case bytes.Equal(line, []byte("GIT binary patch")):
 			if entry >= 0 {
 				v.entries[entry].Binary = true
@@ -375,5 +397,5 @@ func (v *View) index(diff evidence.Digest) {
 		}
 		start = end + 1
 	}
-	finish(len(v.raw))
+	finishFile(len(v.raw))
 }

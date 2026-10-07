@@ -262,6 +262,10 @@ const patch = "diff --git a/file b/file\nnew file mode 100644\n--- /dev/null\n++
 func TestHunkIdentityAccountingAndCopies(t *testing.T) {
 	v, s, r, _ := synthetic(t, []byte(patch+"@@ -10 +10 @@\n-old\n+new\n"), []byte("hello\n"), nil)
 	h := v.Hunks()
+	files := v.Files()
+	if len(files) != 1 || files[0].Path != "file" || files[0].Start != 0 || files[0].End != len(v.raw) {
+		t.Fatal("file index", files)
+	}
 	if len(h) != 2 || h[0].ID == h[1].ID {
 		t.Fatal(h)
 	}

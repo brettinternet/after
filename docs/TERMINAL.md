@@ -38,8 +38,8 @@ Badges retain brackets and words with color off; green is reserved for a
 current, complete, equal observation, never a reported pass or human decision.
 
 Browser golden views use fixed Git dates, fixed synthetic record timestamps,
-an injected clock and UTC zone. `task test:views` compares the evidence list
-and inventory at 120×40, 80×24 and 40×12 byte for byte; only
+an injected clock and UTC zone. `task test:views` compares Overview, Changes, and
+Diff at 120×40, 80×24 and 40×12 byte for byte; only
 `task test:views -- -update` regenerates them. Synthetic protocol records
 test rendering, not actual execution. Color-mode frame tests allow only theme
 SGR and assert hostile names/documents cannot supply terminal controls.
@@ -67,4 +67,4 @@ Measured on macOS arm64, Apple M5 Max, 18 logical CPUs, Go 1.27.1; warmed tool/m
 
 Memory figures are Go allocation deltas, **not process peak RSS**. They exclude capture/storage construction, which has its own budgets. Timing thresholds are a regression/evaluation gate, not a portable latency guarantee.
 
-Core tests run without an interactive terminal. On macOS/Linux, automated PTY checks open a real pseudo-terminal, verify raw mode was entered, inject quit/Ctrl-C/cancellation and a hostile job error, check exact pre/post termios equality, and verify alternate-screen exit and cursor restoration in emitted bytes. Clipboard/title/hyperlink attack sequences must not appear in that stream. No visual screenshots or fake participant observations are evidence for these checks. Tests are part of the existing macOS/Linux Go CI gate; the measurements above are local macOS observations only.
+Core tests run without an interactive terminal. On macOS/Linux, automated PTY checks open a real pseudo-terminal, verify raw mode was entered, inject quit/Ctrl-C/cancellation and a hostile job error, check exact pre/post termios equality, and verify alternate-screen exit and cursor restoration in emitted bytes. The browser also renders Changes and the captured Diff at 80×24 and 120×40 with color enabled and with `NO_COLOR`. Clipboard/title/hyperlink attack sequences must not appear in that stream. No visual screenshots or fake participant observations are evidence for these checks. Tests are part of the existing macOS/Linux Go CI gate; the measurements above are local macOS observations only.

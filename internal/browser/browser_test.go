@@ -140,7 +140,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	found := map[string]bool{}
 	for _, entry := range d.Inventory {
 		found[entry.Name] = true
-		if entry.Name == "binary" && !strings.Contains(entry.Summary, "binary=true") {
+		if entry.Name == "binary" && !entry.Binary {
 			t.Fatal(entry)
 		}
 	}

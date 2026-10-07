@@ -82,6 +82,44 @@ func TestResponsiveFramePTY(t *testing.T) {
 						t.Fatalf("missing responsive frame in PTY output: %q", stripCSI.ReplaceAllString(transcript.String(), ""))
 					}
 				}
+				if _, err := master.Write([]byte("2")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor := func(wants ...string) {
+					t.Helper()
+					deadline := time.After(5 * time.Second)
+					for {
+						plain := stripCSI.ReplaceAllString(transcript.String(), "")
+						found := true
+						for _, want := range wants {
+							found = found && strings.Contains(plain, want)
+						}
+						if found {
+							return
+						}
+						select {
+						case chunk, ok := <-chunks:
+							if !ok {
+								t.Fatal("PTY closed before requested view")
+							}
+							transcript.WriteString(chunk)
+						case err := <-done:
+							t.Fatalf("TUI exited before requested view: %v", err)
+						case <-deadline:
+							t.Fatalf("missing requested PTY view %v: %q", wants, stripCSI.ReplaceAllString(transcript.String(), ""))
+						}
+					}
+				}
+				waitFor("CHANGED", "app/config.go")
+				changeExcerpt := stripCSI.ReplaceAllString(transcript.String(), "")
+				if _, err := master.Write([]byte("3")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("app/config.go · file", "@@ -")
+				if _, err := master.Write([]byte("}")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("Can't Go to the next indexed hunk")
 				if _, err := master.Write([]byte("q")); err != nil {
 					t.Fatal(err)
 				}
@@ -105,8 +143,15 @@ func TestResponsiveFramePTY(t *testing.T) {
 				if noColor && stripSGR.MatchString(raw) {
 					t.Fatal("NO_COLOR PTY emitted SGR styling")
 				}
-				if !noColor && !strings.Contains(raw, "\x1b[7m[1 Overview]") {
-					t.Fatal("color PTY did not mark the active tab with reverse video")
+				if !noColor {
+					if !strings.Contains(raw, "\x1b[7m[1 Overview]") {
+						t.Fatal("color PTY did not mark the active tab with reverse video")
+					}
+					for _, style := range []string{"\x1b[32m", "\x1b[1;31m", "\x1b[36m"} {
+						if !strings.Contains(raw, style) {
+							t.Fatalf("color PTY missing diff style %q", style)
+						}
+					}
 				}
 				plain := stripCSI.ReplaceAllString(raw, "")
 				last := strings.LastIndex(plain, "AFTER ·")
@@ -116,7 +161,18 @@ func TestResponsiveFramePTY(t *testing.T) {
 				lines := strings.Split(plain[last:], "\n")
 				excerpt := strings.Join(lines[:min(2, len(lines))], "\n")
 				t.Logf("real PTY %dx%d %s excerpt:\n%s", size.width, size.height, name, excerpt)
+				t.Logf("real PTY Changes excerpt: %s", ptyExcerpt(changeExcerpt, "CHANGED"))
+				t.Logf("real PTY Diff excerpt: %s", ptyExcerpt(plain, "app/config.go · file"))
 			})
 		}
 	}
+}
+
+func ptyExcerpt(raw, marker string) string {
+	index := strings.Index(raw, marker)
+	if index < 0 {
+		return "<not found>"
+	}
+	start, end := max(index-60, 0), min(index+180, len(raw))
+	return strings.ReplaceAll(raw[start:end], "\r", "")
 }

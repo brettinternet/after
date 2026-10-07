@@ -13,6 +13,10 @@ const (
 	keyDiff
 	keyNext
 	keyPrevious
+	keyNextFile
+	keyPreviousFile
+	keyNextHunk
+	keyPreviousHunk
 	keyDown
 	keyUp
 	keyPageDown
@@ -73,6 +77,10 @@ var keyMap = []keyBinding{
 	{keys: []string{"3"}, hint: "3 Diff", label: "Switch to Diff", group: "Views", action: keyDiff, contexts: topKeyContexts, priority: 3, disabled: needsData},
 	{keys: []string{"tab"}, hint: "Tab next view", label: "Switch to the next view or section", group: "Views", action: keyNext, contexts: append(append([]keyContext{}, topKeyContexts...), documentKeyContexts...), priority: 3, disabled: canMoveView},
 	{keys: []string{"shift+tab"}, hint: "Shift+Tab previous", label: "Switch to the previous view or section", group: "Views", action: keyPrevious, contexts: append(append([]keyContext{}, topKeyContexts...), documentKeyContexts...), priority: 3, disabled: canMoveView},
+	{keys: []string{"]"}, hint: "] next file", label: "Go to the next captured file", group: "Diff", action: keyNextFile, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateFiles},
+	{keys: []string{"["}, hint: "[ previous file", label: "Go to the previous captured file", group: "Diff", action: keyPreviousFile, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateFiles},
+	{keys: []string{"}"}, hint: "} next hunk", label: "Go to the next indexed hunk", group: "Diff", action: keyNextHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
+	{keys: []string{"{"}, hint: "{ previous hunk", label: "Go to the previous indexed hunk", group: "Diff", action: keyPreviousHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
 	{keys: []string{"j", "down"}, hint: "↓/j down", label: "Move down or scroll", group: "Navigation", action: keyDown, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
 	{keys: []string{"k", "up"}, hint: "↑/k up", label: "Move up or scroll", group: "Navigation", action: keyUp, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
 	{keys: []string{"pgdown"}, hint: "PgDn page", label: "Move down one page", group: "Navigation", action: keyPageDown, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
@@ -217,6 +225,36 @@ func selectedEntry(m *Model, screen string) *Entry {
 func canOpen(m *Model) string {
 	if selectedEntry(m, keyScreen(m)) == nil {
 		return "there is no selected row to inspect"
+	}
+	return ""
+}
+func canNavigateFiles(m *Model) string {
+	if m.section != 0 {
+		return "switch to the captured patch section first"
+	}
+	if m.hex {
+		return "return to text view with b before navigating files"
+	}
+	if m.data == nil || m.data.Diff == nil {
+		return "no shared captured patch is available"
+	}
+	if m.data.Diff.VisibleFiles < 2 {
+		return "the captured patch has fewer than two indexed files"
+	}
+	return ""
+}
+func canNavigateHunks(m *Model) string {
+	if m.section != 0 {
+		return "switch to the captured patch section first"
+	}
+	if m.hex {
+		return "return to text view with b before navigating hunks"
+	}
+	if m.data == nil || m.data.Diff == nil {
+		return "no shared captured patch is available"
+	}
+	if len(m.data.Diff.HunkRows) < 2 {
+		return "the captured patch has fewer than two indexed hunks"
 	}
 	return ""
 }

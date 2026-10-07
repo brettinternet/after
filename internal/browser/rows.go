@@ -93,12 +93,39 @@ func (m *Model) trailing(e Entry) string {
 // Each column is separately sanitized before styling. No payload can consume
 // the badge/selection column, even when it starts with combining marks or tabs.
 func (m *Model) entryLine(e Entry, selected bool) string {
+	return m.entryLineWidth(e, selected, m.width)
+}
+
+func (m *Model) changeEntryLine(e Entry, selected bool, width int) string {
+	prefix, style := "  ", terminal.Plain
+	if selected {
+		prefix, style = "> ", terminal.Strong
+	}
+	letter := "?"
+	switch e.Change {
+	case "added":
+		letter = "A"
+	case "deleted":
+		letter = "D"
+	case "modified":
+		letter = "M"
+	}
+	if width <= len(prefix) {
+		return terminal.Line(prefix, width)
+	}
+	body := letter + "  " + e.Name
+	if e.Summary != "" {
+		body += "  " + e.Summary
+	}
+	return prefix + m.theme.Render(body, width-len(prefix), style, false)
+}
+
+func (m *Model) entryLineWidth(e Entry, selected bool, width int) string {
 	prefix, nameStyle := "  ", terminal.Plain
 	if selected {
 		prefix, nameStyle = "> ", terminal.Strong
 	}
 	b := badgeFor(e)
-	width := m.width
 	if width <= 2 {
 		return terminal.Line(prefix, width)
 	}

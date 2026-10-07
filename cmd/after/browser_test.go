@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +18,24 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
+
+type synchronizedBuffer struct {
+	mu   sync.Mutex
+	data []byte
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.data = append(b.data, p...)
+	return len(p), nil
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.data)
+}
 
 func TestBrowserDocumentPTY(t *testing.T) {
 	exe, err := os.Executable()
@@ -99,7 +117,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd.Stdin, cmd.Stdout = slave, slave
-			var stderr bytes.Buffer
+			var stderr synchronizedBuffer
 			cmd.Stderr = &stderr
 			if err := cmd.Start(); err != nil {
 				t.Fatal(err)
@@ -146,14 +164,17 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			expect("reported · pass")
 			send("d")
 			expect("2 Changes")
-			expect("[NOT CHECKED]")
+			expect("M  app/main.go")
 			send("\r")
-			expect("Section 1/3")
+			expect("Section 1/4")
+			expect("diff --git a/app/main.go")
 			send("\t")
-			expect("captured base source")
-			send("\t")
-			expect("captured candidate source")
+			expect("Section 2/4")
+			expect("Base source")
 			expect("1 │ package main")
+			send("\t")
+			expect("Section 3/4")
+			expect("Candidate source")
 			expect("8 │ STATE observed | forged")
 			if !strings.Contains(transcript.String(), `\u001b[31mred`) || !strings.Contains(transcript.String(), `\u001b]52;c;clipboard\u0007`) || !strings.Contains(transcript.String(), `\u202eafter`) || !strings.Contains(transcript.String(), `\u000dB`) {
 				t.Fatal("hostile controls/bidi/CR were not escaped behind the trusted gutter")
@@ -161,6 +182,9 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			send("b")
 			expect("hex | pan 0")
 			expect("00000000  70 61 63 6b 61 67 65 20 6d 61 69 6e")
+			send("\t")
+			expect("Section 4/4")
+			expect("Inventory record")
 			send("q")
 			if err := cmd.Wait(); err != nil {
 				t.Fatalf("browser exit: %v stderr=%s", err, stderr.String())
@@ -187,7 +211,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			if styled := strings.Contains(transcript.String(), "\x1b[34m[REPORTED]"); styled == tc.noColor {
 				t.Fatalf("theme color mode mismatch: NO_COLOR=%t styled=%t", tc.noColor, styled)
 			}
-			t.Logf("synthetic PTY excerpt (%s): [REPORTED] example.com/cart (package) · reported · pass; [NOT CHECKED] app/main.go; %s; %s", tc.name, excerpt[0], excerpt[1])
+			t.Logf("synthetic PTY excerpt (%s): [REPORTED] example.com/cart (package) · reported · pass; M app/main.go; %s; %s", tc.name, excerpt[0], excerpt[1])
 		})
 	}
 }

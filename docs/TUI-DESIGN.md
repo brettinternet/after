@@ -1,8 +1,8 @@
 # Review TUI design
 
-**Status: target design, not implemented.** This is the design for backlog tasks
-AFTER-21 to AFTER-33 (milestone M2). [TUI.md](TUI.md) documents current behavior,
-and each task updates it as it lands. The command line, including how
+**Status: target design. AFTER-21–23 and AFTER-28 are implemented as documented in
+[TUI.md](TUI.md); AFTER-24–27 and AFTER-29–33 remain target behavior.** This is the design for
+backlog tasks AFTER-21 to AFTER-33 (milestone M2). The command line, including how
 `after review` launches, is designed in [CLI-DESIGN.md](CLI-DESIGN.md). The product
 invariants in [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md),
 and [TERMINAL.md](TERMINAL.md) still apply. Where this document changes an earlier TUI

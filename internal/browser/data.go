@@ -58,16 +58,27 @@ type Entry struct {
 	DecisionAt           time.Time
 	Summary              string // untrusted data, never a badge
 	Name                 string // untrusted description
+	Change               string
+	PotentialOracle      bool
+	Binary               bool
+	BaseMode             string
+	CandidateMode        string
+	Added                int
+	Deleted              int
+	Limits               []string
 	Sections             []Section
 }
 type Data struct {
-	Selection         Selection
-	BaseSnapshot      evidence.Snapshot
-	CandidateSnapshot evidence.Snapshot
-	Entries           []Entry
-	Inventory         []Entry
-	Patch             Section
-	Limits            Section
+	Selection          Selection
+	BaseSnapshot       evidence.Snapshot
+	CandidateSnapshot  evidence.Snapshot
+	Entries            []Entry
+	Inventory          []Entry
+	InventoryRows      []InventoryRow
+	InventoryPositions []int
+	Diff               *DiffView
+	Patch              Section
+	Limits             Section
 }
 
 func document(name string, value any) Section {
@@ -112,23 +123,57 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, Patch: Section{Name: "captured raw diff", Blob: candidate.Diff}, Limits: document("capture limits", raw.Limits())}
-	if !rawdiff.CapturedPair(base, candidate) {
-		d.Patch = document("no shared captured patch; inspect inventory and both sources", raw.Limits())
+	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, Limits: document("capture limits", raw.Limits())}
+	inventory := raw.Inventory()
+	if rawdiff.CapturedPair(base, candidate) {
+		patch, err := readRawDiff(raw)
+		if err == nil {
+			d.Diff = buildDiff(patch, raw.Files(), raw.Hunks(), inventory)
+			counts, countErr := raw.Count(nil, nil)
+			d.Diff.HunksComplete = countErr == nil && counts.Complete
+			d.Patch = Section{Name: "captured raw diff", Content: patch}
+		} else {
+			d.Patch = document("captured patch unavailable; no patch is fabricated", raw.Limits())
+		}
+	} else {
+		message := "No shared captured patch for this pair. AFTER-32 has not computed a source diff. The complete inventory and both captured sources remain available."
+		if limits := raw.Limits(); len(limits) > 0 {
+			message += "\n\nCapture limitations:\n" + strings.Join(limits, "\n")
+		}
+		d.Patch = Section{Name: "no shared captured patch", Content: []byte(message)}
 	}
-	for _, item := range raw.Inventory() {
+	counts := map[string][2]int{}
+	if d.Diff != nil {
+		for _, file := range d.Diff.Files {
+			current := counts[file.Path]
+			current[0] += file.Added
+			current[1] += file.Deleted
+			counts[file.Path] = current
+		}
+	}
+	for _, item := range inventory {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		e := Entry{Summary: fmt.Sprintf("%s · binary=%t · potential oracle=%t", item.Change, item.Binary, item.PotentialOracle), Name: item.Path, Sections: []Section{document("inventory (unclassified)", item)}}
+		count := counts[item.Path]
+		added, deleted := count[0], count[1]
+		baseMode, candidateMode := "", ""
 		if item.Base != nil {
-			e.Sections = append(e.Sections, Section{Name: "captured base source", Blob: item.Base.Content})
+			baseMode = item.Base.Mode
 		}
 		if item.Candidate != nil {
-			e.Sections = append(e.Sections, Section{Name: "captured candidate source", Blob: item.Candidate.Content})
+			candidateMode = item.Candidate.Mode
 		}
+		flags := pathSummary(item, added, deleted)
+		record := inventoryRecord{Path: item.Path, Change: item.Change, PotentialOracle: item.PotentialOracle, Binary: item.Binary, BaseMode: baseMode, CandidateMode: candidateMode, Added: added, Deleted: deleted, Limits: append([]string(nil), item.Limits...)}
+		sections := []Section{{Name: "Diff", Content: pathDiff(d, item.Path)}}
+		sections = append(sections, sourceSection("Base source", item.Path, item.Base, item.Change, true, item.Limits))
+		sections = append(sections, sourceSection("Candidate source", item.Path, item.Candidate, item.Change, false, item.Limits))
+		sections = append(sections, document("Inventory record", record))
+		e := Entry{Name: item.Path, Summary: flags, Change: item.Change, PotentialOracle: item.PotentialOracle, Binary: item.Binary, BaseMode: baseMode, CandidateMode: candidateMode, Added: added, Deleted: deleted, Limits: append([]string(nil), item.Limits...), Sections: sections}
 		d.Inventory = append(d.Inventory, e)
 	}
+	d.InventoryRows, d.InventoryPositions = inventoryRows(d.Inventory)
 	for _, id := range selected.Evidence {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -140,6 +185,39 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		d.Entries = append(d.Entries, entries...)
 	}
 	return d, nil
+}
+
+func pathDiff(data *Data, path string) []byte {
+	if data.Diff == nil {
+		return []byte("No shared captured patch for this pair. AFTER-32 has not computed a source diff.")
+	}
+	for _, file := range data.Diff.Files {
+		if file.Path == path {
+			return data.Diff.Raw[file.Start:file.End]
+		}
+	}
+	return []byte("No captured patch lines for this path. The captured inventory and source sections remain available.")
+}
+
+func sourceSection(name, path string, file *evidence.File, change string, base bool, limits []string) Section {
+	if file != nil {
+		return Section{Name: name, Blob: file.Content}
+	}
+	side := "base"
+	if !base {
+		side = "candidate"
+	}
+	if base && change == "added" {
+		return Section{Name: name, Content: []byte("No base source: this path was added; no base file exists in the captured manifest.")}
+	}
+	if !base && change == "deleted" {
+		return Section{Name: name, Content: []byte("No candidate source: this path was deleted; no candidate file exists in the captured manifest.")}
+	}
+	message := side + " source unavailable: no content for this path was retained in the " + side + " manifest."
+	if len(limits) > 0 {
+		message += "\nRecorded limitations: " + strings.Join(limits, "; ")
+	}
+	return Section{Name: name, Content: []byte(message)}
 }
 
 func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair) ([]Entry, error) {

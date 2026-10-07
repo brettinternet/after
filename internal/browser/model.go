@@ -53,6 +53,7 @@ type Model struct {
 	width, height                        int
 	screen                               string
 	returnTo, helpFrom                   string
+	targetDiffPath                       string
 	index, inventory, section, top, left int
 	doc                                  *terminal.Document
 	hex                                  bool
@@ -115,9 +116,16 @@ func (m *Model) rows() int {
 	}
 	return max(rows, 1)
 }
+func (m *Model) textLimited() bool {
+	return m.doc != nil && m.doc.Limited() || m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil && m.data.Diff.Limited
+}
+
 func (m *Model) contentRows() int {
 	reserved := 2 // section metadata and section name
-	if m.doc != nil && m.doc.Limited() && !m.hex {
+	if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+		reserved++ // sticky current-file metadata
+	}
+	if m.textLimited() && !m.hex {
 		reserved++
 	}
 	return max(m.bodyRows()-reserved, 1)
@@ -238,7 +246,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.doc = msg.doc
 			m.hex = msg.doc.AutoHex()
-			if msg.doc.Limited() {
+			if m.screen == "patch" && m.targetDiffPath != "" && m.data != nil && m.data.Diff != nil {
+				if fileIndex, ok := m.data.Diff.FileByPath[m.targetDiffPath]; ok && m.data.Diff.Files[fileIndex].StartRow >= 0 {
+					m.top = m.data.Diff.Files[fileIndex].StartRow
+				}
+				m.targetDiffPath = ""
+			}
+			if m.textLimited() {
 				m.status = "Text index limited at 250000 lines; b opens exact hex for every stored byte"
 			}
 		}
@@ -295,6 +309,18 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		return m.switchView(1)
 	case keyDiff:
 		return m.switchView(2)
+	case keyNextFile, keyPreviousFile:
+		delta := 1
+		if binding.action == keyPreviousFile {
+			delta = -1
+		}
+		m.navigateFile(delta)
+	case keyNextHunk, keyPreviousHunk:
+		delta := 1
+		if binding.action == keyPreviousHunk {
+			delta = -1
+		}
+		m.navigateHunk(delta)
 	case keyNext, keyPrevious:
 		if m.screen == "inspector" || m.screen == "plan" {
 			count := len(m.sections())
@@ -351,6 +377,10 @@ func (m *Model) switchView(view int) tea.Cmd {
 	m.request++
 	m.doc = nil
 	m.top = 0
+	m.targetDiffPath = ""
+	if view == 2 && m.screen == "inventory" && m.data != nil && m.inventory >= 0 && m.inventory < len(m.data.Inventory) {
+		m.targetDiffPath = m.data.Inventory[m.inventory].Name
+	}
 	switch view {
 	case 0:
 		m.screen = "examples"
@@ -361,6 +391,11 @@ func (m *Model) switchView(view int) tea.Cmd {
 	case 2:
 		m.screen = "patch"
 		m.section = 0
+		if m.data != nil && m.data.Diff != nil && m.targetDiffPath != "" {
+			if fileIndex, ok := m.data.Diff.FileByPath[m.targetDiffPath]; ok && m.data.Diff.Files[fileIndex].StartRow >= 0 {
+				m.top = m.data.Diff.Files[fileIndex].StartRow
+			}
+		}
 		return m.loadDocument()
 	default:
 		return nil
@@ -428,6 +463,9 @@ func (m *Model) documentRows() int {
 	}
 	if m.hex {
 		return m.doc.HexRows()
+	}
+	if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+		return len(m.data.Diff.Rows)
 	}
 	return m.doc.Lines()
 }
@@ -633,12 +671,11 @@ func (m *Model) View() string {
 		for _, line := range help[top:min(top+m.bodyRows(), len(help))] {
 			add(window(line, m.left, m.width))
 		}
-	case "examples", "inventory":
+	case "examples":
 		entries := m.entries()
 		i := *m.cursor()
 		if len(entries) == 0 {
-			add("Not checked: no evidence / no inventory entries")
-			add("d raw inventory remains available when evidence fails")
+			add("Not checked: no evidence loaded")
 		} else {
 			add("Badges: finite evidence only · Enter for full state and scope")
 			top := max(0, i-m.rows()+1)
@@ -646,6 +683,8 @@ func (m *Model) View() string {
 				body = append(body, m.entryLine(entries[n], n == i))
 			}
 		}
+	case "inventory":
+		body = append(body, m.inventoryBody()...)
 	case "inspector", "patch", "plan":
 		sections := m.sections()
 		if len(sections) > 0 {
@@ -660,10 +699,13 @@ func (m *Model) View() string {
 			}
 			add(fmt.Sprintf("Section %d/%d | %d stored bytes | %s | pan %d", m.section+1, len(sections), total, mode, m.left))
 			data(section.Name)
+			if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+				body = append(body, m.diffStickyHeader())
+			}
 			if m.doc == nil {
 				add("Loading complete document off the event loop")
 			} else {
-				if m.doc.Limited() && !m.hex {
+				if m.textLimited() && !m.hex {
 					add("TEXT LIMITED at 250000 lines; b opens exact hex for every stored byte")
 				}
 				if m.doc.Lines() == 0 && m.doc.HexRows() == 0 {
@@ -673,6 +715,10 @@ func (m *Model) View() string {
 					for n := m.top; n < min(m.top+m.contentRows(), count); n++ {
 						if m.hex {
 							add(m.doc.HexLine(n))
+							continue
+						}
+						if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+							body = append(body, m.diffDocumentRow(n))
 							continue
 						}
 						digits := len(strconv.Itoa(max(m.doc.Lines(), 1)))

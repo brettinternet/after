@@ -34,7 +34,9 @@ representation. Every path remains inspectable without an example mapping.
 
 Each hunk has its exact captured patch byte range and a stable SHA-256 identity
 bound to the diff digest and header offset. Duplicate identical hunk text at
-different positions stays distinct. `Count` unions references across examples;
+different positions stays distinct. `Files()` returns copies of the exact
+`diff --git` section byte ranges used with `Hunks()` for file/hunk navigation; an
+unmatched raw header has an empty path and remains visible. `Count` unions references across examples;
 folded IDs must belong to that union. Its disjoint counts satisfy:
 
 ```text
