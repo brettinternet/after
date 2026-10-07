@@ -1,7 +1,7 @@
 # Review TUI design
 
-**Status: target design. AFTER-21–24, AFTER-28, AFTER-29 and AFTER-32 are implemented as
-documented in [TUI.md](TUI.md); AFTER-25–27, AFTER-30–31 and AFTER-33 remain target behavior.**
+**Status: target design. AFTER-21–26, AFTER-28, AFTER-29 and AFTER-32 are implemented as
+documented in [TUI.md](TUI.md); AFTER-27, AFTER-30–31 and AFTER-33 remain target behavior.**
 This is the design for backlog tasks AFTER-21 to AFTER-33 (milestone M2). The
 command line, including how `after review` launches, is designed in
 [CLI-DESIGN.md](CLI-DESIGN.md). The product

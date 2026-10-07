@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
+	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
@@ -101,6 +103,84 @@ func viewSelection(t *testing.T) Selection {
 	return sel
 }
 
+func viewRawSelection(t *testing.T) Selection {
+	t.Helper()
+	_, sel := setup(t, true)
+	return sel
+}
+
+func viewReportSelection(t *testing.T) Selection {
+	t.Helper()
+	s, sel := setup(t, false)
+	makeReport := func(action, producer string, binding evidence.Digest, importedAt time.Time) evidence.Digest {
+		raw := fmt.Sprintf("{\"Action\":%q,\"Package\":\"example.com/cart\",\"Test\":\"TestFreeShippingThreshold\"}\n", action)
+		report, err := gotestreport.Import(strings.NewReader(raw), gotestreport.Metadata{Producer: producer, Snapshot: binding, ImportedAt: importedAt})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return viewArtifact(t, s, report, "report").Content
+	}
+	sel.Evidence = []evidence.Digest{
+		makeReport("pass", "go version go1.27.1 darwin/arm64; candidate suite", sel.Pair.Candidate, viewTime.Add(-43*time.Minute)),
+		makeReport("fail", "go version go1.27.1 darwin/arm64; base tests on candidate code", sel.Pair.Base, viewTime.Add(-42*time.Minute)),
+	}
+	return sel
+}
+
+// This golden fixture uses explicitly synthetic stored records, not Docker
+// observations; runner artifacts retain their fixture-only limitation.
+func viewPaymentLoopSelection(t *testing.T) Selection {
+	t.Helper()
+	s, sel := setup(t, false)
+	initialComparison := viewComparison(t, s, sel, false, evidence.Complete)
+	initialComparisonRecord, err := store.Get[evidence.Comparison](s, initialComparison)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialReceipt, err := store.Get[evidence.Receipt](s, initialComparisonRecord.Receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err := review.Create(s, initialReceipt.ID, "Preserve the finite provider-request count", evidence.FiniteExample, "pin the initial synthetic result")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := filepath.Join(sel.Project, "app", "config.go")
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(config), "retentionSeconds = 300", "retentionSeconds = 60", 1)
+	if updated == string(config) || os.WriteFile(configPath, []byte(updated), 0600) != nil {
+		t.Fatal("could not prepare the synthetic follow-up snapshot")
+	}
+	captured, err := capture.Capture(t.Context(), sel.Project, s, capture.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := Selection{Project: sel.Project, Pair: evidence.SnapshotPair{Base: sel.Pair.Base, Candidate: captured.Candidate.ID}}
+	currentComparison := viewComparison(t, s, current, false, evidence.Complete)
+	currentComparisonRecord, err := store.Get[evidence.Comparison](s, currentComparison)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentReceipt, err := store.Get[evidence.Receipt](s, currentComparisonRecord.Receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err = review.Select(s, pin.ID, evidence.BasisOf(currentReceipt), evidence.OriginalBase, "review the synthetic follow-up candidate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err = review.Attach(s, pin.ID, currentReceipt.ID, "attach the synthetic follow-up result")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Evidence = []evidence.Digest{pin.ID, currentComparison}
+	return current
+}
+
 func TestCaseRowsFromStoredWitnesses(t *testing.T) {
 	s, sel := setup(t, false)
 	for _, tc := range []struct {
@@ -154,6 +234,48 @@ func TestGoldenViews(t *testing.T) {
 				} else {
 					m.screen = screen
 				}
+				got := m.View() + "\n"
+				path := filepath.Join("testdata", "views", name+".txt")
+				if *updateViews {
+					if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				want, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(want) != got {
+					t.Fatalf("view differs: %s; regenerate explicitly with -update\n%s", path, got)
+				}
+				for _, line := range strings.Split(got, "\n") {
+					if uniseg.StringWidth(line) > size.Width {
+						t.Fatal("width", line)
+					}
+				}
+			})
+		}
+	}
+	for _, scenario := range []struct {
+		name      string
+		selection Selection
+	}{
+		{name: "raw", selection: viewRawSelection(t)},
+		{name: "report", selection: viewReportSelection(t)},
+		{name: "payment", selection: viewPaymentLoopSelection(t)},
+	} {
+		for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 40}, {Width: 80, Height: 24}, {Width: 40, Height: 12}} {
+			name := fmt.Sprintf("overview-%s-%dx%d", scenario.name, size.Width, size.Height)
+			t.Run(name, func(t *testing.T) {
+				m := New(t.Context(), scenario.selection, Jobs{})
+				defer m.Close()
+				m.setClock(func() time.Time { return viewTime }, time.UTC)
+				m.theme.Color = false
+				drain(m, m.Init())
+				step(m, size)
 				got := m.View() + "\n"
 				path := filepath.Join("testdata", "views", name+".txt")
 				if *updateViews {

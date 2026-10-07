@@ -49,8 +49,16 @@ type Section struct {
 	Blob    evidence.Digest
 	format  documentFormat
 }
+type ReportCounts struct {
+	Pass int
+	Fail int
+	Skip int
+}
+
 type Entry struct {
 	Receipt              evidence.Digest
+	SourceReceipt        evidence.Digest
+	HasComparison        bool
 	Expectation          string
 	State                evidence.EvidenceState
 	Completeness         evidence.Completeness
@@ -59,6 +67,11 @@ type Entry struct {
 	MissingCurrentResult bool
 	Candidate            evidence.Digest
 	DecisionAt           time.Time
+	ReportID             evidence.Digest
+	ReportBinding        evidence.Digest
+	ReportImportedAt     time.Time
+	ReportProducer       string
+	ReportCounts         ReportCounts
 	Summary              string // untrusted data, never a badge
 	Name                 string // untrusted description
 	Change               string
@@ -75,6 +88,7 @@ type Data struct {
 	Selection          Selection
 	BaseSnapshot       evidence.Snapshot
 	CandidateSnapshot  evidence.Snapshot
+	ChangeCounts       rawdiff.Counts
 	Entries            []Entry
 	Inventory          []Entry
 	InventoryRows      []InventoryRow
@@ -126,6 +140,10 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 	if err != nil {
 		return nil, err
 	}
+	changeCounts, err := raw.Count(nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	if selected.Discover {
 		selected.Evidence, selected.OmittedEvidence, err = discoverEvidence(s, selected.Pair)
 		if err != nil {
@@ -134,7 +152,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 			selected.DiscoveryWarning = true
 		}
 	}
-	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, Limits: document("capture limits", raw.Limits())}
+	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, ChangeCounts: changeCounts, Limits: document("capture limits", raw.Limits())}
 	inventory := raw.Inventory()
 	if rawdiff.CapturedPair(base, candidate) {
 		patch, err := readRawDiff(raw)
@@ -272,9 +290,11 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			missing = true
 		}
 		e := Entry{State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: []Section{document("pin revision / current evidence / exact reopening reason", v)}}
-		// Every prior observation remains reachable with its original snapshot scope.
+		// Keep every prior observation reachable at its original candidate, both
+		// from the pin detail and as a history row in Overview.
 		seen := map[evidence.Digest]bool{}
-		for i := len(pin.History) - 1; i >= 0; i-- {
+		historyRows := []Entry{}
+		for i := 0; i < len(pin.History); i++ {
 			event := pin.History[i]
 			if event.Review == nil || event.Review.Receipt == "" || seen[event.Review.Receipt] {
 				continue
@@ -286,9 +306,12 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			}
 			for _, row := range rows {
 				e.Sections = append(e.Sections, row.Sections...)
+				if row.State.Kind == evidence.Observed && row.State.Applicability == evidence.Stale {
+					historyRows = append(historyRows, row)
+				}
 			}
 		}
-		return []Entry{e}, nil
+		return append([]Entry{e}, historyRows...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -316,7 +339,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				completeness = evidence.Incomplete
 			}
 		}
-		e := Entry{State: state, Completeness: completeness, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: []Section{document("receipt: producer, bindings, timestamps, limits", r)}}
+		e := Entry{State: state, Completeness: completeness, SourceReceipt: r.ID, HasComparison: comparison != nil, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: []Section{document("receipt: producer, bindings, timestamps, limits", r)}}
 		if r.Bindings != nil {
 			scenario, err := store.Get[evidence.Scenario](s, r.Bindings.Scenario)
 			if err != nil {
@@ -416,6 +439,17 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		return nil, errors.New("unsupported report")
 	}
 	entries := []Entry{}
+	reportCounts := ReportCounts{}
+	for _, card := range report.Cards {
+		switch card.State.Report {
+		case evidence.ReportPass:
+			reportCounts.Pass++
+		case evidence.ReportFail:
+			reportCounts.Fail++
+		case evidence.ReportSkip:
+			reportCounts.Skip++
+		}
+	}
 	summary := document("caller provenance, snapshot binding, timestamps and report limits", struct {
 		Metadata     gotestreport.Metadata     `json:"metadata"`
 		Completeness evidence.Completeness     `json:"completeness"`
@@ -448,10 +482,10 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		if card.Scope == "package" {
 			name = card.Package + " (package)"
 		}
-		entries = append(entries, Entry{State: state, Completeness: report.Completeness, Name: name, Sections: sections})
+		entries = append(entries, Entry{State: state, Completeness: report.Completeness, Name: name, ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: sections})
 	}
 	if len(entries) == 0 {
-		entries = append(entries, Entry{Summary: "no reported cases", Name: string(id), Sections: []Section{summary}})
+		entries = append(entries, Entry{State: evidence.EvidenceState{Producer: evidence.Importer, Kind: evidence.Reported, Applicability: evidence.Unknown, Execution: evidence.NotRun, Comparison: evidence.NotCompared, Report: evidence.NoReport}, Completeness: report.Completeness, Summary: "no reported cases", Name: string(id), ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: []Section{summary}})
 	}
 	return entries, nil
 }

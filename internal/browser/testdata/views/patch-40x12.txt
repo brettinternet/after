@@ -8,5 +8,5 @@ app/config.go · file 1 of 2 · captured …
             │ --- a/app/config.go
             │ +++ b/app/config.go
             │ @@ -1,5 +1,2 @@
-Stored records only; no project executi…
+
 q quit · ? help · Esc back

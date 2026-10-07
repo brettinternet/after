@@ -7,5 +7,5 @@ loaded     52f08b96 · b413d37e · 4551059b · +1
 ACTIVITY
 > 20:00:00  session opened  2d13fdbf · 3726afba · opened Activity
   20:00:00  capture finished  2d13fdbf · 3726afba · candidate ready
-Stored records only; no project execution
+
 q quit · ? help · Esc back · Enter open · 1 Overview · 2 Changes · 3 Diff

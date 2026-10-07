@@ -225,7 +225,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 
 			p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
 			p.expect("AFTER · project")
-			p.expect("Stored records only")
+			p.expect("NOT CHECKED — no evidence was loaded")
 			firstSelection, _ := p.finish()
 			allTranscript.WriteString(p.transcript.String())
 			first := readSession()
@@ -301,7 +301,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			} else if !strings.Contains(transcript, "\x1b[7m[1 Overview]") {
 				t.Fatal("color PTY did not style the active tab")
 			}
-			t.Logf("PTY %dx%d NO_COLOR=%t excerpts: Stored records only · New capture %s — u reviews it · Snapshot selected; prior evidence remains history · c: Capture running; selected pair unchanged · No new capture; the selected pair is unchanged · Saved review %s → %s · after review resumes it", variant.width, variant.height, variant.noColor, shortID(resumed.Pair.Candidate), shortID(first.Pair.Base), shortID(first.Pair.Candidate))
+			t.Logf("PTY %dx%d NO_COLOR=%t excerpts: NOT CHECKED — no evidence was loaded · New capture %s — u reviews it · Snapshot selected; prior evidence remains history · c: Capture running; selected pair unchanged · No new capture; the selected pair is unchanged · Saved review %s → %s · after review resumes it", variant.width, variant.height, variant.noColor, shortID(resumed.Pair.Candidate), shortID(first.Pair.Base), shortID(first.Pair.Candidate))
 		})
 	}
 }
@@ -487,6 +487,8 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("[EQUAL]")
 	p.send("\r")
 	p.expect("measured provider-request counts")
+	p.send("\x1b")
+	p.expect("1 Overview")
 	p.send("d")
 	p.expect("2 Changes")
 	p.send("\t")
@@ -510,7 +512,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	}
 	// Restart before editing proves the selected expectation is a durable record.
 	p = startLoopPTY(t, args(sel))
-	p.expect("observed · current")
+	p.expect("[PINNED]")
 	configBytes, err := os.ReadFile(filepath.Join(project, "app/config.go"))
 	if err != nil {
 		t.Fatal(err)
@@ -520,8 +522,8 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("new capture")
 	p.send("u")
 	p.expect("Snapshot selected; prior evidence remains history")
-	p.send("\x1b[F")
-	p.expect("not run / missing current evidence")
+	p.send("\x1b[H\x1b[B")
+	p.expect("Pin reopened: no result for this candidate yet")
 	p.send("\r")
 	p.expect("exact reopening reason")
 	sel, _ = p.finish()
@@ -538,7 +540,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		t.Fatal("reopening invented evidence or lost reason", v, err)
 	}
 	p = startLoopPTY(t, args(sel))
-	p.expect("[STALE]")
+	p.expect("[REOPENED]")
 	p.send("r")
 	p.expect("Run this exact plan?")
 	p.send("n")
@@ -547,7 +549,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("r")
 	p.expect("Run this exact plan?")
 	p.send("y")
-	p.expect("Authorized run active")
+	p.expect("Running the approved plan")
 	responsive := time.Now()
 	p.send("?")
 	p.expect("Help")
@@ -558,15 +560,24 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	}
 	p.send("\x1b")
 	p.expect("Measured result attached")
-	p.send("\x1b[F")
-	p.expect("30s same-key retry · provider requests 1 → 1")
-	p.send("k")
+	p.send("?")
+	p.expect("Help")
+	p.send("\x1b")
+	p.expect("NEEDS ANOTHER LOOK 2")
+	p.expect("[REOPENED]")
+	p.expect("[DIFFERENT]")
 	p.expect("12h same-key retry · provider requests 1 → 2")
+	p.expect("AGREES 1")
+	p.expect("[EQUAL]")
+	p.expect("30s same-key retry · provider requests 1 → 1")
+	p.expect("▸ EARLIER SNAPSHOTS 2")
+	p.send("\x1b[H" + strings.Repeat("\x1b[B", 5) + "\r") // Expand the history header after the attention rows and control.
+	p.expect("ran on " + shortID(pair.Candidate))
 	// Real authorized cancellation persists an incomplete result, not equality.
 	p.send("r")
 	p.expect("Run this exact plan?")
 	p.send("y")
-	p.expect("Authorized run active")
+	p.expect("Running the approved plan")
 	p.send("x")
 	p.expect("Run failed/cancelled; incomplete result retained")
 	sel, _ = p.finish()
@@ -603,8 +614,6 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		t.Fatalf("unexpected recent comparison outcomes: newest=%s prior=%s", cancelled.Outcome, good.Outcome)
 	}
 	p = startLoopPTY(t, args(sel))
-	p.expect("[STALE]")
-	p.send("\x1b[B\x1b[B")
 	p.expect("[REOPENED]")
 	p.send("\r")
 	p.expect("exact reopening reason")

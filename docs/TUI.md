@@ -1,8 +1,9 @@
 # Captured evidence review loop
 
 `after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
-The responsive frame, contextual key map, review session and Activity view are
-implemented; later redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
+The responsive frame, contextual key map, review session, Activity view, and
+AFTER-26 grouped Overview are implemented; later redesign tasks are specified in
+[TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after review                         # capture HEAD vs working tree; open or resume
@@ -44,7 +45,7 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                                 |
 | `1`–`4`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                             |
-| Enter                                              | Inspect the selected record or inventory entry                                              |
+| Enter                                              | Inspect the selected record or inventory entry; expand/collapse Overview groups             |
 | `d` / `2`                                          | Open Changes: the complete unclassified inventory                                           |
 | `3`                                                | Open the captured raw Diff                                                                  |
 | `]` / `[`                                          | Next / previous indexed file in Diff                                                        |
@@ -73,8 +74,8 @@ loaded. At that limit the immutable report remains stored and Activity retains
 its ID. Repeated `s` presses with unchanged session references grow neither
 Activity nor the evidence list.
 
-`a` no longer accepts a capture. It is reserved for pin acceptance, which is not
-yet available in this TUI; help reports that action as disabled.
+`a` no longer accepts a capture. Pin acceptance is not yet available in this TUI;
+help points to `after pin PIN --accept` for the explicit CLI decision.
 
 ## Changes and Diff
 
@@ -132,6 +133,41 @@ a receipt opened without a comparison is NOT COMPARED. Payment cases use their
 own paired and repetition witnesses: the 12h case may be DIFFERENT while the
 30s control is EQUAL. A differing repetition makes only its case UNSTABLE.
 Incomplete/incomparable comparisons never become equal case rows.
+
+## Overview triage and Next line
+
+Overview groups evidence in the order **NEEDS ANOTHER LOOK**, **PINNED EXPECTATIONS**,
+**AGREES**, **REPORTED**, **EARLIER SNAPSHOTS**, and **OTHER**. Empty groups are
+omitted and each header counts its evidence rows. Enter collapses or expands a
+group; Earlier Snapshots starts collapsed. Reopened pins and stale/unknown pins
+come before unavailable IDs and current failed, cancelled, incomplete, unstable,
+or different observations. Current equal observations are under Agrees. Reports
+stay under Reported, and observations bound to another pair remain under Earlier
+Snapshots with `ran on <candidate-id>` so their values cannot look current.
+
+Each report has a line before its cards containing the short report ID, caller-
+selected snapshot binding (or `unbound`), import time, and pass/fail/skip counts.
+The caller-supplied producer string is clipped as data at the end of the line;
+identical test names from separate reports therefore remain distinguishable.
+Reported passes use the reported badge/style, never the observed-equal style.
+
+The Overview `CHANGES` line counts rawdiff paths and captured hunks (all
+unclassified), and potential-oracle paths appear directly below it. For computed
+source diffs, captured hunk counts remain separate from computed added/deleted
+lines. With evidence loaded, `2 shows all` leads to the full Changes inventory.
+With no evidence, Overview says `NOT CHECKED` and lists every inventory path,
+including excluded and unsupported entries; Enter opens a listed path's captured
+detail without implying that anything ran.
+
+The Next line uses only typed record state: `Loading stored records — nothing
+runs on open`; `Couldn't load this pair — check the IDs with after inspect`;
+`Nothing has run. y runs this exact plan once · n denies`; the active-run line;
+a pending-capture notice; reopened-pin and current-result guidance; and, when no
+evidence is loaded, `Not checked — read the change, or c captures again after
+editing`. Otherwise it is blank. A transient action result replaces the line only
+until the next keypress. A current pin's available command is
+`after pin PIN --accept`; report names, output, and producer prose never become
+badges, group labels, or Next-line text.
 
 Rows read, for example, `12h same-key retry · provider requests 1 → 2 · responses same`.
 When repetitions disagree, every count is listed (`1 → 2,1`).

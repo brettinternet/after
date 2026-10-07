@@ -92,14 +92,16 @@ func TestActivityClockTicksOnlyWhileWorkIsActive(t *testing.T) {
 			if m.scheduleClock() == nil || !m.clockScheduled {
 				t.Fatal("active operation did not schedule its clock")
 			}
-			header, extra := m.frameHeader()
-			frameHeader := header + "\n" + strings.Join(extra, "\n")
-			if !strings.Contains(frameHeader, active.want) {
-				t.Fatalf("elapsed time not shown for %s: header=%q status=%q", active.name, frameHeader, m.statusLine())
+			frame := func() string {
+				header, extra := m.frameHeader()
+				return header + "\n" + strings.Join(extra, "\n")
+			}
+			if !strings.Contains(frame(), active.want) {
+				t.Fatalf("elapsed time not shown for %s: header=%q status=%q", active.name, frame(), m.statusLine())
 			}
 			clock = clock.Add(time.Second)
-			if !strings.Contains(m.statusLine(), elapsed(time.Second*66)) {
-				t.Fatalf("elapsed time did not update for %s: %q", active.name, m.statusLine())
+			if !strings.Contains(frame(), elapsed(time.Second*66)) {
+				t.Fatalf("elapsed time did not update for %s: %q", active.name, frame())
 			}
 			if strings.Contains(m.View(), "%") {
 				t.Fatal("elapsed frame invented a percentage")

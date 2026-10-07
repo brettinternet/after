@@ -70,11 +70,15 @@ type Model struct {
 	activityDropped, activityIndex       int
 	sessionActivityDetail                string
 	quitConfirm                          bool
+	loadFailed                           bool
 	width, height                        int
 	screen                               string
 	returnTo, helpFrom                   string
+	inspectInventory                     bool
 	targetDiffPath                       string
 	index, inventory, section, top, left int
+	overviewPosition                     int
+	overviewCollapsedGroups              map[overviewGroup]bool
 	doc                                  *terminal.Document
 	hex                                  bool
 	status                               string
@@ -87,7 +91,7 @@ func New(ctx context.Context, selected Selection, jobs Jobs) *Model {
 	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	selected.Evidence = append(selected.Evidence[:0:0], selected.Evidence...)
-	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, session: ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: selected.Pair, Mode: "original_base"}, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples", status: "Loading immutable records; no project execution"}
+	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, session: ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: selected.Pair, Mode: "original_base"}, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples"}
 }
 
 // spawn starts ownership before returning a Bubble Tea command, so even a quit
@@ -168,11 +172,8 @@ func (m *Model) rows() int {
 	if m.screen == "activity" {
 		return m.activityRows()
 	}
-	if m.screen == "examples" || m.screen == "inventory" {
-		rows -= 2 // explanatory rows above the list
-		if m.screen == "examples" && m.data != nil && (m.data.Selection.OmittedEvidence > 0 || m.data.Selection.DiscoveryWarning) {
-			rows--
-		}
+	if m.screen == "inventory" {
+		rows -= 2 // inventory summary and one fixed heading row
 	}
 	return max(rows, 1)
 }
@@ -194,13 +195,13 @@ func (m *Model) entries() []Entry {
 	if m.data == nil {
 		return nil
 	}
-	if m.screen == "inventory" || (m.screen == "inspector" && m.returnTo == "inventory") {
+	if m.screen == "inventory" || (m.screen == "inspector" && (m.returnTo == "inventory" || m.returnTo == "examples" && m.inspectInventory)) {
 		return m.data.Inventory
 	}
 	return m.data.Entries
 }
 func (m *Model) cursor() *int {
-	if m.screen == "inventory" || (m.screen == "inspector" && m.returnTo == "inventory") {
+	if m.screen == "inventory" || (m.screen == "inspector" && (m.returnTo == "inventory" || m.returnTo == "examples" && m.inspectInventory)) {
 		return &m.inventory
 	}
 	return &m.index
@@ -286,6 +287,7 @@ func (m *Model) startJob(name, kind string, job Job) tea.Cmd {
 }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
+		m.status = ""
 		if key.Paste {
 			return m, nil
 		}
@@ -329,17 +331,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.status = "Capture unavailable; use after capture/inspect"
+			m.loadFailed = true
+			m.status = ""
 		} else {
+			m.loadFailed = false
 			m.data = msg.data
 			m.selected = msg.data.Selection
-			if m.selected.DiscoveryWarning {
-				m.status = "Evidence discovery was limited; raw changes remain available"
-			} else if m.selected.OmittedEvidence > 0 {
-				m.status = fmt.Sprintf("%d matching records not loaded; history listing is unavailable until AFTER-37", m.selected.OmittedEvidence)
-			} else {
-				m.status = "Stored records only; no project execution"
-			}
+			m.status = ""
+			m.selectFirstOverviewRow()
 		}
 	case documentReady:
 		if msg.request != m.request {
@@ -423,6 +422,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.selected, m.data = msg.data.Selection, msg.data
 		m.index = max(len(m.data.Entries)-1, 0)
+		m.positionOverviewEntry(m.index)
 		m.status = "Imported report cards loaded without restart · s Activity"
 		if m.screen == "inspector" {
 			m.screen = "examples"
@@ -521,6 +521,20 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		}
 		return m.switchView((current + delta + count) % count)
 	case keyEnter:
+		if m.screen == "help" {
+			m.screen, m.helpFrom = m.helpFrom, ""
+		}
+		if m.screen == "examples" {
+			row, ok := m.currentOverviewRow()
+			if !ok {
+				return nil
+			}
+			if row.kind == overviewGroupHeader {
+				m.toggleOverviewGroup()
+				return nil
+			}
+			m.inspectInventory = row.kind == overviewInventory
+		}
 		m.returnTo = m.screen
 		m.screen = "inspector"
 		m.section = 0
@@ -604,7 +618,16 @@ func (m *Model) move(action keyAction) {
 			m.activityIndex = len(m.activity) - 1
 		}
 		m.activityIndex = min(max(m.activityIndex, 0), max(len(m.activity)-1, 0))
-	case "examples", "inventory":
+	case "examples":
+		position := m.overviewPosition + delta
+		if action == keyStart {
+			position = 0
+		}
+		if action == keyEnd {
+			position = len(m.overviewRows()) - 1
+		}
+		m.selectOverviewPosition(position)
+	case "inventory":
 		p := m.cursor()
 		*p += delta
 		if action == keyStart {
@@ -854,6 +877,10 @@ func (m *Model) breadcrumb() string {
 	return m.theme.Render(safePrefix, prefixWidth, terminal.Strong, true) + " " + m.theme.Render(badgeText, badgeWidth, b.style, false)
 }
 
+func (m *Model) overviewIsSelected() bool {
+	return m.screen == "examples" || m.screen == "inspector" && m.returnTo == "examples" || m.screen == "help" && m.helpFrom == "examples"
+}
+
 func lenInventory(data *Data) int {
 	if data == nil {
 		return 0
@@ -862,32 +889,45 @@ func lenInventory(data *Data) int {
 }
 
 func (m *Model) statusLine() string {
-	if m.quitConfirm {
-		return "Confirm quit? y cancels the run and quits · n keeps running"
+	if m.status != "" && (m.quitConfirm || m.data == nil) {
+		return m.status
 	}
-	if m.pending != nil {
-		if strings.HasPrefix(m.status, "New capture ") {
-			return "New capture " + shortID(m.pending.Candidate) + " — u reviews it"
-		}
-		return m.status + " · new capture " + shortID(m.pending.Candidate) + " · u"
+	if m.loadFailed {
+		return "Couldn't load this pair — check the IDs with after inspect"
+	}
+	if m.data == nil && m.status != "" {
+		return m.status
+	}
+	if m.data == nil {
+		return "Loading stored records — nothing runs on open"
+	}
+	if m.screen == "plan" {
+		return "Nothing has run. y runs this exact plan once · n denies"
 	}
 	if m.running {
-		if strings.HasPrefix(m.status, "Run continues") {
-			return "Run continues · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels · q confirms quit"
+		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels (the incomplete result is kept)"
+	}
+	if m.pending != nil {
+		return "New capture " + shortID(m.pending.Candidate) + " — u reviews it"
+	}
+	if m.capturing || m.busy || m.actionBusy {
+		return ""
+	}
+	if m.status != "" {
+		return m.status
+	}
+	if m.overviewIsSelected() {
+		if entry := m.selectedOverviewEntry(); entry != nil && entry.Decision == evidence.Reopened && entry.MissingCurrentResult {
+			return "Pin reopened: no result for this candidate yet — r previews a rerun"
 		}
-		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels · q confirms quit"
-	}
-	if m.capturing {
-		return "Capturing · " + elapsed(m.now().Sub(m.captureStarted)) + " · x cancels"
-	}
-	if m.busy {
-		kind := m.busyKind
-		if kind != "" {
-			kind = strings.ToUpper(kind[:1]) + kind[1:]
+		if entry := m.selectedOverviewEntry(); entry != nil && entry.Decision != "" && entry.State.Applicability == evidence.Current && !entry.MissingCurrentResult {
+			return "Current result attached — accept it with after pin PIN --accept"
 		}
-		return kind + " · " + elapsed(m.now().Sub(m.busyStarted)) + " · x cancels"
 	}
-	return m.status
+	if len(m.data.Entries) == 0 {
+		return "Not checked — read the change, or c captures again after editing"
+	}
+	return ""
 }
 
 func (m *Model) View() string {
@@ -940,27 +980,11 @@ func (m *Model) View() string {
 			}
 		}
 	case "examples":
-		entries := m.entries()
-		i := *m.cursor()
-		if len(entries) == 0 {
-			add("Not checked: no evidence loaded")
-			if line := m.overviewChangesLine(); line != "" {
-				add(line)
-			}
-		} else {
-			add("Badges: finite evidence only · Enter for full state and scope")
-			if line := m.overviewChangesLine(); line != "" {
-				add(line)
-			}
-			if m.data.Selection.OmittedEvidence > 0 {
-				add(fmt.Sprintf("%d matching records not loaded · history listing unavailable until AFTER-37", m.data.Selection.OmittedEvidence))
-			} else if m.data.Selection.DiscoveryWarning {
-				add("Evidence discovery was limited; history listing unavailable until AFTER-37")
-			}
-			top := max(0, i-m.rows()+1)
-			for n := top; n < min(len(entries), top+m.rows()); n++ {
-				body = append(body, m.entryLine(entries[n], n == i))
-			}
+		rows := m.overviewRows()
+		position := min(max(m.overviewPosition, 0), max(len(rows)-1, 0))
+		top := max(0, position-m.rows()+1)
+		for n := top; n < min(len(rows), top+m.rows()); n++ {
+			body = append(body, m.overviewRowText(rows[n], n == position))
 		}
 	case "inventory":
 		body = append(body, m.inventoryBody()...)

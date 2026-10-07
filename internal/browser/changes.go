@@ -13,14 +13,39 @@ import (
 )
 
 func (m *Model) overviewChangesLine() string {
+	if m.data == nil {
+		return ""
+	}
+	paths := len(m.data.Inventory)
+	oracles := 0
+	for _, entry := range m.data.Inventory {
+		if entry.PotentialOracle {
+			oracles++
+		}
+	}
+	line := fmt.Sprintf("CHANGES %d %s · %d captured %s, all unclassified · %d potential %s", paths, plural(paths, "path", "paths"), m.data.ChangeCounts.Total, plural(m.data.ChangeCounts.Total, "hunk", "hunks"), oracles, plural(oracles, "oracle", "oracles"))
+	if len(m.data.Entries) > 0 {
+		line += " · 2 shows all"
+	}
+	return line
+}
+
+func (m *Model) overviewChangeDetailLine() string {
 	if m.data == nil || m.data.Diff == nil || m.data.Diff.Origin != rawdiff.ComputedOrigin {
 		return ""
 	}
-	line := fmt.Sprintf("CHANGES · %s · %d paths · +%d −%d lines", m.data.Diff.Origin, len(m.data.Inventory), m.data.Diff.Added, m.data.Diff.Deleted)
+	line := m.data.Diff.Origin
 	if m.data.Diff.SourceLimited {
 		line += " · limited inventory"
 	}
 	return line
+}
+
+func plural(count int, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }
 
 func (m *Model) inventorySummary() string {

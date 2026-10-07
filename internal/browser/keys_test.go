@@ -63,7 +63,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	}
 	step(m, key("?"))
 	help := m.View()
-	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin, not a snapshot", "pin acceptance is not available", "s  Open Activity and record this session reference"} {
+	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin, not a snapshot", "after pin PIN --accept", "s  Open Activity and record this session reference"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("grouped help missing %q:\n%s", want, help)
 		}
@@ -73,7 +73,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	}
 }
 
-func TestOmittedEvidenceStatusNamesUnavailableHistoryCommand(t *testing.T) {
+func TestOmittedEvidenceGuidancePointsToLog(t *testing.T) {
 	sel := viewSelection(t)
 	sel.OmittedEvidence = 7
 	m := New(t.Context(), sel, Jobs{})
@@ -81,13 +81,13 @@ func TestOmittedEvidenceStatusNamesUnavailableHistoryCommand(t *testing.T) {
 	m.width, m.height = 120, 40
 	drain(m, m.Init())
 	frame := m.View()
-	for _, want := range []string{"7 matching records not loaded", "history listing is unavailable until AFTER-37"} {
+	for _, want := range []string{"7 matching records not loaded", "after log lists older records"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("omitted-evidence guidance missing %q:\n%s", want, frame)
 		}
 	}
-	if strings.Contains(frame, "after log") {
-		t.Fatal("browser advertised the unavailable history command")
+	if strings.Contains(frame, "unavailable until AFTER-37") {
+		t.Fatal("browser claimed that supported history listing is unavailable")
 	}
 }
 

@@ -165,6 +165,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		m.request++
 		m.index = min(m.index, max(0, len(m.data.Entries)-1))
 		m.inventory = min(m.inventory, max(0, len(m.data.Inventory)-1))
+		m.positionOverviewEntry(m.index)
 		m.status = msg.status + " · s Activity"
 		kind, summary := "selection changed", msg.status
 		if strings.HasPrefix(msg.status, "Pinned") {

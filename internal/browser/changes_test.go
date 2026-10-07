@@ -328,7 +328,7 @@ func TestPairWithoutSharedPatchNeverUsesAnotherPatch(t *testing.T) {
 		t.Fatal("Changes counts did not label the computed origin and partial inventory", m.View())
 	}
 	step(m, key("1"))
-	if !strings.Contains(m.View(), "CHANGES · "+rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "limited inventory") {
+	if !strings.Contains(m.View(), "CHANGES ") || !strings.Contains(m.View(), rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "limited inventory") {
 		t.Fatal("Overview CHANGES line did not label its computed origin and partial inventory", m.View())
 	}
 	step(m, key("2"))

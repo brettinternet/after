@@ -91,7 +91,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 						}
 						transcript.WriteString(chunk)
 						plain := stripCSI.ReplaceAllString(transcript.String(), "")
-						ready = strings.Contains(plain, shortID(evidence.Digest(sel.Pair.Candidate))) && strings.Contains(plain, "Stored records only") && strings.Contains(plain, "1 Overview")
+						ready = strings.Contains(plain, shortID(evidence.Digest(sel.Pair.Candidate))) && strings.Contains(plain, "NOT CHECKED") && strings.Contains(plain, "1 Overview")
 					case err := <-done:
 						t.Fatalf("TUI exited before frame: %v", err)
 					case <-deadline:
@@ -123,6 +123,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 						}
 					}
 				}
+				overviewExcerpt := ptyExcerpt(stripCSI.ReplaceAllString(transcript.String(), ""), "NOT CHECKED")
 				if _, err := master.Write([]byte("2")); err != nil {
 					t.Fatal(err)
 				}
@@ -193,6 +194,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 				lines := strings.Split(plain[last:], "\n")
 				excerpt := strings.Join(lines[:min(2, len(lines))], "\n")
 				t.Logf("real PTY %dx%d %s excerpt:\n%s", size.width, size.height, name, excerpt)
+				t.Logf("real PTY Overview excerpt: %s", overviewExcerpt)
 				t.Logf("real PTY Changes excerpt: %s", ptyExcerpt(changeExcerpt, "computed from captured sources — not Git's patch"))
 				t.Logf("real PTY Diff excerpt: %s", ptyExcerpt(plain, "computed from captured sources — not Git's patch"))
 				t.Logf("real PTY Activity excerpt: %s", ptyExcerpt(plain, "ACTIVITY"))
@@ -280,7 +282,7 @@ func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
 							}
 						}
 					}
-					waitFor("Running the approved plan")
+					waitFor("running 1:05 · x")
 					if quit == "q-confirm" {
 						if _, err := master.Write([]byte("q")); err != nil {
 							t.Fatal(err)
@@ -294,7 +296,7 @@ func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
 						if _, err := master.Write([]byte("n")); err != nil {
 							t.Fatal(err)
 						}
-						waitFor("Run continues")
+						waitFor("running 1:06 · x")
 						if _, err := master.Write([]byte("q")); err != nil {
 							t.Fatal(err)
 						}

@@ -176,7 +176,17 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	if m.screen != "examples" || m.index != 1 {
 		t.Fatal("selection lost")
 	}
-	step(m, key("k"))
+	reportPosition := -1
+	for position, row := range m.overviewRows() {
+		if row.kind == overviewEvidence && m.data.Entries[row.entryIndex].State.Kind == evidence.Reported {
+			reportPosition = position
+			break
+		}
+	}
+	if reportPosition < 0 {
+		t.Fatal("reported card missing from grouped Overview")
+	}
+	m.selectOverviewPosition(reportPosition)
 	step(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.doc == nil || !strings.Contains(string(m.doc.RawBytes()), "reported") {
 		t.Fatal("actual report inspector")
@@ -494,6 +504,7 @@ func TestCancelDoesNotBlockNavigation(t *testing.T) {
 	}})
 	defer m.Close()
 	m.data = &Data{Entries: []Entry{{Name: "one"}, {Name: "two"}}}
+	m.selectFirstOverviewRow()
 	_, cmd := m.Update(key("c"))
 	<-started
 	step(m, key("j"))

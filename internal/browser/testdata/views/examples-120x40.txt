@@ -1,11 +1,16 @@
 AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
 [1 Overview]   2 Changes 6   3 Diff   4 Activity
-Badges: finite evidence only · Enter for full state and scope
-> [DIFFERENT]   12h same-key retry · provider requests 1 → 2 · responses same                    observed · current
+  ▾ NEEDS ANOTHER LOOK 2
+> [UNAVAILABLE] sha256:0000000000000000000000000000000000000000000000000000000000000000
+  [DIFFERENT]   12h same-key retry · provider requests 1 → 2 · responses same                    observed · current
+  ▾ AGREES 1
   [EQUAL]       30s same-key retry · provider requests 1 → 1 · responses same                    observed · current
+  ▾ REPORTED — imported, not observed by AFTER 3
+  report b413d37e · bound to unbound · imported 20:00 · 1 pass · 1 fail · synthetic test
   [REPORTED]    example.com/cart (package)                                                       reported · pass
   [REPORTED]    TestThreshold                                                                    reported · fail
+  report 4551059b · bound to 3726afba · imported Jan 1 00:00 · 1 pass · go test caller
   [REPORTED]    example                                                                          reported · pass
-  [UNAVAILABLE] sha256:0000000000000000000000000000000000000000000000000000000000000000
-Stored records only; no project execution
+CHANGES 6 paths · 1 captured hunk, all unclassified · 0 potential oracles · 2 shows all
+
 q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous
