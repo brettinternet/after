@@ -108,18 +108,23 @@ func TestBrowserPTY(t *testing.T) {
 		done <- run(t.Context(), []string{"review", captured.Data.Candidate.ID, "--tui", "--base", captured.Data.Base.ID, "--evidence", imported.Data.ID, "--project", project, "--import-file", report, "--producer", "PTY Go report"}, slave, &stderr, slave, true)
 	}()
 	expect("[REPORTED]")
+	if !strings.Contains(transcript.String(), "1 Overview") {
+		t.Fatal("overview tab missing from the initial PTY frame")
+	}
 	send("\r")
 	expect("reported case")
 	send("\x1b")
-	expect("AFTER review | examples")
+	expect("1 Overview")
 	send("d")
-	expect("AFTER review | inventory")
+	expect("2 Changes")
 	send("\t")
 	expect("captured raw diff")
 	send("?")
-	expect("Badges are engine metadata")
+	expect("Help")
+	send("\x1b")
+	expect("1 Overview")
 	send("c")
-	expect("Job finished; stored result retained")
+	expect("New capture")
 	send("i")
 	expect("Job finished; stored result retained")
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 8, Cols: 32}); err != nil {
@@ -128,8 +133,7 @@ func TestBrowserPTY(t *testing.T) {
 	if err := syscall.Kill(os.Getpid(), syscall.SIGWINCH); err != nil {
 		t.Fatal(err)
 	}
-	send("\x1b")
-	expect("AFTER review | examples")
+	expect("AFTER ·")
 	send("q")
 	select {
 	case code := <-done:

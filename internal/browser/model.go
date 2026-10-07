@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rivo/uniseg"
@@ -50,7 +52,7 @@ type Model struct {
 	busy                                 bool
 	width, height                        int
 	screen                               string
-	returnTo                             string
+	returnTo, helpFrom                   string
 	index, inventory, section, top, left int
 	doc                                  *terminal.Document
 	hex                                  bool
@@ -88,13 +90,37 @@ func (m *Model) Init() tea.Cmd {
 	selected := m.selected
 	return m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })
 }
-func (m *Model) rows() int { return max(m.height-5, 1) }
+func (m *Model) secondaryRow() bool {
+	if m.height <= 2 {
+		return false
+	}
+	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch"))
+}
+func (m *Model) bodyRows() int {
+	_, jobLines := m.frameHeader()
+	reserved := 1 + len(jobLines) // header and overflow indicators
+	if m.secondaryRow() {
+		reserved++
+	}
+	reserved++ // key hints
+	if m.height >= 7 {
+		reserved++ // next/status line
+	}
+	return max(m.height-reserved, 0)
+}
+func (m *Model) rows() int {
+	rows := m.bodyRows()
+	if m.screen == "examples" || m.screen == "inventory" {
+		rows -= 2 // explanatory rows above the list
+	}
+	return max(rows, 1)
+}
 func (m *Model) contentRows() int {
-	reserved := 5 // header, document details, section name, status and key hints
+	reserved := 2 // section metadata and section name
 	if m.doc != nil && m.doc.Limited() && !m.hex {
 		reserved++
 	}
-	return max(m.height-reserved, 1)
+	return max(m.bodyRows()-reserved, 1)
 }
 func (m *Model) entries() []Entry {
 	if m.data == nil {
@@ -169,6 +195,20 @@ func (m *Model) startJob(name string, job Job) tea.Cmd {
 	return m.spawn(func() tea.Msg { result, err := job(ctx); cancel(); return finished{id, result, err} })
 }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if key.Paste {
+			return m, nil
+		}
+		binding, found := keyBindingFor(key.String())
+		if !found {
+			return m, nil
+		}
+		if reason := m.keyReason(binding, false); reason != "" {
+			m.status = "Can't " + binding.label + ": " + reason
+			return m, nil
+		}
+		return m, m.dispatch(binding)
+	}
 	if cmd, handled := m.updateLoop(msg); handled {
 		return m, cmd
 	}
@@ -184,7 +224,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Capture unavailable; use after capture/inspect"
 		} else {
 			m.data = msg.data
-			m.status = "Stored records only; no new observation. c capture | i import configured file"
+			m.status = "Stored records only; no project execution"
 		}
 	case documentReady:
 		if msg.request != m.request {
@@ -218,133 +258,165 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.data != nil {
 			m.data.Entries = append(m.data.Entries, Entry{Summary: "job completion, not evidence", Name: "background result", Sections: []Section{{Name: "stored result IDs / diagnostic", Content: []byte(result)}}})
 		}
-	case tea.KeyMsg:
-		if msg.Paste {
-			return m, nil
-		}
-		switch msg.String() {
-		case "q", "ctrl+c":
-			m.cancel()
-			return m, tea.Quit
-		case "x":
-			if m.jobCancel != nil {
-				m.jobCancel()
-				m.status = "Cancellation requested; waiting for owned job cleanup"
-			}
-		case "c":
-			return m, m.startJob("Capture", m.jobs.Capture)
-		case "i":
-			return m, m.startJob("Import", m.jobs.Import)
-		case "?":
-			m.request++
-			m.screen = "help"
-			m.top = 0
-		case "esc":
-			m.request++
-			m.top = 0
-			if m.screen == "inspector" {
-				m.screen = m.returnTo
-			} else {
-				m.screen = "examples"
-			}
-		case "d":
-			m.request++
-			m.screen = "inventory"
-			m.top = 0
-		case "enter":
-			if m.screen == "examples" || m.screen == "inventory" {
-				if len(m.entries()) == 0 {
-					return m, nil
-				}
-				m.returnTo = m.screen
-				m.screen = "inspector"
-				m.section = 0
-				return m, m.loadDocument()
-			}
-		case "tab", "shift+tab":
-			if m.screen == "inventory" {
-				m.screen = "patch"
-				m.section = 0
-				return m, m.loadDocument()
-			}
-			if m.screen == "patch" || m.screen == "inspector" || m.screen == "plan" {
-				count := len(m.sections())
-				if count == 0 {
-					return m, nil
-				}
-				delta := 1
-				if msg.String() == "shift+tab" {
-					delta = -1
-				}
-				m.section = (m.section + delta + count) % count
-				return m, m.loadDocument()
-			}
-		case "b":
-			if m.isDocumentScreen() && m.doc != nil {
-				m.hex = !m.hex
-				m.top = 0
-				m.left = 0
-			}
-		case "right", "l":
-			if m.isDocumentScreen() && m.doc != nil && !m.hex {
-				m.left = min(m.left+16, m.doc.MaxColumns())
-			} else if m.screen == "examples" || m.screen == "inventory" || m.screen == "help" {
-				m.left = min(m.left+16, 240)
-			}
-		case "left", "h":
-			if (m.isDocumentScreen() && !m.hex) || m.screen == "examples" || m.screen == "inventory" || m.screen == "help" {
-				m.left = max(m.left-16, 0)
-			}
-		case "j", "down", "k", "up", "pgdown", "pgup", "home", "end", "g", "G":
-			delta := 1
-			switch msg.String() {
-			case "k", "up":
-				delta = -1
-			case "pgdown":
-				delta = m.rows()
-			case "pgup":
-				delta = -m.rows()
-			}
-			if m.screen == "examples" || m.screen == "inventory" {
-				p := m.cursor()
-				*p += delta
-				if msg.String() == "home" || msg.String() == "g" {
-					*p = 0
-				}
-				if msg.String() == "end" || msg.String() == "G" {
-					*p = len(m.entries()) - 1
-				}
-				*p = min(max(*p, 0), max(len(m.entries())-1, 0))
-			} else if m.screen == "help" {
-				m.top += delta
-				if msg.String() == "home" || msg.String() == "g" {
-					m.top = 0
-				}
-				if msg.String() == "end" || msg.String() == "G" {
-					m.top = len(helpLines) - 1
-				}
-				m.top = min(max(m.top, 0), max(len(helpLines)-m.rows(), 0))
-			} else if m.isDocumentScreen() && m.doc != nil {
-				rows := m.contentRows()
-				if msg.String() == "pgdown" {
-					delta = rows
-				} else if msg.String() == "pgup" {
-					delta = -rows
-				}
-				total := m.documentRows()
-				m.top += delta
-				if msg.String() == "home" || msg.String() == "g" {
-					m.top = 0
-				}
-				if msg.String() == "end" || msg.String() == "G" {
-					m.top = max(total-rows, 0)
-				}
-				m.top = min(max(m.top, 0), max(total-rows, 0))
-			}
-		}
 	}
 	m.top = max(0, m.top)
 	return m, nil
+}
+
+func (m *Model) dispatch(binding keyBinding) tea.Cmd {
+	if cmd, handled := m.dispatchLoop(binding.action); handled {
+		return cmd
+	}
+	switch binding.action {
+	case keyQuit:
+		m.cancel()
+		return tea.Quit
+	case keyHelp:
+		m.request++
+		if m.screen == "help" {
+			m.screen, m.helpFrom = m.helpFrom, ""
+		} else {
+			m.helpFrom, m.screen = m.screen, "help"
+		}
+		m.top = 0
+	case keyBack:
+		m.request++
+		m.top = 0
+		if m.screen == "help" {
+			m.screen, m.helpFrom = m.helpFrom, ""
+		} else if m.screen == "inspector" {
+			m.screen = m.returnTo
+		} else {
+			m.screen = "examples"
+		}
+	case keyOverview:
+		return m.switchView(0)
+	case keyChanges:
+		return m.switchView(1)
+	case keyDiff:
+		return m.switchView(2)
+	case keyNext, keyPrevious:
+		if m.screen == "inspector" || m.screen == "plan" {
+			count := len(m.sections())
+			delta := 1
+			if binding.action == keyPrevious {
+				delta = -1
+			}
+			m.section = (m.section + delta + count) % count
+			return m.loadDocument()
+		}
+		current := map[string]int{"examples": 0, "inventory": 1, "patch": 2}[m.screen]
+		count := 1
+		if m.data != nil {
+			count = 3
+		}
+		delta := 1
+		if binding.action == keyPrevious {
+			delta = -1
+		}
+		return m.switchView((current + delta + count) % count)
+	case keyEnter:
+		m.returnTo = m.screen
+		m.screen = "inspector"
+		m.section = 0
+		return m.loadDocument()
+	case keyPanLeft, keyPanRight:
+		if m.isDocumentScreen() && m.doc != nil && !m.hex {
+			delta := 16
+			if binding.action == keyPanLeft {
+				delta = -16
+			}
+			m.left = min(max(m.left+delta, 0), m.doc.MaxColumns())
+		} else if binding.action == keyPanRight {
+			m.left = min(m.left+16, 240)
+		} else {
+			m.left = max(m.left-16, 0)
+		}
+	case keyHex:
+		m.hex = !m.hex
+		m.top, m.left = 0, 0
+	case keyDown, keyUp, keyPageDown, keyPageUp, keyStart, keyEnd:
+		m.move(binding.action)
+	case keyCapture:
+		if m.jobs.Actions == nil {
+			return m.startJob("Capture", m.jobs.Capture)
+		}
+	case keyImport:
+		return m.startJob("Import", m.jobs.Import)
+	}
+	return nil
+}
+
+func (m *Model) switchView(view int) tea.Cmd {
+	m.request++
+	m.doc = nil
+	m.top = 0
+	switch view {
+	case 0:
+		m.screen = "examples"
+		return nil
+	case 1:
+		m.screen = "inventory"
+		return nil
+	case 2:
+		m.screen = "patch"
+		m.section = 0
+		return m.loadDocument()
+	default:
+		return nil
+	}
+}
+
+func (m *Model) move(action keyAction) {
+	delta := 1
+	switch action {
+	case keyUp:
+		delta = -1
+	case keyPageDown:
+		delta = m.rows()
+	case keyPageUp:
+		delta = -m.rows()
+	}
+	switch m.screen {
+	case "examples", "inventory":
+		p := m.cursor()
+		*p += delta
+		if action == keyStart {
+			*p = 0
+		}
+		if action == keyEnd {
+			*p = len(m.entries()) - 1
+		}
+		*p = min(max(*p, 0), max(len(m.entries())-1, 0))
+	case "help":
+		lines := m.helpLines()
+		m.top += delta
+		if action == keyStart {
+			m.top = 0
+		}
+		if action == keyEnd {
+			m.top = len(lines) - 1
+		}
+		m.top = min(max(m.top, 0), max(len(lines)-m.bodyRows(), 0))
+	default:
+		if m.isDocumentScreen() && m.doc != nil {
+			rows := m.contentRows()
+			if action == keyPageDown {
+				delta = rows
+			} else if action == keyPageUp {
+				delta = -rows
+			}
+			total := m.documentRows()
+			m.top += delta
+			if action == keyStart {
+				m.top = 0
+			}
+			if action == keyEnd {
+				m.top = max(total-rows, 0)
+			}
+			m.top = min(max(m.top, 0), max(total-rows, 0))
+		}
+	}
 }
 
 func (m *Model) isDocumentScreen() bool {
@@ -361,26 +433,191 @@ func (m *Model) documentRows() int {
 }
 func window(raw string, left, width int) string { return terminal.LineAt(raw, left, width) }
 
-var helpLines = []string{
-	"Enter inspect | Esc back | d complete inventory",
-	"Inventory: Tab raw patch; Enter captured source",
-	"Inspector/patch: Tab/Shift+Tab section; b text/hex",
-	"j/k move | PgUp/PgDn | Home/End | g/G document start/end",
-	"h/l pan safely through first 4 KiB; [b] links to hex view",
-	"Documents: NUL in first 8000 bytes starts in hex view",
-	"Hex: offset rows keep every original byte reachable",
-	"c capture | i import configured file | x cancel job",
-	"q/Ctrl-C quit and cancel/join owned jobs",
-	"Badges are engine metadata; payload cannot forge them",
-	"p pin selected measured count | c capture | a accept snapshot",
-	"r exact preview | y approve once | n deny | x cancel",
-	"Resume using pin revision IDs shown in session details (s)",
-	"Evidence is finite measured inputs/channels, not safety",
+func (m *Model) headerText() string {
+	baseID, candidateID := shortID(m.selected.Pair.Base), shortID(m.selected.Pair.Candidate)
+	if m.width < 60 {
+		return fmt.Sprintf("AFTER · %s → %s", baseID, candidateID)
+	}
+	project := filepath.Base(filepath.Clean(m.selected.Project))
+	if project == "." || project == string(filepath.Separator) || project == "" {
+		project = "project"
+	}
+	baseSource, candidateSource := "source loading", "source loading"
+	if m.data != nil {
+		baseSource = snapshotSource(m.data.BaseSnapshot)
+		candidateSource = snapshotSource(m.data.CandidateSnapshot)
+	}
+	return fmt.Sprintf("AFTER · %s · base %s (%s) → candidate %s (%s)", project, baseID, baseSource, candidateID, candidateSource)
+}
+
+func (m *Model) frameHeader() (string, []string) {
+	header := m.headerText()
+	if m.height <= 2 {
+		return header, nil
+	}
+	indicators := []string{}
+	if m.capturing {
+		indicators = append(indicators, "capturing")
+	}
+	if m.pending != nil {
+		indicators = append(indicators, "new capture "+shortID(m.pending.Candidate)+" · u")
+	}
+	if m.running {
+		indicators = append(indicators, "running "+elapsed(m.now().Sub(m.runStarted))+" · x")
+	}
+	extra := []string{}
+	for _, indicator := range indicators {
+		candidate := header + " · " + indicator
+		if uniseg.StringWidth(candidate) <= m.width {
+			header = candidate
+		} else {
+			extra = append(extra, indicator)
+		}
+	}
+	return header, extra
+}
+
+func snapshotSource(snapshot evidence.Snapshot) string {
+	switch snapshot.Source {
+	case evidence.Commit:
+		if snapshot.Unborn || snapshot.Commit == "" {
+			return "commit unborn"
+		}
+		return "commit " + commitShort(snapshot.Commit)
+	case evidence.WorkingTree:
+		return "working tree"
+	case evidence.Index:
+		return "staged"
+	case evidence.MergeBase:
+		return "merge base " + commitShort(snapshot.MergeBase)
+	default:
+		return "source unavailable"
+	}
+}
+
+func commitShort(commit string) string {
+	return commit[:min(7, len(commit))]
+}
+
+func elapsed(duration time.Duration) string {
+	seconds := max(int(duration.Seconds()), 0)
+	if seconds >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", seconds/3600, seconds/60%60, seconds%60)
+	}
+	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
+}
+
+func (m *Model) tabBar() string {
+	labels := []string{"1 Overview", fmt.Sprintf("2 Changes %d", lenInventory(m.data)), "3 Diff"}
+	if m.width < 60 {
+		labels = []string{"1 Ov", fmt.Sprintf("2 Ch %d", lenInventory(m.data)), "3 Df"}
+	}
+	active := map[string]int{"examples": 0, "inventory": 1, "patch": 2}[m.screen]
+	count := 1
+	if m.data != nil {
+		count = len(labels)
+	}
+	var line strings.Builder
+	used := 0
+	for index := 0; index < count; index++ {
+		label := labels[index]
+		if index == active {
+			label = "[" + label + "]"
+		}
+		separator := ""
+		if used > 0 {
+			separator = "   "
+		}
+		width := uniseg.StringWidth(label)
+		sepWidth := uniseg.StringWidth(separator)
+		if used+sepWidth+width > m.width {
+			break
+		}
+		line.WriteString(separator)
+		style := terminal.Plain
+		if index == active {
+			style = terminal.Reverse
+		}
+		line.WriteString(m.theme.Render(label, width, style, false))
+		used += sepWidth + width
+	}
+	return line.String()
+}
+
+func (m *Model) breadcrumb() string {
+	if m.screen == "help" {
+		return m.theme.Render("Help", m.width, terminal.Strong, false)
+	}
+	if m.screen == "plan" {
+		return m.theme.Render("Review › Exact execution preview", m.width, terminal.Strong, false)
+	}
+	if m.screen != "inspector" {
+		return ""
+	}
+	root := "Overview"
+	if m.returnTo == "inventory" {
+		root = "Changes"
+	}
+	entries := m.entries()
+	i := *m.cursor()
+	if i >= len(entries) {
+		return m.theme.Render(root, m.width, terminal.Strong, false)
+	}
+	entry := entries[i]
+	prefix := root + " › " + entry.Name
+	b := badgeFor(entry)
+	badgeText := "[" + b.word + "]"
+	badgeWidth := uniseg.StringWidth(badgeText)
+	prefixWidth := max(m.width-badgeWidth-1, 0)
+	if prefixWidth == 0 {
+		return m.theme.Render(prefix, m.width, terminal.Strong, false)
+	}
+	safePrefix := terminal.Line(prefix, prefixWidth)
+	used := uniseg.StringWidth(safePrefix)
+	if used+1+badgeWidth > m.width {
+		return m.theme.Render(prefix, m.width, terminal.Strong, false)
+	}
+	return m.theme.Render(safePrefix, prefixWidth, terminal.Strong, true) + " " + m.theme.Render(badgeText, badgeWidth, b.style, false)
+}
+
+func lenInventory(data *Data) int {
+	if data == nil {
+		return 0
+	}
+	return len(data.Inventory)
+}
+
+func (m *Model) statusLine() string {
+	if m.pending != nil {
+		if strings.HasPrefix(m.status, "New capture ") {
+			return "New capture " + shortID(m.pending.Candidate) + " — u reviews it"
+		}
+		return m.status + " · new capture " + shortID(m.pending.Candidate) + " · u"
+	}
+	if m.running {
+		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels"
+	}
+	return m.status
 }
 
 func (m *Model) View() string {
-	lines := []string{m.theme.Render("AFTER review | "+m.screen, m.width, terminal.Strong, false)}
-	add := func(s string) { lines = append(lines, terminal.Line(s, m.width)) }
+	if m.height == 1 {
+		return terminal.Line(m.keyHints(), m.width)
+	}
+	header, indicators := m.frameHeader()
+	lines := []string{m.theme.Render(header, m.width, terminal.Strong, false)}
+	for _, indicator := range indicators {
+		lines = append(lines, m.theme.Render(indicator, m.width, terminal.Attention, false))
+	}
+	if m.secondaryRow() {
+		if m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" {
+			lines = append(lines, m.tabBar())
+		} else {
+			lines = append(lines, m.breadcrumb())
+		}
+	}
+	body := []string{}
+	add := func(s string) { body = append(body, terminal.Line(s, m.width)) }
 	data := func(s string) {
 		prefix := "data | "
 		if m.width <= len(prefix) {
@@ -391,9 +628,10 @@ func (m *Model) View() string {
 	}
 	switch m.screen {
 	case "help":
-		top := min(m.top, len(helpLines)-1)
-		for _, s := range helpLines[top:min(top+m.rows(), len(helpLines))] {
-			add(window(s, m.left, m.width))
+		help := m.helpLines()
+		top := min(m.top, max(len(help)-1, 0))
+		for _, line := range help[top:min(top+m.bodyRows(), len(help))] {
+			add(window(line, m.left, m.width))
 		}
 	case "examples", "inventory":
 		entries := m.entries()
@@ -405,7 +643,7 @@ func (m *Model) View() string {
 			add("Badges: finite evidence only · Enter for full state and scope")
 			top := max(0, i-m.rows()+1)
 			for n := top; n < min(len(entries), top+m.rows()); n++ {
-				lines = append(lines, m.entryLine(entries[n], n == i))
+				body = append(body, m.entryLine(entries[n], n == i))
 			}
 		}
 	case "inspector", "patch", "plan":
@@ -441,7 +679,7 @@ func (m *Model) View() string {
 						gutter := fmt.Sprintf("%*d │ ", digits, n+1)
 						gutterWidth := uniseg.StringWidth(gutter)
 						if m.width <= gutterWidth {
-							lines = append(lines, terminal.Line(gutter, m.width))
+							body = append(body, terminal.Line(gutter, m.width))
 							continue
 						}
 						available := m.width - gutterWidth
@@ -451,22 +689,21 @@ func (m *Model) View() string {
 							available -= len(marker)
 						}
 						row := m.doc.LineAt(n, m.left, available) + marker
-						lines = append(lines, gutter+row)
+						body = append(body, gutter+row)
 					}
 				}
 			}
 		}
 	}
-	if m.pending != nil {
-		add("New captured snapshot available; a explicitly accepts; selection unchanged")
+	footer := []string{}
+	if m.height >= 7 {
+		footer = append(footer, terminal.Line(m.statusLine(), m.width))
 	}
-	add(m.status)
-	if m.isDocumentScreen() {
-		add("j/k move | PgUp/PgDn | Home/End | g/G start/end | h/l pan | b text/hex | Tab section | Esc back")
-	} else {
-		add("Enter inspect | d diff | ? help | Esc back | q quit")
-	}
-	return strings.Join(lines[:min(len(lines), m.height)], "\n")
+	footer = append(footer, terminal.Line(m.keyHints(), m.width))
+	available := max(m.height-len(lines)-len(footer), 0)
+	lines = append(lines, body[:min(len(body), available)]...)
+	lines = append(lines, footer...)
+	return strings.Join(lines, "\n")
 }
 func Run(m *Model, input io.Reader, output io.Writer) error {
 	defer m.Close()

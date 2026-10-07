@@ -27,8 +27,8 @@ Try in the TUI:
   1. Enter on a case row: exact responses and provider calls. Esc.
   2. On the 43200s (12h) row, p: pin its measured count (1) as a finite expectation.
   3. In another terminal:  $regress
-  4. c captures the edit, a accepts it as the reviewed candidate. End selects the pin:
-     reopened | stale | missing current evidence. Enter shows the exact reason.
+  4. c captures the edit; u uses it as the reviewed candidate, retaining the original base.
+     End selects the pin: reopened | stale | missing current evidence. Enter shows why.
   5. r previews the exact offline rerun plan; n denies (nothing runs), y approves once.
      Navigation stays live during the run; x cancels it.
   6. New rows appear: 43200s base=[1] candidate=[2] breaks the pinned expectation;

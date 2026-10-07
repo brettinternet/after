@@ -109,7 +109,7 @@ func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair) (Selection, 
 		if old.BasisSnapshots.Base != pair.Base {
 			return sel, errors.New("snapshot acceptance retains the original base")
 		}
-		pin, err := review.Select(s, id, target, evidence.OriginalBase, "Explicit TUI a: accept captured snapshot, not its behavior")
+		pin, err := review.Select(s, id, target, evidence.OriginalBase, "Explicit TUI u: use captured snapshot, not its behavior")
 		if err != nil {
 			return sel, err
 		}

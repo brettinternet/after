@@ -191,7 +191,7 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 		}
 	}
 	step(m, key("?"))
-	if !strings.Contains(m.View(), "Badges are engine metadata") {
+	if !strings.Contains(m.View(), "unavailable:") {
 		t.Fatal(m.View())
 	}
 }
@@ -433,8 +433,8 @@ func TestJobsWaitForInitialLoad(t *testing.T) {
 			defer m.Close()
 			m.loadID = 1
 			_, cmd := m.Update(key(action))
-			if cmd != nil || m.busy || !strings.Contains(m.status, "finish loading") {
-				t.Fatal("job started before its result could be retained")
+			if cmd != nil || m.busy || !strings.Contains(m.status, "wait for stored records to load") {
+				t.Fatal("job started before its result could be retained", m.status)
 			}
 			m.Update(loaded{request: 1, data: &Data{}})
 			step(m, key(action))

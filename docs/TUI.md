@@ -3,8 +3,8 @@
 `after review --tui` opens the stored engine records, not a demo or a live checkout.
 It does not run Git, import a report, build code or contact Docker on open.
 The existing headless `review <pin-revision-id>` remains unchanged.
-This page documents current behavior; the remaining redesign (AFTER-23–33) is
-specified in [TUI-DESIGN.md](TUI-DESIGN.md).
+The responsive frame and contextual key map from AFTER-23 are implemented; the
+remaining redesign (AFTER-24–33) is specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after capture --project /path/to/project
@@ -18,29 +18,58 @@ implicit selection of the newest result. Start without evidence to review the
 complete captured inventory and patch with an explicit **not checked** screen.
 Unknown/corrupt evidence IDs do not hide the raw inventory.
 
-## Keys and evidence
+## Frame, keys and evidence
 
-| Key                                         | Action                                                                                                                  |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Up/down or `j`/`k`, PgUp/PgDn, Home/End     | Select a record or scroll the focused document continuously                                                             |
-| Enter                                       | Inspect the selected record or inventory entry                                                                          |
-| `d`                                         | Open the complete unclassified inventory, including unknown, excluded, unsupported, binary and potential-oracle entries |
-| Tab in inventory                            | Open the captured raw patch                                                                                             |
-| Tab / Shift+Tab in inspector, patch or plan | Next/previous section                                                                                                   |
-| `g` / `G`                                   | Move to the start/end of the complete text or hex document                                                              |
-| `b`                                         | Toggle exact-byte hex view for any document; NUL in the first 8,000 bytes opens hex automatically                       |
-| Left/right or `h`/`l`                       | Pan text by grapheme-safe columns through the first 4 KiB of each line; `[b]` marks longer lines                        |
-| Escape                                      | Return to list, preserving selection                                                                                    |
-| `?`                                         | Scrollable help                                                                                                         |
-| `c`                                         | Explicitly capture HEAD versus working tree in the background; untracked files stay excluded                            |
-| `i`                                         | Explicitly import the file configured at launch, if any                                                                 |
-| `p`                                         | Pin the selected measured candidate provider-request count as a finite expectation (list only)                          |
-| `a`                                         | Accept the pending captured candidate, retaining the original review base; not behavior acceptance                      |
-| `r`                                         | Prepare and display the exact frozen offline execution plan, without executing                                          |
-| `y` / `n`                                   | In the preview only: approve this plan once / deny without execution                                                    |
-| `s`                                         | Inspect selected snapshot IDs, immutable pin revisions and retained result IDs for restart                              |
-| `x`                                         | Request cancellation of the active job                                                                                  |
-| `q` / Ctrl-C                                | Quit, cancel and join owned work, restore terminal                                                                      |
+The frame header shows the sanitized project directory name, short base and
+candidate snapshot IDs, and source words from the stored snapshot records:
+`commit <short hash>`, `working tree`, `staged`, or `merge base <short hash>`.
+A ready capture is shown as `new capture <id> · u`; an authorized run shows its
+elapsed time and `x` cancellation key. The Overview, Changes (with inventory
+count), and Diff tabs exist after records load. The active tab is reverse video
+in color mode and bracketed in `NO_COLOR` mode. A detail screen replaces tabs
+with a breadcrumb and the selected row's typed badge.
+
+Number keys `1`–`3` and Tab/Shift+Tab switch between Overview, Changes, and Diff.
+In a detail or preview, Tab/Shift+Tab moves between document sections. At fewer
+than 12 rows the tab bar hides (number keys still work); below 7 rows the status
+line hides and hints shrink to `? help · q quit`. Below 60 columns the project
+and source words are omitted, tab labels shorten, and only high-priority hints
+are shown. The viewport remains capped at 240×100.
+
+One contextual key map drives dispatch, footer hints, and grouped `?` help.
+Hints show only enabled actions and are clipped at the terminal width; help also
+shows disabled actions with their reason. Color is optional: `NO_COLOR` (any
+non-empty value) or `TERM=dumb` disables styling. The actions are:
+
+| Key                                                | Action                                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                               |
+| `1`–`3`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                           |
+| Enter                                              | Inspect the selected record or inventory entry                                            |
+| `d` / `2`                                          | Open Changes: the complete unclassified inventory                                         |
+| `3`                                                | Open the captured raw Diff                                                                |
+| `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically          |
+| Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                        |
+| Esc                                                | Return from a detail, preview, or overlay; return to Overview from another top-level view |
+| `?`                                                | Open grouped help with contextual disabled reasons                                        |
+| `c`                                                | Explicitly capture HEAD versus working tree in the background                             |
+| `i`                                                | Import the file configured at launch, if any                                              |
+| `u`                                                | Use a pending capture with the original review base; selection is explicit                |
+| `p`                                                | Pin the selected measured provider-request count as a finite expectation                  |
+| `r`                                                | Prepare the exact frozen offline execution plan without executing                         |
+| `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                      |
+| `s`                                                | Inspect snapshot IDs, pin revisions and retained result IDs for restart                   |
+| `x`                                                | Request cancellation of an active owned job                                               |
+| `q` / Ctrl-C                                       | Quit, cancel and join owned work, restore the terminal                                    |
+
+`a` no longer accepts a capture. It is reserved for pin acceptance, which is not
+yet available in this TUI; help reports that action as disabled. At a 1×1
+terminal, `q` still quits even though the frame cannot show a useful hint.
+
+Each evidence row has a bracketed badge derived only from typed engine fields,
+a plain-text name and summary, and a trailing kind/freshness column at widths
+of 80 or more. Selection is marked by `>` and bold; color is optional.
+Narrow rows clip explicitly; Enter retains the complete record and scope.
 
 Each evidence row has a bracketed badge derived only from typed engine fields,
 a plain-text name and summary, and a trailing kind/freshness column at widths
@@ -104,7 +133,7 @@ To enable `i`, supply `--import-file /path/to/report.jsonl --producer 'caller Go
 The file is opened only on that key action, through the same bounded regular-file
 reader as the CLI, bound to the launch candidate (not a subsequently selected one).
 Import completion adds a result row with its persisted ID. Capture completion
-notifies without replacing the selected pair or cursor; press `a` to accept it.
+notifies without replacing the selected pair or cursor; press `u` to use it.
 Actions are unavailable until the initial immutable records finish loading.
 One capture and one run can progress together; one short pin/selection/preview
 operation runs at a time. They share a lazy, process-owned store writer whose
@@ -122,8 +151,8 @@ it is not acceptance of the whole change. Twelve-hour and thirty-second rows sho
 all recorded repetition counts. Imported, incomplete, historical or unstable
 candidate counts cannot become this finite-count pin.
 
-Edit the checkout externally, then press `c`. Only `a` accepts the captured
-candidate. Pin revisions reopen conservatively on whole-project basis changes;
+Edit the checkout externally, then press `c`. Only `u` uses the captured
+candidate, retaining the original base. Pin revisions reopen conservatively on whole-project basis changes;
 the inspector gives the exact reason and **missing current evidence** state.
 Prior observations, including the control, remain inspectable under their original
 snapshot IDs. Their values are history, not predictions for the new candidate.

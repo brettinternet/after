@@ -27,11 +27,11 @@ inventory "$BASE" "$CANDIDATE"
 cat >&2 <<'EOF'
 
 Try in the TUI:
-  d          complete inventory: deleted, added (a rename is both), binary, mode change, excluded .env.local
-  j/k Enter  inspect one entry; Tab/Shift+Tab move between sections
-  Tab        (from inventory) the captured raw patch; j/k, PgUp/PgDn, g/G scroll
+  1/2/3      Overview, Changes inventory, and captured Diff; active tab is highlighted
+  Tab        next view; Shift+Tab previous view (inside a detail, move between sections)
+  j/k Enter  inspect one entry; Changes includes deleted, added, binary, mode, and excluded paths
   b          toggle exact hex bytes; h/l pan long lines
-  Esc        back to the list; the STATE row says "not checked" - no evidence was supplied
-  ?          every key;  q quits and restores the terminal
+  Esc        back to the previous view; no evidence was supplied
+  ?          grouped contextual keys and unavailable reasons; q quits and restores the terminal
 EOF
 open_tui "$CANDIDATE" --base "$BASE"

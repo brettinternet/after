@@ -43,6 +43,11 @@ provider received and ignores what the app reports about itself.
 
 Each script prepares state, prints a short key guide, then opens `after review --tui`
 after you press Enter. Set `AFTER_EXAMPLES_PREPARE_ONLY=1` to prepare without opening.
+Use `1`/`2`/`3` or Tab/Shift+Tab for Overview/Changes/Diff; the frame identifies
+the project and snapshot sources. After an external edit, `c` captures and `u`
+explicitly uses the new candidate with the original base. Contextual footer hints
+and grouped `?` help explain which actions are available. `a` does not switch
+snapshots.
 
 | Script                                                     | Scenario                                                                           |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |

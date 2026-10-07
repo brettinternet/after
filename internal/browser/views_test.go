@@ -136,15 +136,20 @@ func TestCaseRowsFromStoredWitnesses(t *testing.T) {
 func TestGoldenViews(t *testing.T) {
 	sel := viewSelection(t)
 	for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 40}, {Width: 80, Height: 24}, {Width: 40, Height: 12}} {
-		for _, screen := range []string{"examples", "inventory"} {
+		for _, screen := range []string{"examples", "inventory", "patch"} {
 			name := fmt.Sprintf("%s-%dx%d", screen, size.Width, size.Height)
 			t.Run(name, func(t *testing.T) {
 				m := New(t.Context(), sel, Jobs{})
 				defer m.Close()
 				m.setClock(func() time.Time { return viewTime }, time.UTC)
+				m.theme.Color = false
 				drain(m, m.Init())
 				step(m, size)
-				m.screen = screen
+				if screen == "patch" {
+					step(m, key("3"))
+				} else {
+					m.screen = screen
+				}
 				got := m.View() + "\n"
 				path := filepath.Join("testdata", "views", name+".txt")
 				if *updateViews {

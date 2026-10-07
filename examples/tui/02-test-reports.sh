@@ -55,11 +55,11 @@ cards "$frozen"
 cat >&2 <<EOF
 
 Try in the TUI:
-  j/k        rows 1-2 are the candidate suite (STATE report=pass), rows 3-4 the frozen run (report=fail)
-  Enter      inspect a row: producer, output, and inputs/effects "unavailable" (reported, not observed)
-  d          inventory: shipping_test.go is a potential oracle
+  1/2/3      Overview, Changes inventory, and captured Diff; Tab/Shift+Tab cycle views
+  j/k Enter  inspect a row: producer, output, and inputs/effects "unavailable" (reported, not observed)
+  2          Changes shows shipping_test.go as a potential oracle
   c          capture again after editing the checkout in another terminal, e.g.
                cd $PROJECT && echo '// free over \$75' >> shipping.go
-  a          accept that capture as the reviewed candidate (selection, not behavior approval)
+  u          use that capture as the reviewed candidate; the original base stays selected
 EOF
 open_tui "$CANDIDATE" --base "$BASE" --evidence "$(jq -r .data.id <<<"$report")" --evidence "$(jq -r .data.id <<<"$frozen")"

@@ -79,6 +79,10 @@ func TestLoopConsentAndSnapshotBarrier(t *testing.T) {
 		t.Fatal("arrival moved selection")
 	}
 	press(m, "a")
+	if m.selected.Pair != before || m.pending == nil {
+		t.Fatal("a must not switch snapshots", m.status)
+	}
+	press(m, "u")
 	if m.selected.Pair == before || m.index != 0 || m.digest != "" {
 		t.Fatal("explicit selection failed", m.status)
 	}

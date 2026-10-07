@@ -140,12 +140,12 @@ func TestBrowserDocumentPTY(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			expect("AFTER review | examples")
+			expect("1 Overview")
 			expect("[REPORTED]")
 			expect("example.com/cart (package)")
 			expect("reported · pass")
 			send("d")
-			expect("AFTER review | inventory")
+			expect("2 Changes")
 			expect("[NOT CHECKED]")
 			send("\r")
 			expect("Section 1/3")

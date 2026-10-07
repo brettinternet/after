@@ -1,0 +1,12 @@
+AFTER · 2d13fdbf → 3726afba
+1 Ov   2 Ch 6   [3 Df]
+Section 1/2 | 470 stored bytes | text |…
+data | captured raw diff
+ 1 │ diff --git a/app/config.go b/app/c…
+ 2 │ index 41e6150..bb43ab7 100644
+ 3 │ --- a/app/config.go
+ 4 │ +++ b/app/config.go
+ 5 │ @@ -1,5 +1,2 @@
+ 6 │  package main
+Stored records only; no project executi…
+q quit · ? help · Esc back

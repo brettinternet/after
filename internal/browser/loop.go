@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/brettinternet/after/internal/evidence"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +18,7 @@ type loopState struct {
 	generation                     uint64
 	actionBusy, capturing, running bool
 	runCancel                      context.CancelFunc
+	runStarted                     time.Time
 	results                        []evidence.Digest
 }
 type snapshotReady struct {
@@ -41,6 +43,11 @@ type ran struct {
 	comparison evidence.Digest
 	err        error
 }
+type runClockTick struct{}
+
+func nextRunClockTick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return runClockTick{} })
+}
 
 func (m *Model) change(work func() (Selection, error), status string) tea.Cmd {
 	m.actionBusy = true
@@ -57,13 +64,18 @@ func (m *Model) invalidatePlan() { m.generation++; m.preview = nil; m.digest = "
 func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 	a := m.jobs.Actions
 	switch msg := msg.(type) {
+	case runClockTick:
+		if m.running {
+			return nextRunClockTick(), true
+		}
+		return nil, true
 	case snapshotReady:
 		m.capturing = false
 		if msg.err != nil {
 			m.status = "Capture failed: " + msg.err.Error()
 		} else {
 			m.pending = &msg.pair
-			m.status = "Job finished; stored result retained; a accepts new snapshot"
+			m.status = "New capture " + shortID(msg.pair.Candidate) + " is ready; u reviews it"
 		}
 		return nil, true
 	case prepared:
@@ -103,6 +115,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 	case ran:
 		m.running = false
 		m.runCancel = nil
+		m.runStarted = time.Time{}
 		if msg.comparison != "" {
 			m.results = append(m.results, msg.comparison)
 		}
@@ -112,7 +125,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		if msg.comparison == "" {
 			return nil, true
 		}
-		if msg.pair != m.selected.Pair || m.actionBusy {
+		if msg.pair != m.selected.Pair || m.actionBusy || a == nil {
 			m.status = "Late result retained for originating snapshot; selection unchanged; s result IDs"
 			return nil, true
 		}
@@ -122,96 +135,101 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			status = "Run failed/cancelled; incomplete result retained, not equality"
 		}
 		return m.change(func() (Selection, error) { return a.Attach(sel, msg.comparison) }, status), true
-	case tea.KeyMsg:
-		if msg.Paste || a == nil {
+	}
+	return nil, false
+}
+
+func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
+	a := m.jobs.Actions
+	switch action {
+	case keyCapture:
+		if a == nil {
 			return nil, false
 		}
-		switch msg.String() {
-		case "x":
-			if m.runCancel != nil {
-				m.runCancel()
-				m.status = "Cancellation requested; waiting for owned run cleanup"
-			}
-			return nil, false
-		case "esc", "n":
-			if m.screen == "plan" {
-				m.invalidatePlan()
-				m.request++
-				m.screen = "examples"
-				m.status = "Execution denied; no project execution"
-				return nil, true
-			}
-		case "s":
-			if m.data == nil {
-				return nil, true
-			}
-			// Full IDs are data pages, not clipped-only notifications. Immutable pin
-			// revisions are the restart contract, shared with the headless CLI.
-			m.data.Entries = append(m.data.Entries, Entry{Summary: "session references only", Name: "session IDs for restart", Sections: []Section{document("selected pair, evidence/pin revisions, retained run comparisons", struct {
-				Selection Selection
-				Results   []evidence.Digest
-			}{m.selected, m.results})}})
-			m.index = len(m.data.Entries) - 1
-			m.returnTo = "examples"
-			m.screen = "inspector"
-			m.section = 0
-			return m.loadDocument(), true
-		case "c":
-			if m.capturing || m.data == nil {
-				return nil, true
-			}
-			m.capturing = true
-			m.status = "Capture running; selected pair unchanged"
-			return m.spawn(func() tea.Msg { pair, err := a.Capture(m.ctx); return snapshotReady{pair, err} }), true
-		case "p":
-			if m.actionBusy || m.data == nil || m.screen != "examples" || len(m.data.Entries) == 0 {
-				return nil, true
-			}
-			entry, sel := m.data.Entries[m.index], m.selected
-			return m.change(func() (Selection, error) {
-				if len(sel.Evidence) >= MaxEvidence {
-					return sel, errors.New("evidence limit reached")
-				}
-				id, err := a.Pin(entry, sel.Pair)
-				if err != nil {
-					return sel, err
-				}
-				sel.Evidence = append(append([]evidence.Digest(nil), sel.Evidence...), id)
-				return sel, nil
-			}, "Pinned selected finite provider-request expectation"), true
-		case "a":
-			if m.pending == nil || m.actionBusy || m.data == nil {
-				return nil, true
-			}
-			sel := m.selected
-			// Capture's new HEAD must not silently replace the original review base.
-			pair := evidence.SnapshotPair{Base: sel.Pair.Base, Candidate: m.pending.Candidate}
-			m.pending = nil
-			m.invalidatePlan()
-			return m.change(func() (Selection, error) { return a.Select(sel, pair) }, "Snapshot accepted; prior evidence is history, not a prediction"), true
-		case "r":
-			if m.actionBusy || m.running || m.data == nil {
-				return nil, true
-			}
-			m.invalidatePlan()
-			gen, pair := m.generation, m.selected.Pair
-			m.actionBusy = true
-			m.status = "Preparing exact offline plan; no execution"
-			return m.spawn(func() tea.Msg { raw, digest, err := a.Prepare(pair); return prepared{gen, pair, raw, digest, err} }), true
-		case "y":
-			if m.screen != "plan" || len(m.preview) == 0 || m.digest == "" || m.planPair != m.selected.Pair || m.running || m.actionBusy {
-				return nil, true
-			}
-			raw, digest, pair := append([]byte(nil), m.preview...), m.digest, m.planPair
-			m.invalidatePlan()
-			m.screen = "examples"
-			m.request++
-			ctx, cancel := context.WithCancel(m.ctx)
-			m.runCancel = cancel
-			m.running = true
-			m.status = "Authorized run active; x cancel; navigation and capture remain available"
-			return m.spawn(func() tea.Msg { defer cancel(); id, err := a.Run(ctx, pair, raw, digest); return ran{pair, id, err} }), true
+		m.capturing = true
+		m.status = "Capture running; selected pair unchanged"
+		return m.spawn(func() tea.Msg { pair, err := a.Capture(m.ctx); return snapshotReady{pair, err} }), true
+	case keyUseCapture:
+		if m.pending == nil || m.actionBusy || m.data == nil || a == nil {
+			return nil, true
 		}
+		sel := m.selected
+		pair := evidence.SnapshotPair{Base: sel.Pair.Base, Candidate: m.pending.Candidate}
+		m.pending = nil
+		m.invalidatePlan()
+		return m.change(func() (Selection, error) { return a.Select(sel, pair) }, "Snapshot selected; prior evidence remains history"), true
+	case keyPin:
+		if a == nil || m.data == nil || m.actionBusy || len(m.data.Entries) == 0 {
+			return nil, true
+		}
+		entry, sel := m.data.Entries[m.index], m.selected
+		return m.change(func() (Selection, error) {
+			if len(sel.Evidence) >= MaxEvidence {
+				return sel, errors.New("evidence limit reached")
+			}
+			id, err := a.Pin(entry, sel.Pair)
+			if err != nil {
+				return sel, err
+			}
+			sel.Evidence = append(append([]evidence.Digest(nil), sel.Evidence...), id)
+			return sel, nil
+		}, "Pinned selected finite provider-request expectation"), true
+	case keyPreview:
+		if a == nil || m.actionBusy || m.running || m.data == nil {
+			return nil, true
+		}
+		m.invalidatePlan()
+		gen, pair := m.generation, m.selected.Pair
+		m.actionBusy = true
+		m.status = "Preparing exact offline plan; no execution"
+		return m.spawn(func() tea.Msg { raw, digest, err := a.Prepare(pair); return prepared{gen, pair, raw, digest, err} }), true
+	case keyApprove:
+		if a == nil || m.screen != "plan" || len(m.preview) == 0 || m.digest == "" || m.planPair != m.selected.Pair || m.running || m.actionBusy {
+			return nil, true
+		}
+		raw, digest, pair := append([]byte(nil), m.preview...), m.digest, m.planPair
+		m.invalidatePlan()
+		m.screen = "examples"
+		m.request++
+		ctx, cancel := context.WithCancel(m.ctx)
+		m.runCancel = cancel
+		m.runStarted = m.now()
+		m.running = true
+		m.status = "Authorized run active; x cancels; navigation remains available"
+		return tea.Batch(m.spawn(func() tea.Msg { defer cancel(); id, err := a.Run(ctx, pair, raw, digest); return ran{pair, id, err} }), nextRunClockTick()), true
+	case keyDeny, keyBack:
+		if m.screen != "plan" {
+			return nil, false
+		}
+		m.invalidatePlan()
+		m.request++
+		m.screen = "examples"
+		m.status = "Execution denied; no project execution"
+		return nil, true
+	case keySession:
+		if m.data == nil {
+			return nil, true
+		}
+		// Full IDs are data pages, not clipped-only notifications. Immutable pin
+		// revisions are the restart contract, shared with the headless CLI.
+		m.data.Entries = append(m.data.Entries, Entry{Summary: "session references only", Name: "session IDs for restart", Sections: []Section{document("selected pair, evidence/pin revisions, retained run comparisons", struct {
+			Selection Selection
+			Results   []evidence.Digest
+		}{m.selected, m.results})}})
+		m.index = len(m.data.Entries) - 1
+		m.returnTo = "examples"
+		m.screen = "inspector"
+		m.section = 0
+		return m.loadDocument(), true
+	case keyCancel:
+		if m.jobCancel != nil {
+			m.jobCancel()
+		}
+		if m.runCancel != nil {
+			m.runCancel()
+		}
+		m.status = "Cancellation requested; waiting for owned job cleanup"
+		return nil, true
 	}
 	return nil, false
 }

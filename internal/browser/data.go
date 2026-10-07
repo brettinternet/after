@@ -61,11 +61,13 @@ type Entry struct {
 	Sections             []Section
 }
 type Data struct {
-	Selection Selection
-	Entries   []Entry
-	Inventory []Entry
-	Patch     Section
-	Limits    Section
+	Selection         Selection
+	BaseSnapshot      evidence.Snapshot
+	CandidateSnapshot evidence.Snapshot
+	Entries           []Entry
+	Inventory         []Entry
+	Patch             Section
+	Limits            Section
 }
 
 func document(name string, value any) Section {
@@ -110,7 +112,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Data{Selection: selected, Patch: Section{Name: "captured raw diff", Blob: candidate.Diff}, Limits: document("capture limits", raw.Limits())}
+	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, Patch: Section{Name: "captured raw diff", Blob: candidate.Diff}, Limits: document("capture limits", raw.Limits())}
 	if !rawdiff.CapturedPair(base, candidate) {
 		d.Patch = document("no shared captured patch; inspect inventory and both sources", raw.Limits())
 	}
