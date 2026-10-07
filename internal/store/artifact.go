@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/brettinternet/after/internal/evidence"
@@ -104,6 +105,39 @@ func (s *Store) blob(id evidence.Digest) ([]byte, error) {
 		return nil, ErrCorrupt
 	}
 	return data, nil
+}
+
+// ReadArtifactMetadata verifies a content-addressed artifact descriptor without
+// reading its referenced blob. Discovery can filter by trusted descriptor fields
+// before opening report bodies or large captured source blobs.
+func (s *Store) ReadArtifactMetadata(id evidence.Digest) (evidence.Artifact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var zero evidence.Artifact
+	name, err := key("artifact", string(id))
+	if err != nil {
+		return zero, err
+	}
+	raw, err := s.read(name, evidence.MaxRecordBytes)
+	if err != nil {
+		return zero, err
+	}
+	if hash(raw) != string(id) {
+		return zero, ErrCorrupt
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var artifact evidence.Artifact
+	if err := decoder.Decode(&artifact); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return zero, ErrCorrupt
+	}
+	if artifact.Content == "" || len(artifact.Channel) == 0 || len(artifact.Channel) > 256 || artifact.Bytes < 0 || artifact.MaxBytes <= 0 || artifact.MaxBytes > MaxBlobBytes || artifact.Bytes > artifact.MaxBytes || (artifact.Completeness != evidence.Complete && artifact.Completeness != evidence.Incomplete) || ((artifact.Redacted || artifact.Truncated) && artifact.Completeness == evidence.Complete) {
+		return zero, ErrCorrupt
+	}
+	if artifact.RedactionPolicy != "" && artifact.RedactionPolicy != redactionPolicy || artifact.Redacted && artifact.RedactionPolicy != redactionPolicy {
+		return zero, ErrCorrupt
+	}
+	return artifact, nil
 }
 
 func (s *Store) artifact(a evidence.Artifact) error {

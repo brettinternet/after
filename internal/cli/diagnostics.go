@@ -119,8 +119,8 @@ func removedForm(args []string) error {
 			return invalidWithFix("inspect no longer accepts --base as a snapshot ID", "use after inspect BASE CANDIDATE")
 		}
 	case "review":
-		if hasOption(args[1:], "--tui") || hasOption(args[1:], "--base") || hasOption(args[1:], "--evidence") {
-			return invalidWithFix("review no longer uses --tui, --base, or --evidence for snapshot pairs", "use after review BASE CANDIDATE [EVIDENCE ...]")
+		if hasOption(args[1:], "--tui") || hasOption(args[1:], "--evidence") {
+			return invalidWithFix("review no longer uses --tui or --evidence for snapshot pairs", "use after review BASE CANDIDATE [EVIDENCE ...]")
 		}
 		if hasOption(args[1:], "--select") {
 			return invalidWithFix("pin selection moved out of review", "use after pin PIN --select SNAPSHOT [--mode MODE] [--reason TEXT]")
@@ -133,9 +133,6 @@ func removedForm(args []string) error {
 		}
 		if hasOption(args[1:], "--mode") || hasOption(args[1:], "--reason") {
 			return invalidWithFix("pin decisions moved out of review", "use after pin PIN with --select, --attach, or --accept")
-		}
-		if len(positionalArgs(args[1:])) == 1 {
-			return invalidWithFix("pin inspection moved out of review", "use after pin PIN")
 		}
 	}
 	return nil
@@ -154,7 +151,7 @@ func hasOption(args []string, option string) bool {
 func positionalArgs(args []string) []string {
 	valueFlags := map[string]bool{
 		"--config": true, "--project": true, "--import-file": true, "--producer": true,
-		"--base": true, "--evidence": true, "--select": true, "--receipt": true,
+		"--base": true, "--target": true, "--include-untracked": true, "--evidence": true, "--select": true, "--receipt": true,
 		"--mode": true, "--reason": true,
 	}
 	var positional []string

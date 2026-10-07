@@ -164,6 +164,10 @@ func (s *Store) read(name string, max int64) ([]byte, error) {
 }
 
 func (s *Store) budget(extra int64) error {
+	return s.budgetReplacing("", extra)
+}
+
+func (s *Store) budgetReplacing(replaced string, extra int64) error {
 	dir, err := s.root.Open(".")
 	if err != nil {
 		return err
@@ -173,14 +177,29 @@ func (s *Store) budget(extra int64) error {
 	if err != nil && err != io.EOF {
 		return err
 	}
-	if len(entries) >= MaxEntries {
-		return ErrLimit
-	}
-	total := extra
+	total, count := extra, 0
 	for _, entry := range entries {
+		if entry.Name() == replaced {
+			continue
+		}
+		count++
+		if count >= MaxEntries {
+			return ErrLimit
+		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
+		}
+		if entry.Name() == "session.json" {
+			// Invalid UI state remains replaceable, but regular files still
+			// consume their full size until a session save replaces them.
+			if info.Mode().IsRegular() {
+				total += info.Size()
+			}
+			if total > MaxStoreBytes {
+				return ErrLimit
+			}
+			continue
 		}
 		if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
 			return errors.New("unsafe entry in store")

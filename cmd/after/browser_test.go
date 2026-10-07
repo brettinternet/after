@@ -116,9 +116,11 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cmd.Stdin, cmd.Stdout = slave, slave
+			cmd.Stdin = slave
+			var stdout synchronizedBuffer
+			cmd.Stdout = &stdout
 			var stderr synchronizedBuffer
-			cmd.Stderr = &stderr
+			cmd.Stderr = slave
 			if err := cmd.Start(); err != nil {
 				t.Fatal(err)
 			}
@@ -159,6 +161,9 @@ func TestBrowserDocumentPTY(t *testing.T) {
 				}
 			}
 			expect("1 Overview")
+			if stdout.String() != "" {
+				t.Fatalf("TUI rendered to stdout instead of stderr: %q", stdout.String())
+			}
 			expect("[REPORTED]")
 			expect("example.com/cart (package)")
 			expect("reported · pass")

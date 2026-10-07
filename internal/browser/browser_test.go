@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -446,6 +447,19 @@ func TestJobsWaitForInitialLoad(t *testing.T) {
 				t.Fatal("returned ID not inspectable", m.View())
 			}
 		})
+	}
+}
+
+func TestBackgroundCaptureFailureKeepsReviewOpen(t *testing.T) {
+	pair := evidence.SnapshotPair{Base: evidence.Digest("sha256:" + strings.Repeat("a", 64)), Candidate: evidence.Digest("sha256:" + strings.Repeat("b", 64))}
+	selection := Selection{Pair: pair}
+	m := New(t.Context(), selection, Jobs{})
+	defer m.Close()
+	m.data = &Data{Selection: selection, Entries: []Entry{{Name: "stored evidence"}}}
+	m.status = "Stored records only; no project execution"
+	_, handled := m.updateLoop(snapshotReady{err: errors.New("unmerged index is unsupported")})
+	if !handled || m.screen != "examples" || m.data == nil || m.selected.Pair != pair || m.status != "Capture failed: unmerged index is unsupported" {
+		t.Fatalf("background capture failure closed or changed the review: handled=%t screen=%s status=%q selection=%+v", handled, m.screen, m.status, m.selected)
 	}
 }
 

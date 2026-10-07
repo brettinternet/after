@@ -10,7 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -29,6 +32,7 @@ type loopPTY struct {
 	chunks             chan string
 	done               chan int
 	stderr             bytes.Buffer
+	stdout             bytes.Buffer
 	transcript, unread strings.Builder
 	before             *term.State
 }
@@ -83,7 +87,7 @@ func startLoopPTYSize(t *testing.T, args []string, width, height int) *loopPTY {
 			}
 		}
 	}()
-	go func() { defer close(stopped); p.done <- run(ctx, args, p.slave, &p.stderr, p.slave, true) }()
+	go func() { defer close(stopped); p.done <- run(ctx, args, &p.stdout, p.slave, p.slave, true) }()
 	return p
 }
 func (p *loopPTY) send(keys string) {
@@ -115,6 +119,51 @@ func (p *loopPTY) expect(want string) {
 		}
 	}
 }
+func latestPinID(t *testing.T, project string) evidence.Digest {
+	t.Helper()
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	pins, err := review.Heads(s)
+	if err != nil || len(pins) == 0 {
+		t.Fatalf("missing saved review pin: %v", err)
+	}
+	return pins[len(pins)-1].ID
+}
+
+func latestComparisonsForPair(s *store.Store, pair evidence.SnapshotPair) ([]evidence.Comparison, error) {
+	ids, err := s.List("comparison")
+	if err != nil {
+		return nil, err
+	}
+	type result struct {
+		comparison evidence.Comparison
+		finished   time.Time
+	}
+	var matches []result
+	for _, entry := range ids {
+		comparison, err := store.Get[evidence.Comparison](s, entry.ID)
+		if err != nil {
+			return nil, err
+		}
+		receipt, err := store.Get[evidence.Receipt](s, comparison.Receipt)
+		if err != nil {
+			return nil, err
+		}
+		if receipt.Snapshots == pair {
+			matches = append(matches, result{comparison: comparison, finished: receipt.FinishedAt})
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].finished.After(matches[j].finished) })
+	comparisons := make([]evidence.Comparison, len(matches))
+	for i, match := range matches {
+		comparisons[i] = match.comparison
+	}
+	return comparisons, nil
+}
+
 func (p *loopPTY) finish() (browser.Selection, []evidence.Digest) {
 	p.t.Helper()
 	p.send("q")
@@ -134,19 +183,215 @@ func (p *loopPTY) finish() (browser.Selection, []evidence.Digest) {
 	for chunk := range p.chunks {
 		p.transcript.WriteString(chunk)
 	}
-	raw := p.transcript.String()
-	index := strings.LastIndex(raw, `{"Selection":`)
-	if index < 0 {
-		p.t.Fatal("no restart references", raw)
+	var output struct {
+		Data browser.ReviewSession `json:"data"`
 	}
-	var session struct {
-		Selection browser.Selection
-		Results   []evidence.Digest
+	if err := json.NewDecoder(strings.NewReader(p.stdout.String())).Decode(&output); err != nil {
+		p.t.Fatalf("no valid review session on stdout: %v; output=%q", err, p.stdout.String())
 	}
-	if err := json.NewDecoder(strings.NewReader(raw[index:])).Decode(&session); err != nil {
-		p.t.Fatal(err)
+	return browser.Selection{Pair: output.Data.Pair}, nil
+}
+
+func TestReviewLaunchResumePTY(t *testing.T) {
+	for _, variant := range []struct {
+		width, height int
+		noColor       bool
+	}{{80, 24, false}, {80, 24, true}, {120, 40, false}, {120, 40, true}} {
+		t.Run(fmt.Sprintf("%dx%d-NO_COLOR=%t", variant.width, variant.height, variant.noColor), func(t *testing.T) {
+			project := filepath.Join(t.TempDir(), "project")
+			makeProject(t, project)
+			firstSource := "package main\nfunc main() { println(1) }\n"
+			writeProjectFile(t, project, "app/main.go", firstSource)
+			t.Setenv("TERM", "xterm-256color")
+			if variant.noColor {
+				t.Setenv("NO_COLOR", "1")
+			} else {
+				t.Setenv("NO_COLOR", "")
+			}
+			statePath := filepath.Join(project, ".after", "session.json")
+			readSession := func() browser.ReviewSession {
+				t.Helper()
+				raw, err := os.ReadFile(statePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				session, err := browser.DecodeReviewSession(raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return session
+			}
+			var allTranscript strings.Builder
+
+			p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
+			p.expect("AFTER · project")
+			p.expect("Stored records only")
+			firstSelection, _ := p.finish()
+			allTranscript.WriteString(p.transcript.String())
+			first := readSession()
+			if first.Pair != firstSelection.Pair || first.Capture.Staged || first.Capture.Base != "" {
+				t.Fatalf("initial capture session mismatch: stored=%+v stdout=%+v", first, firstSelection)
+			}
+			if info, err := os.Stat(statePath); err != nil || info.Mode().Perm() != 0600 {
+				t.Fatalf("saved session mode: info=%v err=%v", info, err)
+			}
+			firstBytes, err := os.ReadFile(statePath)
+			if err != nil || strings.Contains(string(firstBytes), "println(1)") {
+				t.Fatalf("session contains source or is unreadable: %v", err)
+			}
+			if !strings.Contains(p.transcript.String(), fmt.Sprintf("Saved review %s → %s · after review resumes it", shortID(first.Pair.Base), shortID(first.Pair.Candidate))) {
+				t.Fatal("quit did not announce the saved review")
+			}
+
+			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(2) }\n")
+			p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
+			p.expect("AFTER · project")
+			p.expect("Stored records only")
+			p.expect("New capture ")
+			p.send("u")
+			p.expect("Snapshot selected; prior evidence remains history")
+			selectedBeforeQuit := readSession()
+			if selectedBeforeQuit.Pair.Base != first.Pair.Base || selectedBeforeQuit.Pair.Candidate == first.Pair.Candidate {
+				t.Fatalf("selection was not saved immediately: first=%+v selected=%+v", first.Pair, selectedBeforeQuit.Pair)
+			}
+			resumedSelection, _ := p.finish()
+			allTranscript.WriteString(p.transcript.String())
+			resumed := readSession()
+			if resumed.Pair != resumedSelection.Pair || resumed.Pair.Base != first.Pair.Base || resumed.Pair.Candidate == first.Pair.Candidate {
+				t.Fatalf("pending capture did not remain explicit until u: first=%+v resumed=%+v", first.Pair, resumed.Pair)
+			}
+
+			gitRun(t, project, "add", "app/main.go")
+			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(3) }\n")
+			p = startLoopPTYSize(t, []string{"review", "--staged", "--project", project, "--json"}, variant.width, variant.height)
+			p.expect("Replaced saved review ")
+			p.expect("AFTER · project")
+			p.send("c")
+			p.expect("Capture running; selected pair unchanged")
+			p.expect("No new capture; the selected pair is unchanged")
+			replacedSelection, _ := p.finish()
+			allTranscript.WriteString(p.transcript.String())
+			replaced := readSession()
+			if replaced.Pair != replacedSelection.Pair || replaced.Pair == resumed.Pair || !replaced.Capture.Staged {
+				t.Fatalf("different capture flags did not replace the saved review: %+v", replaced)
+			}
+
+			beforeExplicit, err := os.ReadFile(statePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p = startLoopPTYSize(t, []string{"review", string(first.Pair.Candidate), "--project", project, "--json"}, variant.width, variant.height)
+			p.expect("AFTER · project")
+			explicitSelection, _ := p.finish()
+			allTranscript.WriteString(p.transcript.String())
+			if explicitSelection.Pair != first.Pair {
+				t.Fatalf("explicit ID opened another selection: %+v, want %+v", explicitSelection.Pair, first.Pair)
+			}
+			afterExplicit, err := os.ReadFile(statePath)
+			if err != nil || !bytes.Equal(beforeExplicit, afterExplicit) {
+				t.Fatalf("explicit ID changed saved session: %v", err)
+			}
+
+			transcript := allTranscript.String()
+			if variant.noColor {
+				if regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(transcript) {
+					t.Fatal("NO_COLOR PTY emitted SGR")
+				}
+			} else if !strings.Contains(transcript, "\x1b[7m[1 Overview]") {
+				t.Fatal("color PTY did not style the active tab")
+			}
+			t.Logf("PTY %dx%d NO_COLOR=%t excerpts: Stored records only · New capture %s — u reviews it · Snapshot selected; prior evidence remains history · c: Capture running; selected pair unchanged · No new capture; the selected pair is unchanged · Saved review %s → %s · after review resumes it", variant.width, variant.height, variant.noColor, shortID(resumed.Pair.Candidate), shortID(first.Pair.Base), shortID(first.Pair.Candidate))
+		})
 	}
-	return session.Selection, session.Results
+}
+
+func TestReviewInvalidSessionIsReplacedPTY(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(1) }\n")
+	t.Setenv("TERM", "xterm-256color")
+	p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
+	p.expect("AFTER · project")
+	p.finish()
+	statePath := filepath.Join(project, ".after", "session.json")
+	if err := os.Remove(statePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(statePath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
+	p.expect("saved review is invalid; it will be replaced at the next save")
+	p.expect("AFTER · project")
+	selection, _ := p.finish()
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := browser.DecodeReviewSession(raw)
+	if err != nil || session.Pair != selection.Pair {
+		t.Fatalf("invalid session was not replaced with the opened review: %+v %v", session, err)
+	}
+	info, err := os.Stat(statePath)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+		t.Fatalf("session replacement is not a private regular file: %v %v", info, err)
+	}
+	t.Log("PTY invalid private state: non-regular session reported, replaced with valid 0600 saved review")
+}
+
+func TestExplicitOlderPinRevisionPTY(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(1) }\n")
+	t.Setenv("TERM", "xterm-256color")
+	p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
+	p.expect("AFTER · project")
+	pair, _ := p.finish()
+	statePath := filepath.Join(project, ".after", "session.json")
+	before, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptID, _ := seedCLIProcessRecords(t, project, string(pair.Pair.Base), string(pair.Pair.Candidate))
+	s, err := store.Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := store.Get[evidence.Receipt](s, receiptID)
+	if err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	older, err := review.Create(s, receipt.ID, "older pin revision", evidence.HumanIntent, "explicit older revision fixture")
+	if err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	newer, err := review.Select(s, older.ID, evidence.BasisOf(receipt), evidence.OriginalBase, "later revision fixture")
+	if err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if older.ID == newer.ID {
+		t.Fatal("fixture did not create a newer pin revision")
+	}
+
+	p = startLoopPTYSize(t, []string{"review", string(older.ID), "--project", project, "--json"}, 120, 40)
+	p.expect("older pin revision")
+	p.send("\r")
+	p.expect(string(older.ID))
+	selection, _ := p.finish()
+	if selection.Pair != pair.Pair {
+		t.Fatalf("older pin revision opened another pair: %+v want %+v", selection.Pair, pair.Pair)
+	}
+	after, err := os.ReadFile(statePath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("explicit older revision changed saved review: %v", err)
+	}
+	t.Logf("PTY explicit revision excerpt: older pin revision %s remained selected after newer revision %s was created", shortID(older.ID), shortID(newer.ID))
 }
 
 func TestReviewConsentPTY(t *testing.T) {
@@ -250,10 +495,9 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("p")
 	p.expect("Pinned selected finite provider-request expectation")
 	sel, _ = p.finish()
-	if len(sel.Evidence) != 2 {
-		t.Fatal("pin revision missing", sel)
-	}
-	pinID := sel.Evidence[1]
+	sel.Project = project
+	pinID := latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
 	s, err := store.Open(project, false, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -280,11 +524,14 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("\r")
 	p.expect("exact reopening reason")
 	sel, _ = p.finish()
+	sel.Project = project
+	pinID = latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
 	s, err = store.Open(project, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err = review.Inspect(s, sel.Evidence[1])
+	v, err = review.Inspect(s, pinID)
 	s.Close()
 	if err != nil || !v.MissingCurrentResult || v.CurrentReceipt != nil || v.Applicability != evidence.Stale || !strings.Contains(v.Reason, "whole-project snapshot identity changed") {
 		t.Fatal("reopening invented evidence or lost reason", v, err)
@@ -321,16 +568,16 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("Authorized run active")
 	p.send("x")
 	p.expect("Run failed/cancelled; incomplete result retained")
-	sel, results := p.finish()
-	if len(results) != 2 {
-		t.Fatal("missing real run/cancellation", results)
-	}
+	sel, _ = p.finish()
+	sel.Project = project
+	pinID = latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
 	s, err = store.Open(project, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	v, err = review.Inspect(s, sel.Evidence[1])
+	v, err = review.Inspect(s, pinID)
 	if err != nil || v.Pin.Decision != evidence.Reopened {
 		t.Fatal(v, err)
 	}
@@ -346,13 +593,13 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	if !foundSelect {
 		t.Fatal("missing selection history")
 	}
-	good, err := store.Get[evidence.Comparison](s, results[0])
-	if err != nil || good.Outcome != evidence.Different {
-		t.Fatal(good, err)
+	comparisons, err := latestComparisonsForPair(s, sel.Pair)
+	if err != nil || len(comparisons) < 2 {
+		t.Fatalf("missing real run/cancellation comparisons: %v %v", comparisons, err)
 	}
-	cancelled, err := store.Get[evidence.Comparison](s, results[1])
-	if err != nil || cancelled.Outcome != evidence.Incomparable {
-		t.Fatal(cancelled, err)
+	cancelled, good := comparisons[0], comparisons[1]
+	if cancelled.Outcome != evidence.Incomparable || good.Outcome != evidence.Different {
+		t.Fatalf("unexpected recent comparison outcomes: newest=%s prior=%s", cancelled.Outcome, good.Outcome)
 	}
 	p = startLoopPTY(t, args(sel))
 	p.expect("[STALE]")

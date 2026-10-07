@@ -22,6 +22,7 @@ type Job func(context.Context) (string, error)
 type Jobs struct {
 	Capture, Import Job
 	Actions         *Actions
+	CaptureOnStart  bool
 }
 type loaded struct {
 	request uint64
@@ -42,6 +43,8 @@ type finished struct {
 type Model struct {
 	loopState
 	selected                             Selection
+	session                              ReviewSession
+	persistSession                       func(ReviewSession) error
 	data                                 *Data
 	jobs                                 Jobs
 	ctx, parent                          context.Context
@@ -67,7 +70,7 @@ func New(ctx context.Context, selected Selection, jobs Jobs) *Model {
 	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	selected.Evidence = append(selected.Evidence[:0:0], selected.Evidence...)
-	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples", status: "Loading immutable records; no project execution"}
+	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, session: ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: selected.Pair, Mode: "original_base"}, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples", status: "Loading immutable records; no project execution"}
 }
 
 // spawn starts ownership before returning a Bubble Tea command, so even a quit
@@ -89,7 +92,29 @@ func (m *Model) Init() tea.Cmd {
 	m.loadID++
 	id := m.loadID
 	selected := m.selected
-	return m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })
+	commands := []tea.Cmd{m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })}
+	if m.jobs.CaptureOnStart && m.jobs.Actions != nil {
+		m.capturing = true
+		commands = append(commands, m.spawn(func() tea.Msg {
+			pair, err := m.jobs.Actions.Capture(m.ctx)
+			return snapshotReady{pair, err}
+		}))
+	}
+	return tea.Batch(commands...)
+}
+
+// SetReviewSession supplies the validated persisted state and its writer. The
+// callback is invoked only when the selected snapshot pair changes.
+func (m *Model) SetReviewSession(session ReviewSession, persist func(ReviewSession) error) {
+	m.session = session
+	m.session.Capture.IncludeUntracked = append([]string(nil), session.Capture.IncludeUntracked...)
+	m.persistSession = persist
+}
+
+func (m *Model) ReviewSession() ReviewSession {
+	session := m.session
+	session.Capture.IncludeUntracked = append([]string(nil), m.session.Capture.IncludeUntracked...)
+	return session
 }
 func (m *Model) secondaryRow() bool {
 	if m.height <= 2 {
@@ -113,6 +138,9 @@ func (m *Model) rows() int {
 	rows := m.bodyRows()
 	if m.screen == "examples" || m.screen == "inventory" {
 		rows -= 2 // explanatory rows above the list
+		if m.screen == "examples" && m.data != nil && (m.data.Selection.OmittedEvidence > 0 || m.data.Selection.DiscoveryWarning) {
+			rows--
+		}
 	}
 	return max(rows, 1)
 }
@@ -235,7 +263,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Capture unavailable; use after capture/inspect"
 		} else {
 			m.data = msg.data
-			m.status = "Stored records only; no project execution"
+			m.selected = msg.data.Selection
+			if m.selected.DiscoveryWarning {
+				m.status = "Evidence discovery was limited; raw changes remain available"
+			} else if m.selected.OmittedEvidence > 0 {
+				m.status = fmt.Sprintf("%d matching records not loaded; history listing is unavailable until AFTER-37", m.selected.OmittedEvidence)
+			} else {
+				m.status = "Stored records only; no project execution"
+			}
 		}
 	case documentReady:
 		if msg.request != m.request {
@@ -727,6 +762,11 @@ func (m *Model) View() string {
 			add("Badges: finite evidence only · Enter for full state and scope")
 			if line := m.overviewChangesLine(); line != "" {
 				add(line)
+			}
+			if m.data.Selection.OmittedEvidence > 0 {
+				add(fmt.Sprintf("%d matching records not loaded · history listing unavailable until AFTER-37", m.data.Selection.OmittedEvidence))
+			} else if m.data.Selection.DiscoveryWarning {
+				add("Evidence discovery was limited; history listing unavailable until AFTER-37")
 			}
 			top := max(0, i-m.rows()+1)
 			for n := top; n < min(len(entries), top+m.rows()); n++ {

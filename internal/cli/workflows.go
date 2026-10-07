@@ -168,25 +168,9 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
-	options := capture.Options{}
-	baseSet, targetSet := ctx.IsSet("base"), ctx.IsSet("target")
-	if ctx.IsSet("staged") && ctx.Bool("staged") {
-		if baseSet || targetSet {
-			return invalid("--staged cannot be combined with --base/--target")
-		}
-		options.Mode = evidence.Index
-	} else if baseSet || targetSet {
-		if !baseSet || strings.TrimSpace(ctx.String("base")) == "" || (targetSet && strings.TrimSpace(ctx.String("target")) == "") {
-			return invalidWithFix("--base REF is required when --target is used", "try: after capture --base main [--target HEAD]")
-		}
-		options.Mode = evidence.MergeBase
-		options.Base, options.Target = ctx.String("base"), "HEAD"
-		if targetSet {
-			options.Target = ctx.String("target")
-		}
-	}
-	if ctx.IsSet("include-untracked") {
-		options.IncludeUntracked = ctx.StringSlice("include-untracked")
+	options, err := captureOptionsFromFlags(ctx, "capture")
+	if err != nil {
+		return err
 	}
 	s, err := store.Open(cfg.Project, true, nil)
 	if err != nil {
@@ -212,6 +196,30 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		Candidate snapshotSummary  `json:"candidate_snapshot"`
 		Index     *snapshotSummary `json:"index_snapshot,omitempty"`
 	}{summary(result.Base), summary(result.Candidate), index})
+}
+
+func captureOptionsFromFlags(ctx *ucli.Context, command string) (capture.Options, error) {
+	options := capture.Options{Mode: evidence.WorkingTree}
+	baseSet, targetSet := ctx.IsSet("base"), ctx.IsSet("target")
+	if ctx.IsSet("staged") && ctx.Bool("staged") {
+		if baseSet || targetSet {
+			return options, invalid("--staged cannot be combined with --base/--target")
+		}
+		options.Mode = evidence.Index
+	} else if baseSet || targetSet {
+		if !baseSet || strings.TrimSpace(ctx.String("base")) == "" || (targetSet && strings.TrimSpace(ctx.String("target")) == "") {
+			return options, invalidWithFix("--base REF is required when --target is used", "try: after "+command+" --base main [--target HEAD]")
+		}
+		options.Mode = evidence.MergeBase
+		options.Base, options.Target = ctx.String("base"), "HEAD"
+		if targetSet {
+			options.Target = ctx.String("target")
+		}
+	}
+	if ctx.IsSet("include-untracked") {
+		options.IncludeUntracked = ctx.StringSlice("include-untracked")
+	}
+	return options, nil
 }
 
 func importCommand(state *invocation, ctx *ucli.Context) error {

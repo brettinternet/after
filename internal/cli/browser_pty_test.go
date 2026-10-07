@@ -102,10 +102,10 @@ func TestBrowserPTY(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
-		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, slave, &stderr, slave, true)
+		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, &stdout, slave, slave, true)
 	}()
 	expect("[REPORTED]")
 	if !strings.Contains(transcript.String(), "1 Overview") {
@@ -124,7 +124,7 @@ func TestBrowserPTY(t *testing.T) {
 	send("\x1b")
 	expect("1 Overview")
 	send("c")
-	expect("New capture")
+	expect("No new capture; the selected pair is unchanged")
 	send("i")
 	expect("Job finished; stored result retained")
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 8, Cols: 32}); err != nil {
@@ -146,6 +146,12 @@ func TestBrowserPTY(t *testing.T) {
 	after, err := term.GetState(int(slave.Fd()))
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("terminal not restored", err)
+	}
+	var result struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Kind != "review_session" {
+		t.Fatalf("--json review result missing from stdout: %q %v", stdout.String(), err)
 	}
 	slave.Close()
 	for chunk := range chunks {

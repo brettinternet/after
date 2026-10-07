@@ -1,13 +1,24 @@
-Browse a captured snapshot pair in the terminal review; opening it runs no
-project code.
+Capture and open a review, or resume a saved pair with background capture.
+Open explicit stored IDs without running project code.
 
 Usage
+  after review
+  after review --staged
+  after review --base main [--target HEAD]
+  after review --include-untracked PATH
+  after review --new [capture options]
+  after review ID...
   after review BASE CANDIDATE [EVIDENCE ...]
-  after review BASE CANDIDATE --import-file FILE --producer TEXT
+  after review [BASE CANDIDATE] --import-file FILE --producer TEXT
 
 Options
-  --import-file FILE   file to read only after the explicit TUI import action
-  --producer TEXT      caller provenance required with --import-file
+  --new                    capture and replace the saved review
+  --staged                 capture HEAD versus the index
+  --base REF               capture the merge base with a Git ref
+  --target REF             other side of --base capture (default: HEAD)
+  --include-untracked PATH select an exact non-ignored file (repeatable)
+  --import-file FILE       file read only after the explicit TUI import action
+  --producer TEXT          caller provenance required with --import-file
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

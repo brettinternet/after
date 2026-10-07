@@ -1,22 +1,20 @@
 # Captured evidence review loop
 
-`after review BASE CANDIDATE [EVIDENCE ...]` opens the stored engine records, not a demo or a live checkout.
-It does not run Git, import a report, build code or contact Docker on open.
-Pin inspection and decisions use `after pin PIN`.
+`after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
 The responsive frame and contextual key map from AFTER-23 are implemented; the
 remaining redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
-after capture --project /path/to/project
-# Use the returned candidate/base snapshot IDs. Evidence IDs are optional.
-after review <base-id> <candidate-id> <comparison-or-receipt-or-report-or-pin-revision-id> \
-  --project /path/to/project
+after review                         # capture HEAD vs working tree; open or resume
+ after review --staged               # capture HEAD vs index
+ after review --base main            # capture merge base with main vs HEAD
+ after review --include-untracked notes.txt
+ after review --new                  # start and save a fresh review
+ after review <candidate-id>         # open a stored snapshot's newest capture
+ after review <base-id> <candidate-id> [<evidence-id> ...]
 ```
 
-Add up to 32 stored evidence IDs as positional arguments after the snapshot pair.
-There is no automatic discovery or implicit selection of the newest result. Start without evidence to review the
-complete captured inventory and patch with an explicit **not checked** screen.
-Unknown/corrupt evidence IDs do not hide the raw inventory.
+Opening an explicit snapshot, record ID or pair does not read or change the saved review. An explicit pin revision stays on exactly that immutable revision. By default, review discovers pin heads (forks appear independently), the pair's newest runs and comparisons, and reports bound to the candidate. At most 32 records load; pins needing another look come first, and Overview reports the number omitted. Historical listing with `after log` is unavailable until AFTER-37.
 
 ## Frame, keys and evidence
 
@@ -42,28 +40,28 @@ Hints show only enabled actions and are clipped at the terminal width; help also
 shows disabled actions with their reason. Color is optional: `NO_COLOR` (any
 non-empty value) or `TERM=dumb` disables styling. The actions are:
 
-| Key                                                | Action                                                                                    |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                               |
-| `1`–`3`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                           |
-| Enter                                              | Inspect the selected record or inventory entry                                            |
-| `d` / `2`                                          | Open Changes: the complete unclassified inventory                                         |
-| `3`                                                | Open the captured raw Diff                                                                |
-| `]` / `[`                                          | Next / previous indexed file in Diff                                                      |
-| `}` / `{`                                          | Next / previous indexed hunk in Diff                                                      |
-| `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically          |
-| Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                        |
-| Esc                                                | Return from a detail, preview, or overlay; return to Overview from another top-level view |
-| `?`                                                | Open grouped help with contextual disabled reasons                                        |
-| `c`                                                | Explicitly capture HEAD versus working tree in the background                             |
-| `i`                                                | Import the file configured at launch, if any                                              |
-| `u`                                                | Use a pending capture with the original review base; selection is explicit                |
-| `p`                                                | Pin the selected measured provider-request count as a finite expectation                  |
-| `r`                                                | Prepare the exact frozen offline execution plan without executing                         |
-| `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                      |
-| `s`                                                | Inspect snapshot IDs, pin revisions and retained result IDs for restart                   |
-| `x`                                                | Request cancellation of an active owned job                                               |
-| `q` / Ctrl-C                                       | Quit, cancel and join owned work, restore the terminal                                    |
+| Key                                                | Action                                                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                                 |
+| `1`–`3`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                             |
+| Enter                                              | Inspect the selected record or inventory entry                                              |
+| `d` / `2`                                          | Open Changes: the complete unclassified inventory                                           |
+| `3`                                                | Open the captured raw Diff                                                                  |
+| `]` / `[`                                          | Next / previous indexed file in Diff                                                        |
+| `}` / `{`                                          | Next / previous indexed hunk in Diff                                                        |
+| `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically            |
+| Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                          |
+| Esc                                                | Return from a detail, preview, or overlay; return to Overview from another top-level view   |
+| `?`                                                | Open grouped help with contextual disabled reasons                                          |
+| `c`                                                | Capture again with this review's saved flags (or HEAD versus working tree for explicit IDs) |
+| `i`                                                | Import the file configured at launch, if any                                                |
+| `u`                                                | Use a pending capture with the original review base; selection is explicit                  |
+| `p`                                                | Pin the selected measured provider-request count as a finite expectation                    |
+| `r`                                                | Prepare the exact frozen offline execution plan without executing                           |
+| `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                        |
+| `s`                                                | Inspect snapshot IDs, pin revisions and retained result IDs for restart                     |
+| `x`                                                | Request cancellation of an active owned job                                                 |
+| `q` / Ctrl-C                                       | Quit, cancel and join owned work, restore the terminal                                      |
 
 `a` no longer accepts a capture. It is reserved for pin acceptance, which is not
 yet available in this TUI; help reports that action as disabled.
@@ -214,11 +212,17 @@ its incomplete receipt. Success adds the real comparison without accepting behav
 Late results stay at their originating pair and cannot replace the selected result.
 
 Pins are immutable revisions, shared with the [headless review API](REVIEW.md).
-Use `s` for full references; on normal quit, the screen remains readable by default.
-Pass `--json` to print the session JSON after terminal restoration. Restart with its pair and positional evidence IDs: `after review BASE CANDIDATE
-LATEST_PIN_REVISION_ID` (followed by any comparison/history IDs desired).
-There is no implicit newest-pin selection,
-automatic refresh or filesystem watcher. Keep these references private.
+Use `s` for full references. `.after/session.json` stores only the selected pair,
+original-base mode, and safe capture flags; it is atomically replaced with mode
+0600 after a pending capture is selected and again on quit. Invalid state is
+reported and replaced at the next save. It is UI state, never evidence. A resumed
+review opens its saved pair first and captures in the background; a differing
+candidate waits as pending until `u`, without moving the selected pair. `c` uses
+the saved capture options. Different capture flags or `--new` start a new review.
+
+Terminal rendering and the saved-review message use stderr. Stdout stays empty
+unless `--json` prints the versioned session JSON after terminal restoration.
+Without a terminal, bare `after review` exits 2 and reports that nonterminal inspection is unavailable until AFTER-37; `after status --json` is not implemented yet. There is no automatic file watcher. Keep the private state and evidence references private.
 
 The viewport is capped at 240 columns and 100 rows; extremely narrow terminals
 clip explicitly. Storage/capture/report bounds still apply. Artifact reads verify

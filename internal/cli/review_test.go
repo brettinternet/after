@@ -37,7 +37,6 @@ func TestPinAndReviewInputSafety(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"review", id}, "after pin PIN"},
 		{[]string{"review", id, "--select", id, "--mode", "original_base"}, "after pin PIN --select SNAPSHOT"},
 		{[]string{"review", id, "--receipt", id}, "after pin PIN --attach RECEIPT"},
 		{[]string{"review", id, "--accept"}, "after pin PIN --accept"},
@@ -59,6 +58,23 @@ func TestPinAndReviewInputSafety(t *testing.T) {
 	entries, err := os.ReadDir(project)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("invalid input/help wrote project: %v %v", entries, err)
+	}
+}
+
+func TestExplicitReviewIDRequiresTerminalWithoutCreatingStore(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "checkout")
+	makeProject(t, project)
+	id := "sha256:" + strings.Repeat("a", 64)
+	code, out, stderr := invoke([]string{"review", id, "--project", project}, false, "")
+	if code != ExitInvalid || out != "" || !strings.Contains(stderr, "run after review ID in a terminal") {
+		t.Fatalf("nonterminal explicit-ID review: %d %q %q", code, out, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".after")); !os.IsNotExist(err) {
+		t.Fatalf("nonterminal review created private store: %v", err)
+	}
+	code, out, stderr = invoke([]string{"review", "--project", project}, false, "")
+	if code != ExitInvalid || out != "" || !strings.Contains(stderr, "nonterminal review inspection is unavailable until AFTER-37") {
+		t.Fatalf("nonterminal implicit review: %d %q %q", code, out, stderr)
 	}
 }
 

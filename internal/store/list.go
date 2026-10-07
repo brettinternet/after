@@ -23,7 +23,7 @@ func (s *Store) List(kinds ...string) ([]Entry, error) {
 	allowed := map[string]bool{}
 	for _, kind := range kinds {
 		switch kind {
-		case "snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob":
+		case "snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob", "artifact":
 			allowed[kind] = true
 		default:
 			return nil, errors.New("unknown store kind")

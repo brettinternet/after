@@ -3,7 +3,7 @@
 This page documents current behavior. The broader CLI target, including commands
 that are not implemented yet, is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
 
-`after` is the CLI entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, comparison and pin APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `after review BASE CANDIDATE` opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
+`after` is the CLI entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, comparison and pin APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `after review` captures and opens or resumes the [captured evidence browser](TUI.md) on a terminal, without execution on open. Explicit IDs and pairs remain read-only and do not consult saved session state. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
 
 See [packaging, the repeatable demo and recovery](DEMO.md) for native distributions and a prepared-checkout walkthrough. Build with `mise exec -- task build`, then run commands from any directory with a selected project:
 
@@ -82,6 +82,14 @@ Outside a checkout, project commands exit 2 with exactly `after: not inside a Gi
 Capture failures retain exit 1 and use fixed allowlisted reason/fix text, for example `after: capture failed: unmerged index is unsupported — resolve the index conflicts, then retry capture`. Repository content and absolute project paths are never interpolated into these diagnostics.
 
 Stored artifacts (including observer response/effect channels referenced by receipts) can also be inspected or exported by content ID. `--artifact-offset` and `--artifact-size` return exact base64 byte pages, up to 65536 bytes, with `next`, `total`, and `more`. A complete valid JSON artifact fitting one page also has a `document` field preserving numeric precision. Artifact content alone does not establish its producer or evidence state; inspect its referring receipt for provenance.
+
+## Review launch and resume
+
+`after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. A capture that finds no changed or unknown paths reports that nothing is open.
+
+A private, atomic `.after/session.json` stores only the snapshot pair, original-base comparison mode and capture flags; it contains no source bytes and is not evidence. A later bare `after review` opens that pair immediately and captures in the background. A differing capture stays pending until `u`; `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and reports that nonterminal review inspection is unavailable until AFTER-37; `after status --json` is not implemented yet.
+
+Evidence discovery loads pin heads (including forks), the selected pair's newest runs and comparisons, and reports bound to the candidate. It loads at most 32 records, prioritizing pins that need another look, and the browser reports the omitted count. Historical listing with `after log` is not implemented yet and is deferred until AFTER-37.
 
 ## Persistent expectations
 

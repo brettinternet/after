@@ -165,16 +165,27 @@ Options
   --reason TEXT        verbatim reason stored in pin history (optional)
 `, evidence.FiniteExample, evidence.OriginalBase) + global
 	case "review":
-		body = `Browse a captured snapshot pair in the terminal review; opening it runs no
-project code.
+		body = `Capture and open a review, or resume a saved pair with background capture.
+Open explicit stored IDs without running project code.
 
 Usage
+  after review
+  after review --staged
+  after review --base main [--target HEAD]
+  after review --include-untracked PATH
+  after review --new [capture options]
+  after review ID...
   after review BASE CANDIDATE [EVIDENCE ...]
-  after review BASE CANDIDATE --import-file FILE --producer TEXT
+  after review [BASE CANDIDATE] --import-file FILE --producer TEXT
 
 Options
-  --import-file FILE   file to read only after the explicit TUI import action
-  --producer TEXT      caller provenance required with --import-file
+  --new                    capture and replace the saved review
+  --staged                 capture HEAD versus the index
+  --base REF               capture the merge base with a Git ref
+  --target REF             other side of --base capture (default: HEAD)
+  --include-untracked PATH select an exact non-ignored file (repeatable)
+  --import-file FILE       file read only after the explicit TUI import action
+  --producer TEXT          caller provenance required with --import-file
 ` + global
 	case "config":
 		body = `Show effective configuration and setting sources without exposing secrets.
@@ -205,7 +216,7 @@ func topLevelHelp() string {
 you approve an exact plan.
 
 Everyday
-  after review BASE CANDIDATE   browse a captured pair in the terminal review
+  after review                 capture a change and open or resume its review
   after capture                 capture a local Git comparison
   after inspect ID              inspect a stored record or snapshot pair
 
@@ -238,7 +249,7 @@ func commandExample(name string) string {
 		"export":  "after export ID",
 		"run":     "after run BASE CANDIDATE",
 		"pin":     "after pin RECEIPT --expectation TEXT",
-		"review":  "after review BASE CANDIDATE",
+		"review":  "after review",
 		"config":  "after config",
 		"version": "after version",
 	}

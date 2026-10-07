@@ -187,20 +187,36 @@ func reasonOrDefault(ctx *ucli.Context, fallback string) string {
 func reviewReason(reason string) bool { return strings.TrimSpace(reason) != "" && len(reason) <= 4096 }
 
 func reviewCommand(state *invocation) *ucli.Command {
-	return &ucli.Command{Name: "review", Usage: "browse a captured snapshot pair in the terminal review", ArgsUsage: "<base-snapshot-id> <candidate-snapshot-id> [evidence-id ...]", Before: outputBefore(state), Flags: append(globalFlags(),
+	return &ucli.Command{Name: "review", Usage: "capture, resume, or open a local review in the terminal", ArgsUsage: "[ID ...] OR [BASE CANDIDATE [EVIDENCE ...]]", Before: outputBefore(state), Flags: append(globalFlags(),
+		&ucli.BoolFlag{Name: "new", Usage: "capture and replace the saved review"},
+		&ucli.BoolFlag{Name: "staged", Usage: "capture HEAD versus the index"},
+		&ucli.StringFlag{Name: "base", Usage: "capture the merge base with a Git ref"},
+		&ucli.StringFlag{Name: "target", Usage: "other side of a --base capture (default: HEAD)"},
+		&ucli.StringSliceFlag{Name: "include-untracked", Usage: "select an exact non-ignored untracked file (repeatable)"},
 		&ucli.StringFlag{Name: "import-file", Usage: "file to import only after the explicit TUI import action"},
 		&ucli.StringFlag{Name: "producer", Usage: "required caller provenance for the explicit TUI import action"},
 	), Action: func(ctx *ucli.Context) error {
-		if ctx.NArg() < 2 {
-			return requireArgs(ctx, 2)
+		if ctx.IsSet("import-file") != ctx.IsSet("producer") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
+			return invalidWithFix("TUI import requires a file and bounded caller provenance", "use after review [BASE CANDIDATE] --import-file FILE --producer TEXT")
 		}
-		if len(ctx.Args().Slice())-2 > 32 {
+		options, err := captureOptionsFromFlags(ctx, "review")
+		if err != nil {
+			return err
+		}
+		args := ctx.Args().Slice()
+		if len(args) == 0 {
+			return startOrResumeReview(state, ctx, options)
+		}
+		if ctx.Bool("new") || ctx.IsSet("staged") || ctx.IsSet("base") || ctx.IsSet("target") || ctx.IsSet("include-untracked") {
+			return invalidWithFix("capture options and --new require an implicit review", "use after review --new [--staged | --base REF [--target REF]]")
+		}
+		if len(args) > 34 {
 			return invalidWithFix("review accepts at most 32 evidence IDs", "use after review BASE CANDIDATE with no more than 32 evidence IDs")
 		}
-		if ctx.IsSet("import-file") != ctx.IsSet("producer") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
-			return invalidWithFix("TUI import requires a file and bounded caller provenance", "use after review BASE CANDIDATE --import-file FILE --producer TEXT")
+		if len(args) == 1 {
+			return openExplicitReviewID(state, ctx, args[0])
 		}
-		return browseCommand(state, ctx)
+		return openExplicitReviewPair(state, ctx, args)
 	}}
 }
 

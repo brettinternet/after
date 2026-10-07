@@ -36,9 +36,12 @@ const (
 )
 
 type Selection struct {
-	Project  string
-	Pair     evidence.SnapshotPair
-	Evidence []evidence.Digest
+	Project          string
+	Pair             evidence.SnapshotPair
+	Evidence         []evidence.Digest
+	Discover         bool
+	OmittedEvidence  int
+	DiscoveryWarning bool
 }
 type Section struct {
 	Name    string
@@ -122,6 +125,14 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 	raw, err := rawdiff.Open(s, base, candidate)
 	if err != nil {
 		return nil, err
+	}
+	if selected.Discover {
+		selected.Evidence, selected.OmittedEvidence, err = discoverEvidence(s, selected.Pair)
+		if err != nil {
+			selected.Evidence = nil
+			selected.OmittedEvidence = 0
+			selected.DiscoveryWarning = true
+		}
 	}
 	d := &Data{Selection: selected, BaseSnapshot: base, CandidateSnapshot: candidate, Limits: document("capture limits", raw.Limits())}
 	inventory := raw.Inventory()

@@ -83,6 +83,9 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		m.capturing = false
 		if msg.err != nil {
 			m.status = "Capture failed: " + msg.err.Error()
+		} else if msg.pair == m.selected.Pair {
+			m.pending = nil
+			m.status = "No new capture; the selected pair is unchanged"
 		} else {
 			m.pending = &msg.pair
 			m.status = "New capture " + shortID(msg.pair.Candidate) + " is ready; u reviews it"
@@ -111,12 +114,29 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			m.status = "Action failed: " + msg.err.Error()
 			return nil, true
 		}
-		m.selected, m.data = msg.selected, msg.data
+		previousPair := m.selected.Pair
+		persistFailed := false
+		m.selected = msg.selected
+		if msg.data != nil && msg.selected.Discover {
+			m.selected = msg.data.Selection
+		}
+		m.data = msg.data
+		if previousPair != m.selected.Pair {
+			m.session.Pair = m.selected.Pair
+			if m.persistSession != nil {
+				if err := m.persistSession(m.ReviewSession()); err != nil {
+					persistFailed = true
+				}
+			}
+		}
 		m.loadID++
 		m.request++
 		m.index = min(m.index, max(0, len(m.data.Entries)-1))
 		m.inventory = min(m.inventory, max(0, len(m.data.Inventory)-1))
 		m.status = msg.status + "; s session IDs for restart"
+		if persistFailed {
+			m.status = "Review selection changed but its private session could not be saved"
+		}
 		if m.screen == "inspector" || m.screen == "patch" {
 			m.section = 0
 			return m.loadDocument(), true
@@ -257,9 +277,6 @@ func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
 // SessionJSON is printed after terminal restoration so restart references are
 // usable without copying wrapped/quoted terminal pages. It contains no source.
 func (m *Model) SessionJSON() []byte {
-	raw, _ := json.Marshal(struct {
-		Selection Selection
-		Results   []evidence.Digest
-	}{m.selected, m.results})
+	raw, _ := json.Marshal(m.ReviewSession())
 	return raw
 }

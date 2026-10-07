@@ -19,12 +19,13 @@ import (
 // publications; a long sandbox run does not prevent capture or pin selection.
 // Close is called only after the model has joined every owned worker.
 type Actions struct {
-	Project     string
-	Repetitions int
-	Limits      sandbox.Limits
-	Docker      sandbox.Docker
-	mu          sync.Mutex
-	s           *store.Store
+	Project        string
+	CaptureOptions capture.Options
+	Repetitions    int
+	Limits         sandbox.Limits
+	Docker         sandbox.Docker
+	mu             sync.Mutex
+	s              *store.Store
 }
 
 func (a *Actions) Store() (*store.Store, error) {
@@ -52,8 +53,21 @@ func (a *Actions) Capture(ctx context.Context) (evidence.SnapshotPair, error) {
 	if err != nil {
 		return evidence.SnapshotPair{}, err
 	}
-	r, err := capture.Capture(ctx, a.Project, s, capture.Options{})
+	options := a.CaptureOptions
+	options.IncludeUntracked = append([]string(nil), a.CaptureOptions.IncludeUntracked...)
+	r, err := capture.Capture(ctx, a.Project, s, options)
 	return evidence.SnapshotPair{Base: r.Base.ID, Candidate: r.Candidate.ID}, err
+}
+func (a *Actions) SaveReviewSession(session ReviewSession) error {
+	raw, err := MarshalReviewSession(session)
+	if err != nil {
+		return err
+	}
+	s, err := a.Store()
+	if err != nil {
+		return err
+	}
+	return s.WriteReviewSession(raw)
 }
 func (a *Actions) Prepare(pair evidence.SnapshotPair) ([]byte, string, error) {
 	s, err := a.Store()

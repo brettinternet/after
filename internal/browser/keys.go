@@ -420,7 +420,11 @@ func (m *Model) helpLines() []string {
 		lines = append(lines, group)
 		for _, binding := range byGroup[group] {
 			reason := m.keyReason(binding, true)
-			line := "  " + strings.Join(binding.keys, "/") + "  " + binding.label
+			label := binding.label
+			if binding.action == keyCapture {
+				label = m.captureHelpLabel()
+			}
+			line := "  " + strings.Join(binding.keys, "/") + "  " + label
 			if reason != "" {
 				line += "  [unavailable: " + reason + "]"
 			}
