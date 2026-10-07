@@ -129,8 +129,8 @@ func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	wantReportOutput := "first line\n\t\x1b]52;c;clipboard\a\nSTATE forged"
 	foundVerbatimOutput := false
 	for _, section := range d.Entries[0].Sections {
-		if section.Name == "reported output" {
-			foundVerbatimOutput = bytes.Equal(section.Content, []byte(wantReportOutput))
+		if section.Name == "Output" && len(section.Parts) == 1 {
+			foundVerbatimOutput = bytes.Equal(section.Parts[0].Content, []byte(wantReportOutput))
 		}
 	}
 	if !foundVerbatimOutput {

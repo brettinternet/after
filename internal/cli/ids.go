@@ -45,6 +45,14 @@ func validateIDInputs(ctx *ucli.Context) error {
 	return nil
 }
 
+func exactDigest(value string) (evidence.Digest, bool) {
+	prefix, err := idPrefix(value)
+	if err != nil || len(prefix) != 64 {
+		return "", false
+	}
+	return evidence.Digest("sha256:" + prefix), true
+}
+
 func idPrefix(value string) (string, error) {
 	prefix := strings.TrimPrefix(strings.ToLower(value), "sha256:")
 	if len(prefix) < 4 {

@@ -136,7 +136,7 @@ func TestPinOlderRevisionReadableAndJSON(t *testing.T) {
 	s.Close()
 	args := []string{"pin", prefixFor(p.ID), "--project", project}
 	code, output, diagnostic = invoke(args, false, "")
-	if code != 0 || diagnostic != "" || !strings.Contains(output, "Pin "+shortID(p.ID)) || !strings.Contains(output, "Historical revision") || !strings.Contains(output, shortID(first.ID)) || !strings.Contains(output, shortID(second.ID)) {
+	if code != 0 || diagnostic != "" || !strings.Contains(output, "Card · explicit old expectation") || !strings.Contains(output, "Historical revision") || !strings.Contains(output, shortID(first.ID)) || !strings.Contains(output, shortID(second.ID)) {
 		t.Fatalf("readable %d %s %s", code, output, diagnostic)
 	}
 	code, output, diagnostic = invoke(append(args, "--json"), false, "")

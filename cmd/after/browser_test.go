@@ -166,7 +166,12 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			}
 			expect("[REPORTED]")
 			expect("example.com/cart (package)")
-			expect("reported · pass")
+			if tc.width >= 110 {
+				expect("── Outcome")
+				expect("pass, as reported by go test JSON.")
+			} else {
+				expect("reported · pass")
+			}
 			send("d")
 			expect("2 Changes")
 			expect("M  app/main.go")
@@ -176,11 +181,11 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			send("\t")
 			expect("Section 2/4")
 			expect("Base source")
-			expect("1 │ package main")
+			expect("2 │ package main")
 			send("\t")
 			expect("Section 3/4")
 			expect("Candidate source")
-			expect("8 │ STATE observed | forged")
+			expect("9 │ STATE observed | forged")
 			if !strings.Contains(transcript.String(), `\u001b[31mred`) || !strings.Contains(transcript.String(), `\u001b]52;c;clipboard\u0007`) || !strings.Contains(transcript.String(), `\u202eafter`) || !strings.Contains(transcript.String(), `\u000dB`) {
 				t.Fatal("hostile controls/bidi/CR were not escaped behind the trusted gutter")
 			}
@@ -207,7 +212,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 					t.Fatalf("hostile control escaped terminal renderer: %q", hostile)
 				}
 			}
-			excerpt := []string{"1 │ package main", "8 │ STATE observed | forged", "13 │ last tail"}
+			excerpt := []string{"2 │ package main", "9 │ STATE observed | forged", "14 │ last tail"}
 			for _, row := range excerpt {
 				if !strings.Contains(transcript.String(), row) {
 					t.Fatalf("PTY excerpt row missing %q", row)

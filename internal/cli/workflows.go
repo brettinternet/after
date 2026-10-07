@@ -31,6 +31,25 @@ const maxReportPageSize = 256
 const inventoryPageSize = 128
 const maxInventoryPageSize = 256
 
+func isImportedReportArtifact(s *store.Store, content evidence.Digest) bool {
+	entries, err := s.List("artifact")
+	if err != nil {
+		return false
+	}
+	var readBytes int64
+	for _, entry := range entries {
+		if entry.Size < 0 || entry.Size > int64(store.MaxBlobBytes)-readBytes {
+			return false
+		}
+		readBytes += entry.Size
+		artifact, err := s.ReadArtifactMetadata(entry.ID)
+		if err == nil && artifact.Content == content && artifact.Channel == "go-test-report-v1" {
+			return true
+		}
+	}
+	return false
+}
+
 func commands(state *invocation) []*ucli.Command {
 	return []*ucli.Command{
 		pinCommand(state), reviewCommand(state),
@@ -362,6 +381,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	options, err := inspectionOptions(ctx)
 	if err != nil {
 		return err
@@ -376,6 +396,21 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	defer s.Close()
 	id, err := resolveID(s, ctx.Args().Get(0), inspectKinds...)
 	if err != nil {
+		if fullID, ok := exactDigest(ctx.Args().Get(0)); ok {
+			entries, listErr := s.List("snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob")
+			if listErr == nil {
+				found := false
+				for _, entry := range entries {
+					if entry.ID == fullID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return writeResult(state, "inspection", inspectionCardReference{ID: fullID})
+				}
+			}
+		}
 		return err
 	}
 	kind := "inspection"
@@ -383,20 +418,32 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		kind = "export"
 	}
 	if value, ok, err := optionalGet[evidence.Comparison](s, id); err != nil {
+		if !exporting && !state.jsonOutput && !state.forceJSON {
+			return writeResult(state, "inspection", inspectionCardReference{ID: id})
+		}
 		return operational("comparison record is corrupt or unavailable")
 	} else if ok {
 		receipt, err := store.Get[evidence.Receipt](s, value.Receipt)
 		if err != nil {
+			if !exporting && !state.jsonOutput && !state.forceJSON {
+				return writeResult(state, "inspection", inspectionCardReference{ID: id})
+			}
 			return operational("comparison receipt is corrupt or unavailable")
 		}
 		var report *compare.Report
 		if value.Details != nil {
 			raw, err := s.ReadBlob(value.Details.Content)
 			if err != nil {
+				if !exporting && !state.jsonOutput && !state.forceJSON {
+					return writeResult(state, "inspection", inspectionCardReference{ID: id})
+				}
 				return operational("comparison detail artifact is corrupt or unavailable")
 			}
 			var decoded compare.Report
 			if err := strictJSON(raw, &decoded); err != nil {
+				if !exporting && !state.jsonOutput && !state.forceJSON {
+					return writeResult(state, "inspection", inspectionCardReference{ID: id})
+				}
 				return operational("comparison detail artifact is invalid")
 			}
 			report = &decoded
@@ -405,6 +452,9 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		if receipt.Snapshots.Base != "" {
 			view, err := snapshotBundle(s, receipt.Snapshots.Base, receipt.Snapshots.Candidate, options, !state.jsonOutput && !state.forceJSON && !exporting)
 			if err != nil {
+				if !exporting && !state.jsonOutput && !state.forceJSON {
+					return writeResult(state, "inspection", inspectionCardReference{ID: id})
+				}
 				return operational("snapshot inventory or diff is unavailable")
 			}
 			snapshots = &view
@@ -416,12 +466,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		if exporting {
 			kind = "export"
 		}
-		return writeResult(state, kind, struct {
-			Comparison evidence.Comparison `json:"comparison"`
-			Receipt    evidence.Receipt    `json:"receipt"`
-			Details    *compare.Report     `json:"details,omitempty"`
-			Snapshots  *snapshotView       `json:"snapshots,omitempty"`
-		}{value, receipt, report, snapshots})
+		return writeResult(state, kind, comparisonResult{Comparison: value, Receipt: receipt, Details: report, Snapshots: snapshots, InspectCard: true})
 	}
 	if value, ok, err := optionalGet[evidence.Receipt](s, id); err != nil {
 		return operational("receipt record is corrupt or unavailable")
@@ -447,6 +492,9 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 				return invalid("report card page is outside supported bounds")
 			}
 			return writeResult(state, kind, reportView(id, report, options.cardOffset, options.cardLimit))
+		}
+		if !exporting && isImportedReportArtifact(s, id) {
+			return writeResult(state, kind, inspectionCardReference{ID: id})
 		}
 		offset := min(options.artifactOffset, len(raw))
 		end := offset + min(options.artifactSize, len(raw)-offset)

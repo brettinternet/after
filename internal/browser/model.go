@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/terminal"
@@ -31,9 +32,17 @@ type loaded struct {
 	err     error
 }
 type documentReady struct {
-	request uint64
-	doc     *terminal.Document
-	err     error
+	request  uint64
+	doc      *terminal.Document
+	dividers []int
+	err      error
+}
+type previewReady struct {
+	request  uint64
+	key      string
+	doc      *terminal.Document
+	dividers []int
+	err      error
 }
 type finished struct {
 	request   uint64
@@ -79,7 +88,12 @@ type Model struct {
 	index, inventory, section, top, left int
 	overviewPosition                     int
 	overviewCollapsedGroups              map[overviewGroup]bool
+	previewRequest                       uint64
+	previewKey                           string
+	previewDoc                           *terminal.Document
+	previewDividers                      map[int]bool
 	doc                                  *terminal.Document
+	dividerRows                          map[int]bool
 	hex                                  bool
 	status                               string
 	theme                                terminal.Theme
@@ -240,20 +254,20 @@ func (m *Model) loadDocument() tea.Cmd {
 	m.top = 0
 	m.left = 0
 	m.hex = false
+	m.dividerRows = nil
 	sections := m.sections()
 	if len(sections) == 0 {
 		return nil
 	}
 	section := sections[m.section]
-	project := m.selected.Project
+	project, width := m.selected.Project, m.width
 	return m.spawn(func() tea.Msg {
-		raw, err := ReadSection(m.ctx, project, section)
+		view, err := readSectionDocument(m.ctx, project, section, width)
 		if err != nil {
 			return documentReady{request: id, err: err}
 		}
-		display := displayJSON(raw, section.format)
-		doc, err := terminal.NewDocumentView(display, raw)
-		return documentReady{request: id, doc: doc, err: err}
+		doc, err := terminal.NewDocumentView(view.display, view.raw)
+		return documentReady{request: id, doc: doc, dividers: view.dividers, err: err}
 	})
 }
 func (m *Model) startJob(name, kind string, job Job) tea.Cmd {
@@ -324,8 +338,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		previousWidth := m.width
 		m.width = min(max(msg.Width, 1), 240)
 		m.height = min(max(msg.Height, 1), 100)
+		if previousWidth != m.width && m.screen == "examples" {
+			return m, m.startOverviewPreview()
+		}
 	case loaded:
 		if msg.request != m.loadID {
 			return m, nil
@@ -339,6 +357,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selected = msg.data.Selection
 			m.status = ""
 			m.selectFirstOverviewRow()
+			return m, m.startOverviewPreview()
+		}
+	case previewReady:
+		if msg.request != m.previewRequest || msg.key != m.previewKey {
+			return m, nil
+		}
+		if msg.err != nil || msg.doc == nil {
+			m.previewDoc = nil
+			m.previewDividers = nil
+		} else {
+			m.previewDoc = msg.doc
+			m.previewDividers = make(map[int]bool, len(msg.dividers))
+			for _, row := range msg.dividers {
+				m.previewDividers[row] = true
+			}
 		}
 	case documentReady:
 		if msg.request != m.request {
@@ -347,10 +380,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil || msg.doc == nil {
 			unavailable := "Artifact unavailable; no conclusion. Use after inspect for this stored ID."
 			m.doc, _ = terminal.NewDocument([]byte(unavailable))
+			m.dividerRows = nil
 			m.hex = false
 			m.status = unavailable
 		} else {
 			m.doc = msg.doc
+			m.dividerRows = make(map[int]bool, len(msg.dividers))
+			for _, row := range msg.dividers {
+				m.dividerRows[row] = true
+			}
 			m.hex = msg.doc.AutoHex()
 			if m.screen == "patch" && m.targetDiffPath != "" && m.data != nil && m.data.Diff != nil {
 				if fileIndex, ok := m.data.Diff.FileByPath[m.targetDiffPath]; ok && m.data.Diff.Files[fileIndex].StartRow >= 0 {
@@ -434,6 +472,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == "patch" {
 			return m, m.loadDocument()
 		}
+		return m, m.startOverviewPreview()
 	}
 	m.top = max(0, m.top)
 	return m, nil
@@ -479,6 +518,9 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 			m.screen = m.returnTo
 		} else {
 			m.screen = "examples"
+		}
+		if m.screen == "examples" {
+			return m.startOverviewPreview()
 		}
 	case keyOverview:
 		return m.switchView(0)
@@ -531,12 +573,13 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 			}
 			if row.kind == overviewGroupHeader {
 				m.toggleOverviewGroup()
-				return nil
+				return m.startOverviewPreview()
 			}
 			m.inspectInventory = row.kind == overviewInventory
 		}
 		m.returnTo = m.screen
 		m.screen = "inspector"
+		m.startOverviewPreview()
 		m.section = 0
 		return m.loadDocument()
 	case keyPanLeft, keyPanRight:
@@ -555,7 +598,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		m.hex = !m.hex
 		m.top, m.left = 0, 0
 	case keyDown, keyUp, keyPageDown, keyPageUp, keyStart, keyEnd:
-		m.move(binding.action)
+		return m.move(binding.action)
 	case keyCapture:
 		if m.jobs.Actions == nil {
 			return m.startJob("Capture", "capture", m.jobs.Capture)
@@ -577,12 +620,14 @@ func (m *Model) switchView(view int) tea.Cmd {
 	switch view {
 	case 0:
 		m.screen = "examples"
-		return nil
+		return m.startOverviewPreview()
 	case 1:
 		m.screen = "inventory"
+		m.startOverviewPreview()
 		return nil
 	case 2:
 		m.screen = "patch"
+		m.startOverviewPreview()
 		m.section = 0
 		if m.data != nil && m.data.Diff != nil && m.targetDiffPath != "" {
 			if fileIndex, ok := m.data.Diff.FileByPath[m.targetDiffPath]; ok && m.data.Diff.Files[fileIndex].StartRow >= 0 {
@@ -592,13 +637,14 @@ func (m *Model) switchView(view int) tea.Cmd {
 		return m.loadDocument()
 	case 3:
 		m.screen = "activity"
+		m.startOverviewPreview()
 		return nil
 	default:
 		return nil
 	}
 }
 
-func (m *Model) move(action keyAction) {
+func (m *Model) move(action keyAction) tea.Cmd {
 	delta := 1
 	switch action {
 	case keyUp:
@@ -627,6 +673,7 @@ func (m *Model) move(action keyAction) {
 			position = len(m.overviewRows()) - 1
 		}
 		m.selectOverviewPosition(position)
+		return m.startOverviewPreview()
 	case "inventory":
 		p := m.cursor()
 		*p += delta
@@ -666,6 +713,7 @@ func (m *Model) move(action keyAction) {
 			m.top = min(max(m.top, 0), max(total-rows, 0))
 		}
 	}
+	return nil
 }
 
 func (m *Model) isDocumentScreen() bool {
@@ -684,6 +732,29 @@ func (m *Model) documentRows() int {
 	return m.doc.Lines()
 }
 func window(raw string, left, width int) string { return terminal.LineAt(raw, left, width) }
+
+func padStyledLine(raw string, width int) string {
+	var visible strings.Builder
+	for i := 0; i < len(raw); {
+		if raw[i] == '\x1b' {
+			if end := strings.IndexByte(raw[i:], 'm'); end >= 0 {
+				i += end + 1
+				continue
+			}
+		}
+		_, size := utf8.DecodeRuneInString(raw[i:])
+		if size == 0 {
+			break
+		}
+		visible.WriteString(raw[i : i+size])
+		i += size
+	}
+	missing := width - uniseg.StringWidth(visible.String())
+	if missing > 0 {
+		return raw + strings.Repeat(" ", missing)
+	}
+	return raw
+}
 
 func (m *Model) headerText() string {
 	baseID, candidateID := shortID(m.selected.Pair.Base), shortID(m.selected.Pair.Candidate)
@@ -983,8 +1054,21 @@ func (m *Model) View() string {
 		rows := m.overviewRows()
 		position := min(max(m.overviewPosition, 0), max(len(rows)-1, 0))
 		top := max(0, position-m.rows()+1)
-		for n := top; n < min(len(rows), top+m.rows()); n++ {
-			body = append(body, m.overviewRowText(rows[n], n == position))
+		if m.width >= 110 {
+			listWidth := overviewListWidth(m.width)
+			previewWidth := m.width - listWidth - 1
+			for offset := 0; offset < m.rows(); offset++ {
+				left := strings.Repeat(" ", listWidth)
+				if index := top + offset; index < len(rows) {
+					left = padStyledLine(m.overviewRowTextWidth(rows[index], index == position, listWidth), listWidth)
+				}
+				right := padStyledLine(m.overviewPreviewLine(offset, previewWidth), previewWidth)
+				body = append(body, left+"│"+right)
+			}
+		} else {
+			for n := top; n < min(len(rows), top+m.rows()); n++ {
+				body = append(body, m.overviewRowText(rows[n], n == position))
+			}
 		}
 	case "inventory":
 		body = append(body, m.inventoryBody()...)
@@ -1021,6 +1105,10 @@ func (m *Model) View() string {
 					for n := m.top; n < min(m.top+m.contentRows(), count); n++ {
 						if m.hex {
 							add(m.doc.HexLine(n))
+							continue
+						}
+						if m.dividerRows[n] {
+							body = append(body, m.theme.Render(m.doc.LineAt(n, m.left, m.width), m.width, terminal.Strong, false))
 							continue
 						}
 						if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {

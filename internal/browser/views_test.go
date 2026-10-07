@@ -16,6 +16,7 @@ import (
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
+	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,14 +42,26 @@ func viewArtifact(t *testing.T, s *store.Store, value any, channel string) evide
 // exercises real store decoding and browser rows without Docker or wall clocks.
 func viewComparison(t *testing.T, s *store.Store, sel Selection, unstable bool, complete evidence.Completeness) evidence.Digest {
 	t.Helper()
-	a := viewArtifact(t, s, "synthetic fixture only", "input")
+	a := viewArtifact(t, s, struct {
+		Epoch   int64   `json:"epoch"`
+		Seconds []int64 `json:"seconds"`
+		Key     string  `json:"key"`
+		Body    struct {
+			AmountCents int    `json:"amount_cents"`
+			Currency    string `json:"currency"`
+		} `json:"body"`
+	}{1735689600, []int64{43200, 30}, "synthetic-key-a", struct {
+		AmountCents int    `json:"amount_cents"`
+		Currency    string `json:"currency"`
+	}{1200, "USD"}}, "input")
 	scenario, err := store.Put(s, evidence.Scenario{SchemaVersion: 1, Input: a.Content, Driver: a.Content, Observer: a.Content, Rules: a.Content, Boundary: "synthetic", Author: "test", Limits: []string{"not execution"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := &evidence.Environment{Environment: a.Content, Toolchain: a.Content, Dependencies: a.Content, Argv: []string{"synthetic"}}
-	r := evidence.Receipt{SchemaVersion: 1, State: evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.Observed, Applicability: evidence.Current, Execution: evidence.Completed, Comparison: evidence.NotCompared, Report: evidence.NoReport}, Snapshots: sel.Pair, Bindings: &evidence.Bindings{Scenario: scenario.ID, Input: a.Content, Driver: a.Content, Observer: a.Content, Rules: a.Content}, BaseEnvironment: env, CandidateEnvironment: env, Authorization: a.Content, StartedAt: viewTime, FinishedAt: viewTime, Completeness: evidence.Complete, Limits: []string{"synthetic; not a real run"}}
-	report := compare.Report{Version: 1, Snapshots: sel.Pair, Outcome: evidence.Different, Limits: []string{"synthetic"}}
+	r := evidence.Receipt{RequestID: a.Content, SchemaVersion: 1, State: evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.Observed, Applicability: evidence.Current, Execution: evidence.Completed, Comparison: evidence.NotCompared, Report: evidence.NoReport}, Snapshots: sel.Pair, Bindings: &evidence.Bindings{Scenario: scenario.ID, Input: a.Content, Driver: a.Content, Observer: a.Content, Rules: a.Content}, BaseEnvironment: env, CandidateEnvironment: env, Authorization: a.Content, StartedAt: viewTime, FinishedAt: viewTime, Completeness: evidence.Complete, Limits: []string{"synthetic; not a real run"}}
+	report := compare.Report{Version: 1, Snapshots: sel.Pair, Outcome: evidence.Different, Rules: scenario.Rules, Limits: []string{"synthetic"}}
+	refs := map[string]compare.SampleRef{}
 	for _, sec := range []int64{43200, 30} {
 		for rep := 0; rep < 2; rep++ {
 			for _, side := range []string{"base", "candidate"} {
@@ -59,22 +72,31 @@ func viewComparison(t *testing.T, s *store.Store, sel Selection, unstable bool, 
 				if unstable && side == "candidate" && sec == 43200 && rep == 1 {
 					count = 1
 				}
-				o := runner.Observation{Version: 1, Seconds: sec, Responses: []runner.Response{{Status: 200, Body: "ok"}, {Status: 200, Body: "ok"}}, Calls: make([]runner.Call, count)}
-				r.Artifacts = append(r.Artifacts, viewArtifact(t, s, o, fmt.Sprintf("%s/%d/%d/observation", side, sec, rep)))
+				calls := make([]runner.Call, count)
+				for index := range calls {
+					calls[index] = runner.Call{At: int64(index), Method: "POST", Path: "/payments", Key: "synthetic-key-a", Body: `{"amount_cents":1200}`}
+				}
+				o := runner.Observation{Version: 1, Seconds: sec, Responses: []runner.Response{{Status: 200, Body: "ok"}, {Status: 200, Body: "ok"}}, Calls: calls}
+				observation := viewArtifact(t, s, o, fmt.Sprintf("%s/%d/%d/observation", side, sec, rep))
+				sample := runner.Sample{RequestID: r.RequestID, Snapshots: sel.Pair, Side: side, CaseSeconds: sec, Repetition: rep, StartedAt: viewTime, FinishedAt: viewTime, Status: "completed", Execution: sandbox.ExperimentResult{App: sandbox.Result{Cleaned: true}, Observer: sandbox.Result{Cleaned: true}}, Artifacts: []evidence.Artifact{observation}}
+				metadata := viewArtifact(t, s, sample, fmt.Sprintf("%s/%d/%d/sample", side, sec, rep))
+				r.Artifacts = append(r.Artifacts, observation, metadata)
+				refs[fmt.Sprintf("%s/%d/%d", side, sec, rep)] = compare.SampleRef{Side: side, Seconds: sec, Repetition: rep, Metadata: metadata.Content, Observation: observation.Content}
 			}
 			for _, channel := range []string{"provider", "responses"} {
 				outcome := evidence.Equal
 				if sec == 43200 && channel == "provider" {
 					outcome = evidence.Different
 				}
-				report.Witnesses = append(report.Witnesses, compare.Witness{Relation: "paired", Channel: channel, Before: compare.SampleRef{Side: "base", Seconds: sec, Repetition: rep}, After: compare.SampleRef{Side: "candidate", Seconds: sec, Repetition: rep}, Outcome: outcome})
+				report.Witnesses = append(report.Witnesses, compare.Witness{Relation: "paired", Channel: channel, Before: refs[fmt.Sprintf("base/%d/%d", sec, rep)], After: refs[fmt.Sprintf("candidate/%d/%d", sec, rep)], Outcome: outcome})
 			}
 		}
 	}
 	if unstable {
 		report.Outcome = evidence.Unstable
-		report.Witnesses = append(report.Witnesses, compare.Witness{Relation: "repetition", Channel: "provider", Before: compare.SampleRef{Side: "candidate", Seconds: 43200, Repetition: 0}, After: compare.SampleRef{Side: "candidate", Seconds: 43200, Repetition: 1}, Outcome: evidence.Different})
+		report.Witnesses = append(report.Witnesses, compare.Witness{Relation: "repetition", Channel: "provider", Before: refs["candidate/43200/0"], After: refs["candidate/43200/1"], Outcome: evidence.Different})
 	}
+	report.Artifacts = append([]evidence.Artifact(nil), r.Artifacts...)
 	r, err = store.Put(s, r)
 	if err != nil {
 		t.Fatal(err)

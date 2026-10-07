@@ -1,12 +1,40 @@
 AFTER · 004 · base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (working tree)
 [1 Overview]   2 Changes 4   3 Diff   4 Activity
-  ▾ NEEDS ANOTHER LOOK 2
-> [REOPENED]    Preserve the finite provider-request count                                       current result attached
-  [DIFFERENT]   12h same-key retry · provider requests 1 → 2 · responses same                    observed · current
-  ▾ AGREES 1
-  [EQUAL]       30s same-key retry · provider requests 1 → 1 · responses same                    observed · current
-  ▸ EARLIER SNAPSHOTS 2
-CHANGES 4 paths · 0 captured hunks, all unclassified · 0 potential oracles · 2 shows all
-  computed from captured sources — not Git's patch · limited inventory
+  ▾ NEEDS ANOTHER LOOK 2                              │── Expectation · 85 B ──                                         
+> [REOPENED]    Preserve the finite provider-request …│Preserve the finite provider-request count (your words;          
+  [DIFFERENT]   12h same-key retry · provider request…│AFTER does not evaluate them)                                    
+  ▾ AGREES 1                                          │── Scope · 40 B ──                                               
+  [EQUAL]       30s same-key retry · provider request…│finite_example · basis receipt e32608d9                          
+  ▸ EARLIER SNAPSHOTS 2                               │── Reviewing · 37 B ──                                           
+CHANGES 4 paths · 0 captured hunks, all unclassified …│2d13fdbf → 8e9eef34 (original_base)                              
+  computed from captured sources — not Git's patch · …│── Reopened · 70 B ──                                            
+                                                      │incomplete or excluded whole-project footprint; cannot           
+                                                      │establish reuse                                                  
+                                                      │── Current · 57 B ──                                             
+                                                      │receipt 9ff67f12 · completed · not_compared · complete           
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
 
 q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous

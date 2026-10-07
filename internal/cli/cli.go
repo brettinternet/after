@@ -41,6 +41,7 @@ type invocation struct {
 	stdoutTTY       bool
 	stderrTTY       bool
 	columns         int
+	project         string
 	jsonOutput      bool
 	forceJSON       bool
 	suggestionFlags string

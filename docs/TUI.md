@@ -2,8 +2,8 @@
 
 `after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
 The responsive frame, contextual key map, review session, Activity view, and
-AFTER-26 grouped Overview are implemented; later redesign tasks are specified in
-[TUI-DESIGN.md](TUI-DESIGN.md).
+AFTER-26 grouped Overview and AFTER-27 evidence Cards are implemented; later
+redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after review                         # capture HEAD vs working tree; open or resume
@@ -158,6 +158,17 @@ lines. With evidence loaded, `2 shows all` leads to the full Changes inventory.
 With no evidence, Overview says `NOT CHECKED` and lists every inventory path,
 including excluded and unsupported entries; Enter opens a listed path's captured
 detail without implying that anything ran.
+
+At 110 columns or more, Overview asynchronously previews the selected row's
+Card beside the list; a preview result is discarded if the selection changes
+before it arrives. Narrower terminals keep the one-pane list, and Enter opens
+that same Card in the full-screen detail. Card parts keep their trusted typed
+titles in ordered divider rows, while bounded sanitized wrapping preserves the
+complete prose. Receipt and comparison details retain an explicit Receipt Card
+alongside the payment-case Card; full receipt, scenario, witness, sample,
+artifact, pin-history and ID sections remain reachable. An unexpected stored
+shape is shown as full raw content with a limitation, never guessed into a
+conclusion. Reports and unavailable IDs use the same Card-first section format.
 
 The Next line uses only typed record state: `Loading stored records — nothing
 runs on open`; `Couldn't load this pair — check the IDs with after inspect`;

@@ -57,6 +57,7 @@ func pinCommand(state *invocation) *ucli.Command {
 			if err != nil {
 				return err
 			}
+			state.project = cfg.Project
 			var receiptID evidence.Digest
 			var using *resolvedIDs
 			if ctx.NArg() == 0 {
@@ -96,6 +97,7 @@ func pinCommand(state *invocation) *ucli.Command {
 			if err != nil {
 				return err
 			}
+			state.project = cfg.Project
 			if ctx.NArg() == 0 {
 				return listPinHeads(state, cfg.Project)
 			}
@@ -126,6 +128,7 @@ func pinCommand(state *invocation) *ucli.Command {
 		if err != nil {
 			return err
 		}
+		state.project = cfg.Project
 		s, err := store.Open(cfg.Project, true, nil)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {

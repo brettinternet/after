@@ -182,6 +182,90 @@ func Sanitize(raw string) string { return sanitized(raw) }
 // Line is the untrusted-text boundary at the left edge of a line.
 func Line(raw string, width int) string { return LineAt(raw, 0, width) }
 
+// Wrap sanitizes bounded prose and wraps it without splitting grapheme clusters.
+// Explicit newlines remain paragraph breaks; all other terminal controls use the
+// same visible escapes as Line. The output width and input work are bounded.
+func Wrap(raw string, width int) []string {
+	width = min(max(width, 0), maxWidth)
+	if width == 0 {
+		return nil
+	}
+	clipped := len(raw) > MaxLineBytes
+	if clipped {
+		raw = raw[:MaxLineBytes]
+	}
+	type glyph struct {
+		text  string
+		cells int
+		space bool
+	}
+	paragraphs := strings.Split(raw, "\n")
+	lines := make([]string, 0, len(paragraphs))
+	for _, paragraph := range paragraphs {
+		safe := sanitized(paragraph)
+		line := []glyph{}
+		column, state := 0, -1
+		for len(safe) > 0 {
+			cluster, rest, cells, nextState := uniseg.FirstGraphemeClusterInString(safe, state)
+			safe, state = rest, nextState
+			if cluster == "\t" {
+				cluster = strings.Repeat(" ", 4-column%4)
+				cells = len(cluster)
+			}
+			if column == 0 && cells == 0 {
+				cluster, cells = "◌"+cluster, 1
+			}
+			if cells > width {
+				cluster, cells = "�", 1
+			}
+			if column+cells > width {
+				breakAt := -1
+				for index := len(line) - 1; index >= 0; index-- {
+					if line[index].space {
+						breakAt = index
+						break
+					}
+				}
+				end := len(line)
+				if breakAt >= 0 {
+					end = breakAt + 1
+				}
+				var out strings.Builder
+				for _, item := range line[:end] {
+					out.WriteString(item.text)
+				}
+				lines = append(lines, out.String())
+				line = append([]glyph(nil), line[end:]...)
+				column = 0
+				for _, item := range line {
+					column += item.cells
+				}
+				if cluster == " " && cells == 0 {
+					cluster, cells = "◌"+cluster, 1
+				}
+			}
+			line = append(line, glyph{text: cluster, cells: cells, space: cluster == " " || strings.Trim(cluster, " ") == ""})
+			column += cells
+		}
+		var out strings.Builder
+		for _, item := range line {
+			out.WriteString(item.text)
+		}
+		lines = append(lines, out.String())
+	}
+	if clipped {
+		last := len(lines) - 1
+		if last < 0 {
+			lines = append(lines, "…")
+		} else if uniseg.StringWidth(lines[last]) < width {
+			lines[last] += "…"
+		} else {
+			lines = append(lines, "…")
+		}
+	}
+	return lines
+}
+
 // LineAt sanitizes, clips and horizontally pans untrusted text. It never emits
 // controls, including ESC, C1 CSI/OSC, CR, bidi overrides or embedded newlines.
 // Tabs use absolute four-column stops. Invalid UTF-8 becomes U+FFFD, and a

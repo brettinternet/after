@@ -3,18 +3,19 @@ AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working t
 Section 1/2 | 470 stored bytes | text | pan 0
 data | captured raw diff
 app/config.go · file 1 of 2 · captured patch · modified
+── captured raw diff · 470 B ──
             │ diff --git a/app/config.go b/app/config.go
             │ index 41e6150..bb43ab7 100644
             │ --- a/app/config.go
             │ +++ b/app/config.go
-            │ @@ -1,5 +1,2 @@
-    1     1 │  package main
-    2       │ -
-    3       │ -const retentionSeconds int64 = 24 * 60 * 60
-    4       │ -const deduplicate = true
-    5       │ -const printedCount = "1"
-          2 │ +const retentionSeconds = 300
+    1     1 │ @@ -1,5 +1,2 @@
+    2       │  package main
+    3       │ -
+    4       │ -const retentionSeconds int64 = 24 * 60 * 60
+    5       │ -const deduplicate = true
+          2 │ -const printedCount = "1"
 ── binary · binary ──
+            │ +const retentionSeconds = 300
             │ diff --git a/binary b/binary
             │ index 8352675d67aed6625ece79af41c27fdb4ee2e867..350ed01038bfaa2fda2722ada23a75bdd971bd68 100644
             │ GIT binary patch
@@ -23,6 +24,5 @@ app/config.go · file 1 of 2 · captured patch · modified
             │
             │ literal 3
             │ KcmZQzWC8#H2LJ>B
-            │
 
 q quit · ? help · Esc back · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous

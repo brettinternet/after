@@ -43,7 +43,12 @@ The detail artifact links its receipt and both source inventories, retains every
 receipt artifact reference, and contains paired and within-side repetition
 witnesses. Each witness identifies both sample metadata and observation blobs.
 All samples are inspectable, including those associated with failed comparisons.
-The receipt leads to the snapshot file inventory and captured raw diff.
+The receipt leads to the snapshot file inventory and captured raw diff. The TUI and
+readable `after inspect` share deterministic Card templates for the receipt,
+comparison, payment cases and witnesses; full IDs and artifact sections keep the
+referenced records reachable. Strict-decode or unexpected-shape failures retain the
+complete readable raw artifact with an explicit limitation instead of partial
+comparison prose.
 
 - Responses: ordered HTTP status and body. Valid JSON bodies compare structurally;
   other bodies compare as exact text. JSON and text are distinct representations.

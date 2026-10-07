@@ -7,6 +7,7 @@ import (
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/terminal"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rivo/uniseg"
 )
 
@@ -206,6 +207,10 @@ func (m *Model) uniqueOverviewEvidence() []int {
 }
 
 func (m *Model) overviewRowText(row overviewRow, selected bool) string {
+	return m.overviewRowTextWidth(row, selected, m.width)
+}
+
+func (m *Model) overviewRowTextWidth(row overviewRow, selected bool, width int) string {
 	prefix := "  "
 	if selected {
 		prefix = "> "
@@ -216,31 +221,31 @@ func (m *Model) overviewRowText(row overviewRow, selected bool) string {
 		if strings.HasPrefix(row.text, "NOT CHECKED") {
 			style = terminal.Strong
 		}
-		return prefix + m.theme.Render(row.text, max(m.width-2, 0), style, false)
+		return prefix + m.theme.Render(row.text, max(width-2, 0), style, false)
 	case overviewGroupHeader:
 		marker := "▾"
 		if m.overviewCollapsed(row.group) {
 			marker = "▸"
 		}
 		text := fmt.Sprintf("%s %s %d", marker, overviewGroupName(row.group), row.count)
-		return prefix + m.theme.Render(text, max(m.width-2, 0), terminal.Strong, false)
+		return prefix + m.theme.Render(text, max(width-2, 0), terminal.Strong, false)
 	case overviewEvidence:
 		if row.entryIndex < 0 || row.entryIndex >= len(m.data.Entries) {
 			return ""
 		}
-		return m.entryLine(m.data.Entries[row.entryIndex], selected)
+		return m.entryLineWidth(m.data.Entries[row.entryIndex], selected, width)
 	case overviewReport:
 		if row.entryIndex < 0 || row.entryIndex >= len(m.data.Entries) {
 			return ""
 		}
-		return prefix + m.reportLine(m.data.Entries[row.entryIndex], max(m.width-2, 0))
+		return prefix + m.reportLine(m.data.Entries[row.entryIndex], max(width-2, 0))
 	case overviewInventory:
 		if row.inventoryIndex < 0 || row.inventoryIndex >= len(m.data.Inventory) {
 			return ""
 		}
-		return m.changeEntryLine(m.data.Inventory[row.inventoryIndex], selected, m.width)
+		return m.changeEntryLine(m.data.Inventory[row.inventoryIndex], selected, width)
 	case overviewChanges:
-		return m.theme.Render(m.overviewChangesLine(), m.width, terminal.Strong, false)
+		return m.theme.Render(m.overviewChangesLine(), width, terminal.Strong, false)
 	default:
 		return ""
 	}
@@ -292,6 +297,54 @@ func (m *Model) currentOverviewRow() (overviewRow, bool) {
 		return overviewRow{}, false
 	}
 	return rows[m.overviewPosition], true
+}
+
+func overviewListWidth(width int) int { return width * 45 / 100 }
+
+func (m *Model) startOverviewPreview() tea.Cmd {
+	m.previewRequest++
+	request := m.previewRequest
+	m.previewKey = ""
+	m.previewDoc = nil
+	m.previewDividers = nil
+	if m.screen != "examples" || m.width < 110 {
+		return nil
+	}
+	row, ok := m.currentOverviewRow()
+	entry := m.selectedOverviewEntry()
+	if !ok || entry == nil || len(entry.Sections) == 0 || entry.Sections[0].Name != "Card" {
+		return nil
+	}
+	key := fmt.Sprintf("%d:%d:%s", row.kind, row.entryIndex, entry.Name)
+	m.previewKey = key
+	section := entry.Sections[0]
+	project := m.selected.Project
+	width := m.width - overviewListWidth(m.width) - 1
+	return m.spawn(func() tea.Msg {
+		view, err := readSectionDocument(m.ctx, project, section, width)
+		if err != nil {
+			return previewReady{request: request, key: key, err: err}
+		}
+		doc, err := terminal.NewDocumentView(view.display, view.raw)
+		return previewReady{request: request, key: key, doc: doc, dividers: view.dividers, err: err}
+	})
+}
+
+func (m *Model) overviewPreviewLine(row int, width int) string {
+	if m.previewDoc == nil {
+		if row != 0 {
+			return ""
+		}
+		text := "Select an evidence row to preview its Card"
+		if m.previewKey != "" {
+			text = "Loading selected Card preview off the event loop"
+		}
+		return terminal.Line(text, width)
+	}
+	if m.previewDividers[row] {
+		return m.theme.Render(m.previewDoc.LineAt(row, 0, width), width, terminal.Strong, false)
+	}
+	return m.previewDoc.LineAt(row, 0, width)
 }
 
 func (m *Model) selectedOverviewEntry() *Entry {

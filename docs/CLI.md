@@ -95,10 +95,12 @@ inspect/review pairs search snapshots; compare and pin creation search receipts;
 `pin --attach` searches receipts, and `pin PIN` plus pin decisions search pin
 revisions. Inspect/export search snapshots, receipts, comparisons, reports and
 artifacts. Trailing review IDs search comparisons, receipts, reports and pins.
-Missing matches exit 2 naming the searched kinds; ambiguity exits 2 with at most
+Missing prefixes exit 2 naming the searched kinds; ambiguity exits 2 with at most
 ten short IDs, kinds and sanitized one-line summaries. Use more characters to
-disambiguate. A no-match diagnostic tells you to verify the ID or create the
-record with an available capture, run, import or pin command.
+disambiguate. A full, syntactically valid `sha256:` digest that has no stored
+record opens an `UNAVAILABLE` Card with the exact ID instead of guessing a type.
+Other no-match diagnostics tell you to verify the ID or create the record with
+an available capture, run, import or pin command.
 Lookup fails explicitly on unsafe storage or exceeded scan/read limits; it never
 chooses from a partial namespace (10,000 directory entries, 32 MiB of matching
 object data per lookup).
@@ -135,9 +137,11 @@ Evidence discovery loads pin heads (including forks), the selected pair's newest
 `pin RECEIPT_ID --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`
 creates an immutable pin revision; `--scope` defaults to `finite_example`, and a
 receipt that cannot support it suggests `--scope human_intent`. `pin PIN_ID` opens a
-revision read-only. Decisions use exactly one of `--select SNAPSHOT_ID [--mode
-original_base|last_inspected]`, `--attach RECEIPT_ID`, or `--accept`; `--mode`
-defaults to `original_base`. `--reason` is optional; its command-line default is
+revision read-only using the TUI's shared Card renderer, followed by full IDs.
+Receipt, comparison and report inspection use the same ordered Card parts and
+bounded safe wrapping; `--json` retains the original record envelope. Decisions
+use exactly one of `--select SNAPSHOT_ID [--mode original_base|last_inspected]`,
+`--attach RECEIPT_ID`, or `--accept`; `--mode` defaults to `original_base`. `--reason` is optional; its command-line default is
 stored verbatim in history. Each decision returns a new revision ID; use that ID
 for the next operation. Selection reopens changed bindings without predicting
 results. Receipt attachment never accepts the pin; human acceptance is a separate
@@ -191,7 +195,7 @@ Docker binary and host must be configured together. There is deliberately no con
 
 ## Output and exit status
 
-Readable output uses a leading result sentence and aligned rows or lists. On terminals, the AFTER theme styles output unless `NO_COLOR` is set or `TERM=dumb`; pipes never contain color sequences. Untrusted paths, report text, expectations, producers and errors pass through the terminal sanitizer. Rows clip only on a terminal, with full IDs retained in the `IDs` section of inspect results. Artifact inspection uses the bounded text/hex content viewer; use `after inspect ID --json` for exact base64 pages and raw patch pages.
+Readable output uses a leading result sentence and aligned rows or lists. On terminals, the AFTER theme styles output unless `NO_COLOR` is set or `TERM=dumb`; pipes never contain color sequences. Untrusted paths, report text, expectations, producers and errors pass through the terminal sanitizer. Rows clip only on a terminal, with full IDs retained in the `IDs` section of inspect results. Receipts, comparisons, pins and imported reports use the TUI's shared evidence Cards and ordered artifact sections; an unsupported shape retains its raw bytes with a limitation. General artifact inspection uses the bounded text/hex content viewer; use `after inspect ID --json` for exact base64 pages and raw patch pages.
 
 Use `--json` on a command whose result a script consumes:
 

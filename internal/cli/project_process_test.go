@@ -135,7 +135,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"pin-select", []string{"pin", string(pinned.Data.Pin.ID), "--select", candidateID, "--mode", "original_base", "--reason", "prefix selection"}, ExitOK},
 		{"pin-attach", []string{"pin", string(pinned.Data.Pin.ID), "--attach", string(receiptID), "--reason", "prefix attachment"}, ExitOK},
 		{"run-short-approval", []string{"run", "--plan-file", "not-read", "--approve", "abcd"}, ExitInvalid},
-		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitInvalid},
+		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitOK},
 		{"config", []string{"config"}, ExitOK},
 	}
 	for _, command := range commands {

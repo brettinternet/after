@@ -32,7 +32,10 @@ all forks. It compares the exact original basis and history events, not titles o
 timestamps. Readable inspection of an older revision lists its newer descendant
 heads without switching the requested revision; JSON remains unchanged. Each
 lookup scans at most 512 revisions and 16 MiB of pin records. Corruption or a
-reached bound is reported as unavailable, never as a complete head list.
+reached bound is reported as unavailable, never as a complete head list. Readable
+TUI and CLI inspection share a deterministic pin Card for expectation, scope,
+review target, reopen reason, current result and history, followed by full IDs and
+reachable receipt artifacts. JSON remains the versioned record contract.
 All CLI record IDs also accept [unique prefixes](CLI.md#short-ids-and-pin-heads).
 The first event binds the original scenario, receipt and snapshot pair. Neither
 later selection nor rerun can change the expectation or that original basis.

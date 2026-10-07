@@ -119,7 +119,7 @@ func TestBrowserPTY(t *testing.T) {
 		t.Fatal("overview tab missing from the initial PTY frame")
 	}
 	send("\r")
-	expect("reported case")
+	expect("pty-case (package)")
 	send("\x1b")
 	expect("1 Overview")
 	send("d")

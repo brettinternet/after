@@ -78,7 +78,7 @@ func TestOmittedEvidenceGuidancePointsToLog(t *testing.T) {
 	sel.OmittedEvidence = 7
 	m := New(t.Context(), sel, Jobs{})
 	defer m.Close()
-	m.width, m.height = 120, 40
+	m.width, m.height = 80, 40
 	drain(m, m.Init())
 	frame := m.View()
 	for _, want := range []string{"7 matching records not loaded", "after log lists older records"} {

@@ -419,11 +419,12 @@ func writeStoredComparison(state *invocation, s *store.Store, comparison evidenc
 }
 
 type comparisonResult struct {
-	Comparison evidence.Comparison `json:"comparison"`
-	Receipt    evidence.Receipt    `json:"receipt"`
-	Details    *compare.Report     `json:"details,omitempty"`
-	Snapshots  *snapshotView       `json:"snapshots,omitempty"`
-	Using      *resolvedIDs        `json:"using,omitempty"`
+	Comparison  evidence.Comparison `json:"comparison"`
+	Receipt     evidence.Receipt    `json:"receipt"`
+	Details     *compare.Report     `json:"details,omitempty"`
+	Snapshots   *snapshotView       `json:"snapshots,omitempty"`
+	Using       *resolvedIDs        `json:"using,omitempty"`
+	InspectCard bool                `json:"-"`
 }
 
 type pinListView struct {

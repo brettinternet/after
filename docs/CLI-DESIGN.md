@@ -1,7 +1,8 @@
 # Command-line design
 
-**Status: staged target design.** AFTER-34 to AFTER-38 are implemented; the
-remaining command redesign tasks are still future work. This is the design for
+**Status: staged target design.** AFTER-27's shared readable Cards and AFTER-34
+to AFTER-38 are implemented; the remaining command redesign tasks are still
+future work. This is the design for
 backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in AFTER-24
 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy future
 commands from this target into runtime help before they exist.
@@ -111,16 +112,19 @@ the most recent capture record, however it was made.
   in the IDs section of `after inspect ID`.
 - A suggested command includes a repository path only when the path is printable,
   single-quoted when it contains anything outside `A–Z a–z 0–9 . _ / -`.
-- Readable output never prints raw artifact bytes. Use `after inspect ID --json`
-  pages, or `after diff --raw` into a file.
+- Readable results do not dump artifact bytes by default. `after inspect ID` Cards
+  expose their typed evidence sections and preserve raw bytes for unsupported shapes
+  with an explicit limitation. General artifacts use the bounded text/hex content
+  viewer; use `--json` for exact base64 and paging.
 
 ## IDs and defaults
 
 - An ID argument accepts any unique prefix of at least 4 hex characters, with or
   without `sha256:`, in any case. Resolution only considers the record kinds that
   are valid for that argument. Full IDs keep working.
-- No match exits 2: `after: no capture or run matches 3f2a — after log lists recent records`.
-  An ambiguous prefix exits 2 and lists up to 10 matches:
+- An unmatched prefix exits 2: `after: no capture or run matches 3f2a — after log lists recent records`.
+  An ambiguous prefix exits 2 and lists up to 10 matches. For `after inspect`, a full
+  digest with no stored record instead shows an `UNAVAILABLE` Card with its exact ID:
 
     ```text
     after: 3f2a matches 2 records — use more characters:
@@ -244,7 +248,10 @@ newest capture record. Pin events show the revision they created.
 
 ## inspect
 
-`after inspect` prints one record with the TUI's renderers:
+`after inspect` prints one record with the TUI's Card renderers. Receipts,
+comparisons, pins and reports use the same ordered parts and full IDs; the JSON
+contract is unchanged. A full unknown digest shows an `UNAVAILABLE` Card with its
+ID rather than guessing a record shape:
 
 | Record                                       | Readable output                                                                                    |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -254,9 +261,10 @@ newest capture record. Pin events show the revision they created.
 | Plan                                         | The [consent summary](TUI-DESIGN.md#consent), then the indented plan                               |
 | Artifact                                     | Its kind and size, then its content as the [content viewer](TUI-DESIGN.md#content-viewer) shows it |
 
-Every record ends with an IDs section: one full ID per line, never clipped. Until
-AFTER-27 lands, records without a renderer print their sentence and IDs, and point
-to `--json`. Plans arrive with AFTER-40.
+Every inspect Card ends with an IDs section: one full ID per line, never clipped.
+Unsupported or malformed stored shapes retain their raw bytes with a limitation;
+unknown data is never guessed into a typed record. Plans use the separate consent
+summary and exact-plan renderer.
 
 ## compare
 

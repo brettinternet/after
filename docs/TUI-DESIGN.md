@@ -1,7 +1,7 @@
 # Review TUI design
 
-**Status: target design. AFTER-21–26, AFTER-28, AFTER-29 and AFTER-32 are implemented as
-documented in [TUI.md](TUI.md); AFTER-27, AFTER-30–31 and AFTER-33 remain target behavior.**
+**Status: target design. AFTER-21–29 and AFTER-32 are implemented as documented
+in [TUI.md](TUI.md); AFTER-30–31 and AFTER-33 remain target behavior.**
 This is the design for backlog tasks AFTER-21 to AFTER-33 (milestone M2). The
 command line, including how `after review` launches, is designed in
 [CLI-DESIGN.md](CLI-DESIGN.md). The product
@@ -339,14 +339,14 @@ An imported report card:
 
 Sections by row type:
 
-| Row                       | Sections                                                       |
-| ------------------------- | -------------------------------------------------------------- |
-| Payment case              | Card · Witnesses · Artifacts · Receipt · Scenario · Plan · IDs |
-| Receipt without case rows | Card · Artifacts · Receipt · Scenario · Plan · IDs             |
-| Pin                       | Card · History · Current result · Basis receipt · IDs          |
-| Report card               | Card · Output · Report · IDs                                   |
-| Changes path              | Diff · Base source · Candidate source · Inventory record       |
-| Unavailable ID            | Card (the limitation) · IDs                                    |
+| Row                       | Sections                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| Payment case              | Card · Receipt Card · Witnesses · Artifacts · Receipt · Scenario · Plan · IDs |
+| Receipt without case rows | Card · Artifacts · Receipt · Scenario · Plan · IDs                            |
+| Pin                       | Card · History · Current result · Basis receipt · IDs                         |
+| Report card               | Card · Output · Report · IDs                                                  |
+| Changes path              | Diff · Base source · Candidate source · Inventory record                      |
+| Unavailable ID            | Card (the limitation) · IDs                                                   |
 
 Rules:
 

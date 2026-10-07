@@ -3,7 +3,7 @@ AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working t
 SESSION
 explicit IDs leave .after/session.json unchanged
 pair       base 2d13fdbf → candidate 3726afba
-loaded     52f08b96 · b413d37e · 4551059b · 00000000
+loaded     ee52b8bf · b413d37e · 4551059b · 00000000
 ACTIVITY
 > 20:00:00  session opened  2d13fdbf · 3726afba · opened Activity
   20:00:00  capture finished  2d13fdbf · 3726afba · candidate ready

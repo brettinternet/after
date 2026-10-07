@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brettinternet/after/internal/browser"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
@@ -27,6 +28,10 @@ type snapshotSummary struct {
 	Unsupported  int                   `json:"unsupported"`
 	Diff         evidence.Digest       `json:"diff"`
 	Limits       []string              `json:"limits"`
+}
+
+type inspectionCardReference struct {
+	ID evidence.Digest `json:"id"`
 }
 
 type reportViewData struct {
@@ -59,6 +64,56 @@ func fullLine(value string) readableLine { return readableLine{text: value, full
 
 func readableRow(label, value string) readableLine {
 	return textLine(fmt.Sprintf("  %-12s %s", label, value), terminal.Plain)
+}
+
+func cardInspectionLines(state *invocation, id evidence.Digest) ([]readableLine, bool) {
+	if state.project == "" || id == "" {
+		return nil, false
+	}
+	entries, err := browser.Inspect(state.project, id)
+	if err != nil || len(entries) == 0 {
+		return nil, false
+	}
+	if entries[0].Decision != "" {
+		entries = entries[:1]
+	}
+	columns := min(max(state.columns, 40), 240)
+	lines := make([]readableLine, 0, 24)
+	ids := []evidence.Digest{}
+	for _, entry := range entries {
+		if len(entry.Sections) == 0 || entry.Sections[0].Name != "Card" {
+			continue
+		}
+		lines = append(lines, textLine("Card · "+entry.Name, terminal.Strong))
+		ids = append(ids, entry.IDs...)
+		for _, section := range entry.Sections {
+			if section.Name == "IDs" {
+				continue
+			}
+			if section.Name != "Card" {
+				lines = append(lines, textLine("  "+section.Name, terminal.Strong))
+			}
+			for _, part := range section.Parts {
+				if part.Title != "" {
+					lines = append(lines, textLine("  "+part.Title, terminal.Strong))
+				}
+				content, err := browser.ReadSection(state.ctx, state.project, browser.Section{Parts: []browser.Part{part}})
+				if err != nil {
+					lines = append(lines, textLine("    Card content unavailable", terminal.Attention))
+					continue
+				}
+				for _, paragraph := range strings.Split(string(content), "\n") {
+					for _, line := range terminal.Wrap(paragraph, columns-4) {
+						lines = append(lines, textLine("    "+line, terminal.Plain))
+					}
+				}
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return nil, false
+	}
+	return addIDs(lines, ids...), true
 }
 
 func addIDs(lines []readableLine, ids ...evidence.Digest) []readableLine {
@@ -232,8 +287,18 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		return lines, nil
 	case "import", "inspection":
+		if reference, ok := original.(inspectionCardReference); ok {
+			if lines, ok := cardInspectionLines(state, reference.ID); ok {
+				return lines, nil
+			}
+		}
 		var report reportViewData
 		if err := json.Unmarshal(raw, &report); err == nil && report.ID != "" && report.Cards != nil {
+			if kind == "inspection" {
+				if lines, ok := cardInspectionLines(state, report.ID); ok {
+					return lines, nil
+				}
+			}
 			lines := reportLines(state, report)
 			if kind == "inspection" {
 				lines = addIDs(lines, report.ID, report.Metadata.Snapshot)
@@ -248,6 +313,9 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		var receipt evidence.Receipt
 		if err := json.Unmarshal(raw, &receipt); err != nil {
 			return nil, err
+		}
+		if lines, ok := cardInspectionLines(state, receipt.ID); ok {
+			return lines, nil
 		}
 		lines := []readableLine{textLine(fmt.Sprintf("Receipt %s · %s / %s · %s", shortID(receipt.ID), receipt.State.Kind, receipt.State.Execution, receipt.State.Comparison), badgeStyle(string(receipt.State.Comparison)))}
 		lines = append(lines, readableRow("Snapshots", fmt.Sprintf("%s → %s", shortID(receipt.Snapshots.Base), shortID(receipt.Snapshots.Candidate))))
@@ -265,6 +333,11 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 	case "artifact":
 		return artifactLines(state, raw)
 	case "comparison":
+		if inspection, ok := original.(comparisonResult); ok && inspection.InspectCard {
+			if lines, ok := cardInspectionLines(state, inspection.Comparison.ID); ok {
+				return lines, nil
+			}
+		}
 		return comparisonLines(state, raw)
 	case "review":
 		var view review.View
@@ -273,6 +346,9 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		lines := reviewLines(state, view)
 		if inspection, ok := original.(reviewInspection); ok {
+			if cardLines, ok := cardInspectionLines(state, inspection.Pin.ID); ok {
+				lines = cardLines
+			}
 			if inspection.Using != nil {
 				lines = append([]readableLine{usingRunLine(*inspection.Using)}, lines...)
 				lines = insertIDs(lines, inspection.Using.Capture)
@@ -284,7 +360,7 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 				for _, id := range inspection.NewerHeads {
 					lines = append(lines, readableRow("Head", shortID(id)))
 				}
-				lines = addIDs(lines, inspection.NewerHeads...)
+				lines = insertIDs(lines, inspection.NewerHeads...)
 			}
 		}
 		return lines, nil

@@ -1,13 +1,40 @@
 AFTER · 002 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
 [1 Overview]   2 Changes 6   3 Diff   4 Activity
-  NOT CHECKED — no evidence was loaded for this change
-  Nothing was run or imported for candidate 3726afba. The change is readable below.
-CHANGES 6 paths · 1 captured hunk, all unclassified · 0 potential oracles
-> M  app/config.go  +1 · −4
-  ?  app/main.go  incomplete capture; equal stored content does not establish unchanged original content
-  M  binary  binary
-  ?  go.mod  incomplete capture; equal stored content does not establish unchanged original content
-  ?  unknown  excluded: untracked; not selected
-  ?  unsupported  unsupported: symlink or symlink parent unsupported
+  NOT CHECKED — no evidence was loaded for this change│Select an evidence row to preview its Card                       
+  Nothing was run or imported for candidate 3726afba.…│                                                                 
+CHANGES 6 paths · 1 captured hunk, all unclassified ·…│                                                                 
+> M  app/config.go  +1 · −4                           │                                                                 
+  ?  app/main.go  incomplete capture; equal stored co…│                                                                 
+  M  binary  binary                                   │                                                                 
+  ?  go.mod  incomplete capture; equal stored content…│                                                                 
+  ?  unknown  excluded: untracked; not selected       │                                                                 
+  ?  unsupported  unsupported: symlink or symlink par…│                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
 Not checked — read the change, or c captures again after editing
 q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous

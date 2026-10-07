@@ -22,6 +22,7 @@ import (
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
+	"github.com/rivo/uniseg"
 )
 
 const MaxEvidence = 32
@@ -43,10 +44,22 @@ type Selection struct {
 	OmittedEvidence  int
 	DiscoveryWarning bool
 }
+type Part struct {
+	Title   string
+	Content []byte
+	Blob    evidence.Digest
+	format  documentFormat
+	columns *cardColumns
+}
+type cardColumns struct {
+	leftLabel, left, rightLabel, right string
+}
 type Section struct {
 	Name    string
 	Content []byte
 	Blob    evidence.Digest
+	Parts   []Part
+	Wrap    bool
 	format  documentFormat
 }
 type ReportCounts struct {
@@ -83,6 +96,7 @@ type Entry struct {
 	Deleted              int
 	Limits               []string
 	Sections             []Section
+	IDs                  []evidence.Digest
 }
 type Data struct {
 	Selection          Selection
@@ -223,7 +237,8 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		}
 		entries, err := loadEvidence(s, id, selected.Pair)
 		if err != nil {
-			entries = []Entry{{Unavailable: true, Name: string(id), Sections: []Section{document("load limitation", "Evidence unavailable or invalid; raw inventory remains usable. Use after inspect for the stored ID.")}}}
+			sections := rawUnavailableFallback(s, id, err)
+			entries = []Entry{unavailableEntry(id, sections)}
 		}
 		d.Entries = append(d.Entries, entries...)
 	}
@@ -289,28 +304,11 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			applicability = evidence.Stale
 			missing = true
 		}
-		e := Entry{State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: []Section{document("pin revision / current evidence / exact reopening reason", v)}}
-		// Keep every prior observation reachable at its original candidate, both
-		// from the pin detail and as a history row in Overview.
-		seen := map[evidence.Digest]bool{}
-		historyRows := []Entry{}
-		for i := 0; i < len(pin.History); i++ {
-			event := pin.History[i]
-			if event.Review == nil || event.Review.Receipt == "" || seen[event.Review.Receipt] {
-				continue
-			}
-			seen[event.Review.Receipt] = true
-			rows, err := loadEvidence(s, event.Review.Receipt, pair)
-			if err != nil {
-				return nil, err
-			}
-			for _, row := range rows {
-				e.Sections = append(e.Sections, row.Sections...)
-				if row.State.Kind == evidence.Observed && row.State.Applicability == evidence.Stale {
-					historyRows = append(historyRows, row)
-				}
-			}
+		sections, ids, historyRows, err := pinSections(s, id, pin, v)
+		if err != nil {
+			return nil, err
 		}
+		e := Entry{State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: sections, IDs: ids}
 		return append([]Entry{e}, historyRows...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -339,66 +337,50 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				completeness = evidence.Incomplete
 			}
 		}
-		e := Entry{State: state, Completeness: completeness, SourceReceipt: r.ID, HasComparison: comparison != nil, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: []Section{document("receipt: producer, bindings, timestamps, limits", r)}}
+		var scenario *evidence.Scenario
 		if r.Bindings != nil {
-			scenario, err := store.Get[evidence.Scenario](s, r.Bindings.Scenario)
+			value, err := store.Get[evidence.Scenario](s, r.Bindings.Scenario)
 			if err != nil {
 				return nil, err
 			}
-			e.Sections = append(e.Sections, document("frozen scenario", scenario), Section{Name: "exact frozen input", Blob: scenario.Input})
+			scenario = &value
 		}
-		var report compare.Report
-		if comparison != nil {
-			e.Sections = append(e.Sections, document("comparison outcome and limits", comparison))
-			if comparison.Details != nil {
-				raw, err := s.ReadBlob(comparison.Details.Content)
+		var report *compare.Report
+		if comparison != nil && comparison.Details != nil {
+			raw, err := s.ReadBlob(comparison.Details.Content)
+			if err != nil {
+				return nil, err
+			}
+			report, err = strictReport(raw, r, *comparison)
+			if err != nil {
+				return nil, err
+			}
+		}
+		ids := receiptIDs(r, comparison, report, scenario)
+		sections := receiptSections(s, r, comparison, report, scenario, ids)
+		e := Entry{State: state, Completeness: completeness, SourceReceipt: r.ID, HasComparison: comparison != nil, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: sections, IDs: ids}
+		rows := []Entry{}
+		if scenario != nil && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+			for _, sec := range []int64{43200, 30} {
+				observations, samples, err := caseObservations(s, r, sec)
 				if err != nil {
 					return nil, err
 				}
-				if decode(raw, &report) != nil || report.Receipt != r.ID || report.Snapshots != r.Snapshots || report.Outcome != comparison.Outcome {
-					return nil, errors.New("misbound comparison details")
+				card, err := caseCard(s, r, *scenario, comparison, report, sec, observations, samples)
+				if err != nil {
+					return nil, err
 				}
-				e.Sections = append(e.Sections, Section{Name: "exact before/after channel witnesses", Blob: comparison.Details.Content, format: formatComparison})
-			}
-		}
-		// Retain every sample, observation and diagnostic, including failed runs
-		// and all unstable repetitions. Channel names remain untrusted data.
-		for _, a := range r.Artifacts {
-			e.Sections = append(e.Sections, Section{Name: "artifact: " + a.Channel, Blob: a.Content, format: artifactFormat(a.Channel)})
-		}
-		rows := []Entry{}
-		if r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
-			for _, sec := range []int64{43200, 30} {
-				counts := map[string][]int{}
-				for _, a := range r.Artifacts {
-					for _, side := range []string{"base", "candidate"} {
-						if strings.HasPrefix(a.Channel, fmt.Sprintf("%s/%d/", side, sec)) && strings.HasSuffix(a.Channel, "/observation") && a.Completeness == evidence.Complete && !a.Redacted && !a.Truncated {
-							raw, err := s.ReadBlob(a.Content)
-							if err != nil {
-								return nil, err
-							}
-							var o runner.Observation
-							if decode(raw, &o) != nil || o.Version != 1 || o.Seconds != sec || o.Calls == nil {
-								return nil, errors.New("invalid observation")
-							}
-							counts[side] = append(counts[side], len(o.Calls))
-						}
-					}
-				}
-				if len(counts["base"]) == 0 || len(counts["candidate"]) == 0 {
-					continue
-				}
-				summary := "provider requests " + countText(counts["base"]) + " → " + countText(counts["candidate"])
+				summary := "provider requests " + countText(observationCounts(observations["base"])) + " → " + countText(observationCounts(observations["candidate"]))
 				row := e
 				row.Name = delayText(sec) + " same-key retry"
-				if comparison != nil {
+				if comparison != nil && report != nil {
 					row.State.Comparison = report.CaseOutcome(sec, completeness)
 					if row.State.Comparison != evidence.Incomparable {
 						responses := "same"
-						for _, w := range report.Witnesses {
-							if w.Before.Seconds == sec && w.Channel == "responses" && w.Outcome == evidence.Different {
+						for _, witness := range report.Witnesses {
+							if witness.Before.Seconds == sec && witness.Channel == "responses" && witness.Outcome == evidence.Different {
 								responses = "different"
-								if w.Relation == "repetition" {
+								if witness.Relation == "repetition" {
 									responses = "unstable"
 									break
 								}
@@ -408,17 +390,12 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 					}
 				}
 				row.Summary = summary
-				row.Sections = append([]Section{document("measured provider-request counts (original receipt scope; finite samples only)", summary)}, e.Sections...)
-				same := true
-				for _, count := range counts["candidate"] {
-					if count != counts["candidate"][0] {
-						same = false
-					}
-				}
-				if same && r.Snapshots == pair {
-					row.Receipt = r.ID
-					row.Expectation = fmt.Sprintf("At %ds, expect %d provider request(s) for the frozen two same-key requests; finite example only", sec, counts["candidate"][0])
-				}
+				row.Sections = receiptSections(s, r, comparison, report, scenario, ids)
+				receiptSummary, receiptRecord := row.Sections[0], row.Sections[2]
+				artifacts, _ := artifactsSection(s, r.Artifacts, &sec)
+				row.Sections = append([]Section{card, {Name: "Receipt Card", Parts: receiptSummary.Parts, Wrap: true}, caseWitnessesSection(s, r, comparison, report, sec), artifacts, receiptRecord}, row.Sections[3:]...)
+				row.Receipt = r.ID
+				row.Expectation = fmt.Sprintf("At %ds, expect %s provider request(s) for the frozen two same-key requests; finite example only", sec, countText(observationCounts(observations["candidate"])))
 				rows = append(rows, row)
 			}
 		}
@@ -438,6 +415,10 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 	if decode(raw, &report) != nil || report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards {
 		return nil, errors.New("unsupported report")
 	}
+	cardViews, err := readReportRaw(raw, pair)
+	if err != nil {
+		return nil, err
+	}
 	entries := []Entry{}
 	reportCounts := ReportCounts{}
 	for _, card := range report.Cards {
@@ -450,13 +431,13 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			reportCounts.Skip++
 		}
 	}
-	summary := document("caller provenance, snapshot binding, timestamps and report limits", struct {
+	summary := jsonPart("report metadata", struct {
 		Metadata     gotestreport.Metadata     `json:"metadata"`
 		Completeness evidence.Completeness     `json:"completeness"`
 		Diagnostics  []gotestreport.Diagnostic `json:"diagnostics"`
 		Suppressed   int                       `json:"suppressed_diagnostics"`
 	}{report.Metadata, report.Completeness, report.Diagnostics, report.SuppressedDiagnostics})
-	for _, card := range report.Cards {
+	for cardIndex, card := range report.Cards {
 		state := card.State
 		if state.Validate() != nil || state.Kind != evidence.Reported || state.Producer != evidence.Importer || state.Applicability != evidence.Unknown || state.Execution != evidence.NotRun || state.Comparison != evidence.NotCompared {
 			return nil, errors.New("invalid reported state")
@@ -464,28 +445,32 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		if report.Metadata.Snapshot != "" && report.Metadata.Snapshot != pair.Candidate {
 			state.Applicability = evidence.Stale
 		}
-		metadata := struct {
-			Package         string                 `json:"package"`
-			Test            string                 `json:"test,omitempty"`
-			Scope           string                 `json:"scope"`
-			Attempt         int                    `json:"attempt"`
-			State           evidence.EvidenceState `json:"state"`
-			OutputTruncated bool                   `json:"output_truncated"`
-			FirstEventAt    *time.Time             `json:"first_event_at,omitempty"`
-			LastEventAt     *time.Time             `json:"last_event_at,omitempty"`
-			Inputs          string                 `json:"inputs"`
-			ExpectedValues  string                 `json:"expected_values"`
-			Effects         string                 `json:"effects"`
-		}{card.Package, card.Test, card.Scope, card.Attempt, card.State, card.OutputTruncated, card.FirstEventAt, card.LastEventAt, card.Inputs, card.ExpectedValues, card.Effects}
-		sections := []Section{document("reported case: inputs/effects unavailable, not observations", metadata), {Name: "reported output", Content: []byte(card.Output)}, summary}
+		cardView := cardViews[cardIndex]
+		if cardView.Binding != "" && cardView.Binding != pair.Candidate {
+			state.Applicability = evidence.Stale
+		}
+		ids := []evidence.Digest{id, report.OriginalDigest, report.Metadata.Snapshot}
+		sections := []Section{
+			cardSection(reportCardParts(cardView)...),
+			{Name: "Output", Parts: []Part{{Title: "reported output", Content: []byte(card.Output)}}},
+			{Name: "Report", Parts: []Part{summary, blobPart(s, id, "complete imported report", formatVerbatim)}},
+			idsSection(ids),
+		}
 		name := card.Test
 		if card.Scope == "package" {
 			name = card.Package + " (package)"
 		}
-		entries = append(entries, Entry{State: state, Completeness: report.Completeness, Name: name, ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: sections})
+		entries = append(entries, Entry{State: state, Completeness: report.Completeness, Name: name, ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: sections, IDs: ids})
 	}
 	if len(entries) == 0 {
-		entries = append(entries, Entry{State: evidence.EvidenceState{Producer: evidence.Importer, Kind: evidence.Reported, Applicability: evidence.Unknown, Execution: evidence.NotRun, Comparison: evidence.NotCompared, Report: evidence.NoReport}, Completeness: report.Completeness, Summary: "no reported cases", Name: string(id), ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: []Section{summary}})
+		ids := []evidence.Digest{id, report.OriginalDigest, report.Metadata.Snapshot}
+		sections := []Section{
+			cardSection(textPart("Outcome", "No report cards were retained; no test outcome is inferred."), textPart("Producer", report.Metadata.Producer), textPart("Bound to", string(report.Metadata.Snapshot))),
+			{Name: "Output", Parts: []Part{textPart("reported output", "No case output was retained.")}},
+			{Name: "Report", Parts: []Part{summary, blobPart(s, id, "complete imported report", formatVerbatim)}},
+			idsSection(ids),
+		}
+		entries = append(entries, Entry{State: evidence.EvidenceState{Producer: evidence.Importer, Kind: evidence.Reported, Applicability: evidence.Unknown, Execution: evidence.NotRun, Comparison: evidence.NotCompared, Report: evidence.NoReport}, Completeness: report.Completeness, Summary: "no reported cases", Name: string(id), ReportID: id, ReportBinding: report.Metadata.Snapshot, ReportImportedAt: report.Metadata.ImportedAt, ReportProducer: report.Metadata.Producer, ReportCounts: reportCounts, Sections: sections, IDs: ids})
 	}
 	return entries, nil
 }
@@ -522,17 +507,35 @@ func countText(counts []int) string {
 // ReadSection returns the exact captured bytes, never a live path or formatted
 // representation. Callers doing document indexing must keep it off the event loop.
 func ReadSection(ctx context.Context, project string, section Section) ([]byte, error) {
+	if len(section.Parts) == 0 {
+		return readSectionBytes(ctx, project, section.Content, section.Blob)
+	}
+	var raw bytes.Buffer
+	for _, part := range section.Parts {
+		content, err := readSectionBytes(ctx, project, part.Content, part.Blob)
+		if err != nil {
+			return nil, err
+		}
+		if len(content) > terminal.MaxTextBytes-raw.Len() {
+			return nil, errors.New("section exceeds terminal document limit")
+		}
+		raw.Write(content)
+	}
+	return raw.Bytes(), nil
+}
+
+func readSectionBytes(ctx context.Context, project string, content []byte, blob evidence.Digest) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	raw := section.Content
-	if section.Blob != "" {
+	raw := content
+	if blob != "" {
 		s, err := store.Open(project, false, nil)
 		if err != nil {
 			return nil, err
 		}
 		defer s.Close()
-		raw, err = s.ReadBlob(section.Blob)
+		raw, err = s.ReadBlob(blob)
 		if err != nil {
 			return nil, err
 		}
@@ -541,6 +544,95 @@ func ReadSection(ctx context.Context, project string, section Section) ([]byte, 
 		return nil, err
 	}
 	return append([]byte(nil), raw...), nil
+}
+
+type sectionDocument struct {
+	display, raw []byte
+	dividers     []int
+}
+
+func readSectionDocument(ctx context.Context, project string, section Section, width int) (sectionDocument, error) {
+	parts := section.Parts
+	if len(parts) == 0 {
+		parts = []Part{{Title: section.Name, Content: section.Content, Blob: section.Blob, format: section.format}}
+	}
+	var result sectionDocument
+	var display bytes.Buffer
+	for _, part := range parts {
+		if err := ctx.Err(); err != nil {
+			return sectionDocument{}, err
+		}
+		raw, err := readSectionBytes(ctx, project, part.Content, part.Blob)
+		if err != nil {
+			return sectionDocument{}, err
+		}
+		if len(raw) > terminal.MaxTextBytes-len(result.raw) {
+			return sectionDocument{}, errors.New("section exceeds terminal document limit")
+		}
+		result.raw = append(result.raw, raw...)
+		title := part.Title
+		if title == "" {
+			title = section.Name
+		}
+		result.dividers = append(result.dividers, strings.Count(display.String(), "\n"))
+		fmt.Fprintf(&display, "── %s · %d B ──\n", title, len(raw))
+		var shown []byte
+		if part.columns != nil {
+			shown = renderCardColumns(*part.columns, max(width-6, 1))
+		} else {
+			shown = displayJSON(raw, part.format)
+			if section.Wrap {
+				shown = wrapCardContent(shown, max(width-6, 1))
+			}
+		}
+		if len(shown) > terminal.MaxTextBytes-display.Len() {
+			return sectionDocument{}, errors.New("section exceeds terminal document limit")
+		}
+		display.Write(shown)
+		if len(shown) > 0 && shown[len(shown)-1] != '\n' {
+			display.WriteByte('\n')
+		}
+		if display.Len() > terminal.MaxTextBytes {
+			return sectionDocument{}, errors.New("section exceeds terminal document limit")
+		}
+	}
+	result.display = display.Bytes()
+	return result, nil
+}
+
+func wrapCardContent(raw []byte, width int) []byte {
+	lines := strings.Split(string(raw), "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, strings.Join(terminal.Wrap(line, width), "\n"))
+	}
+	return []byte(strings.Join(wrapped, "\n"))
+}
+
+func renderCardColumns(columns cardColumns, width int) []byte {
+	leftText := columns.leftLabel + " " + columns.left
+	rightText := columns.rightLabel + " " + columns.right
+	if width < 4 {
+		lines := append(terminal.Wrap(leftText, width), terminal.Wrap(rightText, width)...)
+		return []byte(strings.Join(lines, "\n"))
+	}
+	leftWidth := (width - 2) / 2
+	rightWidth := width - leftWidth - 2
+	left := terminal.Wrap(leftText, leftWidth)
+	right := terminal.Wrap(rightText, rightWidth)
+	rows := make([]string, max(len(left), len(right)))
+	for index := range rows {
+		leftLine, rightLine := "", ""
+		if index < len(left) {
+			leftLine = left[index]
+		}
+		if index < len(right) {
+			rightLine = right[index]
+		}
+		padding := max(leftWidth-uniseg.StringWidth(leftLine), 0)
+		rows[index] = leftLine + strings.Repeat(" ", padding) + "  " + rightLine
+	}
+	return []byte(strings.Join(rows, "\n"))
 }
 
 func artifactFormat(channel string) documentFormat {

@@ -1,0 +1,40 @@
+AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (working tree)
+Overview › 12h same-key retry                                                                                [DIFFERENT]
+Section 1/8 | 5156 stored bytes | text | pan 0
+data | Card
+── Payment case · 18 B ──
+  2 │ 12h same-key retry
+── Snapshots · 32 B ──
+  4 │ base 2d13fdbf                                             candidate 8ae79385
+── Provider requests · 18 B ──
+  6 │ base 1                                                    candidate 2
+── Response 1 · 28 B ──
+  8 │ base 200 ok                                               candidate 200 ok
+── Response 2 · 28 B ──
+ 10 │ base 200 ok                                               candidate 200 ok
+── Input · 94 B ──
+ 12 │ key synthetic-key-a · body {"amount_cents":1200,"currency":"USD"} · second request 12h later
+── Witness · paired · "provider" · different · 36 B ──
+ 14 │ No differing values in this witness.
+── Witness · paired · "responses" · equal · 36 B ──
+ 16 │ No differing values in this witness.
+── Witness · paired · "provider" · different · 36 B ──
+ 18 │ No differing values in this witness.
+── Witness · paired · "responses" · equal · 36 B ──
+ 20 │ No differing values in this witness.
+── Samples · 63 B ──
+ 22 │ 2 repetition(s) per side — one sample cannot show instability
+── Sample · base · repetition 1 · 1141 B ──
+ 24 │ {
+ 25 │   "request_id": "sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c",
+ 26 │   "snapshots": {
+ 27 │     "base": "sha256:2d13fdbf16da70ad70c323e3514488471e490975826251c586d0e6f9a509b661",
+ 28 │     "candidate": "sha256:8ae793852575819878d7b498330b30ce448430281c1b6a38f3893d1d61b66782"
+ 29 │   },
+ 30 │   "side": "base",
+ 31 │   "case_seconds": 43200,
+ 32 │   "repetition": 0,
+ 33 │   "started_at": "2025-01-02T20:00:00Z",
+ 34 │   "finished_at": "2025-01-02T20:00:00Z",
+
+q quit · ? help · Esc back · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page · PgUp page

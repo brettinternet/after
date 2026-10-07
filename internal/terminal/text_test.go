@@ -58,6 +58,37 @@ func TestLine(t *testing.T) {
 	}
 }
 
+func TestWrapSanitizesAndWrapsGraphemes(t *testing.T) {
+	for _, tc := range []struct {
+		in    string
+		width int
+		want  []string
+	}{
+		{"hello 界e\u0301 there", 7, []string{"hello ", "界e\u0301 ", "there"}},
+		{"first\nsecond", 4, []string{"firs", "t", "seco", "nd"}},
+		{"a\tb", 5, []string{"a   b"}},
+		{"\u0301x", 2, []string{"◌\u0301x"}},
+		{"界", 1, []string{"�"}},
+	} {
+		got := Wrap(tc.in, tc.width)
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("Wrap(%q,%d)=%q want %q", tc.in, tc.width, got, tc.want)
+		}
+		for _, line := range got {
+			assertSafe(t, line, tc.width)
+		}
+	}
+	for _, hostile := range []string{"\x1b]52;c;clipboard\a\u202eabc", strings.Repeat("x", MaxLineBytes+500)} {
+		lines := Wrap(hostile, 8)
+		if len(lines) == 0 || len(lines) > MaxLineBytes*6 || lines[len(lines)-1] == "" {
+			t.Fatalf("unbounded or empty wrapped content: %d rows", len(lines))
+		}
+		for _, line := range lines {
+			assertSafe(t, line, 8)
+		}
+	}
+}
+
 func TestLinePanIsColumnAndGraphemeSafe(t *testing.T) {
 	for _, tc := range []struct {
 		line string

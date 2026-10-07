@@ -1,16 +1,40 @@
 AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
 [1 Overview]   2 Changes 6   3 Diff   4 Activity
-  ▾ NEEDS ANOTHER LOOK 2
-> [UNAVAILABLE] sha256:0000000000000000000000000000000000000000000000000000000000000000
-  [DIFFERENT]   12h same-key retry · provider requests 1 → 2 · responses same                    observed · current
-  ▾ AGREES 1
-  [EQUAL]       30s same-key retry · provider requests 1 → 1 · responses same                    observed · current
-  ▾ REPORTED — imported, not observed by AFTER 3
-  report b413d37e · bound to unbound · imported 20:00 · 1 pass · 1 fail · synthetic test
-  [REPORTED]    example.com/cart (package)                                                       reported · pass
-  [REPORTED]    TestThreshold                                                                    reported · fail
-  report 4551059b · bound to 3726afba · imported Jan 1 00:00 · 1 pass · go test caller
-  [REPORTED]    example                                                                          reported · pass
-CHANGES 6 paths · 1 captured hunk, all unclassified · 0 potential oracles · 2 shows all
+  ▾ NEEDS ANOTHER LOOK 2                              │── Limitation · 154 B ──                                         
+> [UNAVAILABLE] sha256:000000000000000000000000000000…│stored record                                                    
+  [DIFFERENT]   12h same-key retry · provider request…│sha256:0000000000000000000000000000000000000000000000000000      
+  ▾ AGREES 1                                          │000000000000: Raw content could not be read safely; raw          
+  [EQUAL]       30s same-key retry · provider request…│inventory remains usable.                                        
+  ▾ REPORTED — imported, not observed by AFTER 3      │                                                                 
+  report b413d37e · bound to unbound · imported 20:00…│                                                                 
+  [REPORTED]    example.com/cart (package)            │                                                                 
+  [REPORTED]    TestThreshold                         │                                                                 
+  report 4551059b · bound to 3726afba · imported Jan …│                                                                 
+  [REPORTED]    example                               │                                                                 
+CHANGES 6 paths · 1 captured hunk, all unclassified ·…│                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
+                                                      │                                                                 
 
 q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous

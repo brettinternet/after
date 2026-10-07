@@ -1,0 +1,10 @@
+Card · sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  Limitation
+    stored ID 
+    sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: No 
+    supported receipt, comparison, pin, or report record was found.
+IDs
+sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+Next
+  after inspect sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --project <project>
+    inspect the reported test results

@@ -203,6 +203,119 @@ func TestResponsiveFramePTY(t *testing.T) {
 	}
 }
 
+func TestOverviewCardPreviewPTY(t *testing.T) {
+	s, selection := setup(t, false)
+	selection.Evidence = []evidence.Digest{viewComparison(t, s, selection, false, evidence.Complete)}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := Load(t.Context(), selection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range []struct{ width, height int }{{80, 24}, {120, 40}} {
+		for _, noColor := range []bool{false, true} {
+			name := fmt.Sprintf("%dx%d/no-color=%t", size.width, size.height, noColor)
+			t.Run(name, func(t *testing.T) {
+				if noColor {
+					t.Setenv("NO_COLOR", "1")
+				} else {
+					t.Setenv("NO_COLOR", "")
+				}
+				t.Setenv("TERM", "xterm-256color")
+				model := New(context.Background(), selection, Jobs{})
+				model.data, model.selected = data, selection
+				model.selectFirstOverviewRow()
+				master, slave, err := pty.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer master.Close()
+				defer slave.Close()
+				if err := pty.Setsize(master, &pty.Winsize{Rows: uint16(size.height), Cols: uint16(size.width)}); err != nil {
+					t.Fatal(err)
+				}
+				before, err := term.GetState(int(slave.Fd()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				chunks := make(chan string, 256)
+				go func() {
+					defer close(chunks)
+					buf := make([]byte, 4096)
+					for {
+						n, err := master.Read(buf)
+						if n > 0 {
+							chunks <- string(buf[:n])
+						}
+						if err != nil {
+							return
+						}
+					}
+				}()
+				var transcript strings.Builder
+				done := make(chan error, 1)
+				go func() { done <- Run(model, slave, slave) }()
+				waitFor := func(want string) {
+					t.Helper()
+					deadline := time.After(5 * time.Second)
+					for {
+						plain := stripPTYControls(transcript.String())
+						if strings.Contains(plain, want) {
+							return
+						}
+						select {
+						case chunk, ok := <-chunks:
+							if !ok {
+								t.Fatalf("PTY closed before %q: %s", want, plain)
+							}
+							transcript.WriteString(chunk)
+						case err := <-done:
+							t.Fatalf("TUI exited before %q: %v", want, err)
+						case <-deadline:
+							t.Fatalf("missing PTY text %q: %s", want, plain)
+						}
+					}
+				}
+				waitFor("12h same-key retry")
+				if size.width >= 110 {
+					waitFor("── Payment case")
+					waitFor("candidate 2")
+					waitFor("── Input")
+					if !strings.Contains(stripPTYControls(transcript.String()), "30s same-key retry") {
+						t.Fatal("wide PTY Card preview lost its content")
+					}
+				} else if strings.Contains(stripPTYControls(transcript.String()), "── Payment case") {
+					t.Fatal("narrow PTY unexpectedly rendered the side preview")
+				}
+				raw := transcript.String()
+				if noColor && regexp.MustCompile("\\x1b\\[[0-9;]*m").MatchString(raw) {
+					t.Fatal("NO_COLOR Card preview emitted SGR")
+				}
+				if !noColor && !strings.Contains(raw, "\x1b[1m") {
+					t.Fatal("color Card preview omitted typed section-title styling")
+				}
+				if _, err := master.Write([]byte("q")); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case err := <-done:
+					if err != nil {
+						t.Fatal(err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("q did not quit the Card preview PTY")
+				}
+				after, err := term.GetState(int(slave.Fd()))
+				if err != nil || !reflect.DeepEqual(before, after) {
+					t.Fatal("Card preview PTY did not restore terminal state", err)
+				}
+				t.Logf("real PTY %dx%d no-color=%t Card excerpt: %s", size.width, size.height, noColor, ptyExcerpt(stripPTYControls(raw), "Payment case"))
+			})
+		}
+	}
+}
+
 func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
 	for _, size := range []struct{ width, height int }{{80, 24}, {120, 40}} {
 		for _, noColor := range []bool{false, true} {
@@ -282,6 +395,32 @@ func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
 							}
 						}
 					}
+					waitForAfter := func(previous string, wants ...string) {
+						t.Helper()
+						previousCount := strings.Count(stripPTYControls(previous), "Confirm quit?")
+						deadline := time.After(5 * time.Second)
+						for {
+							plain := stripPTYControls(transcript.String())
+							found := strings.Count(plain, "Confirm quit?") > previousCount
+							for _, want := range wants {
+								found = found && strings.Contains(plain, want)
+							}
+							if found {
+								return
+							}
+							select {
+							case chunk, ok := <-chunks:
+								if !ok {
+									t.Fatalf("PTY closed before new %v: %s", wants, plain)
+								}
+								transcript.WriteString(chunk)
+							case err := <-done:
+								t.Fatalf("TUI exited before new %v: %v", wants, err)
+							case <-deadline:
+								t.Fatalf("missing new PTY text %v: %s", wants, plain)
+							}
+						}
+					}
 					waitFor("running 1:05 · x")
 					if quit == "q-confirm" {
 						if _, err := master.Write([]byte("q")); err != nil {
@@ -297,10 +436,11 @@ func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
 							t.Fatal(err)
 						}
 						waitFor("running 1:06 · x")
+						previous := transcript.String()
 						if _, err := master.Write([]byte("q")); err != nil {
 							t.Fatal(err)
 						}
-						waitFor("Confirm quit?")
+						waitForAfter(previous, "Confirm quit?")
 						if _, err := master.Write([]byte("y")); err != nil {
 							t.Fatal(err)
 						}

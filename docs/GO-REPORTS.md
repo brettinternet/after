@@ -77,9 +77,11 @@ consumption, not a deadline for a blocking reader. It is not a Go event-sequence
 or producer-authenticity validator.
 
 All strings remain untrusted data, including producer, package, test names and
-output. JSON encoding escapes terminal controls; a future terminal renderer must
-sanitize every string before display. No importer function renders raw text or
-interprets an output URL/path. The API returns report data; it does not write the
-original bytes to disk. Later storage integration must use private store artifact
-redaction and distinguish the original digest from any redacted artifact digest.
-Do not commit real project reports, credentials, or participant data.
+output. JSON encoding escapes terminal controls; the shared TUI/CLI Card renderers
+also sanitize and bound displayed text. No importer function renders raw text or
+interprets an output URL/path. The API returns report data and does not write the
+original stream to disk. The CLI stores the bounded report artifact through the
+private store's redaction policy and keeps the original digest distinct from the
+stored artifact digest; malformed stored reports remain available as raw bytes with
+a limitation, not a guessed Card. Do not commit real project reports, credentials,
+or participant data.

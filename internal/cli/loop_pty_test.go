@@ -383,6 +383,11 @@ func TestExplicitOlderPinRevisionPTY(t *testing.T) {
 	p = startLoopPTYSize(t, []string{"review", string(older.ID), "--project", project, "--json"}, 120, 40)
 	p.expect("older pin revision")
 	p.send("\r")
+	p.expect("Section 1/5")
+	for range 4 {
+		p.send("\t")
+	}
+	p.expect("Section 5/5")
 	p.expect(string(older.ID))
 	selection, _ := p.finish()
 	if selection.Pair != pair.Pair {

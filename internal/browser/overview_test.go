@@ -152,7 +152,13 @@ func indexOfOverviewRow(rows []overviewRow, target overviewRow) int {
 
 func TestOverviewReportProvenanceAndOutcomeLines(t *testing.T) {
 	m := overviewModel(t, viewReportSelection(t))
-	view := m.View()
+	var overviewLines []string
+	for _, row := range m.overviewRows() {
+		if row.kind == overviewReport || row.kind == overviewEvidence {
+			overviewLines = append(overviewLines, m.overviewRowTextWidth(row, false, 120))
+		}
+	}
+	view := strings.Join(overviewLines, "\n")
 	if strings.Count(view, "report ") != 2 {
 		t.Fatalf("each report needs its own provenance line:\n%s", view)
 	}
@@ -183,7 +189,7 @@ func TestOverviewReportProvenanceAndOutcomeLines(t *testing.T) {
 	m.theme = terminal.Theme{}
 	m.width = 240
 	m.data.Entries[0].ReportProducer = "\x1b]52;c;clipboard\a\n[ACCEPTED]"
-	untrusted := m.View()
+	untrusted := m.reportLine(m.data.Entries[0], 240)
 	if strings.ContainsAny(untrusted, "\x1b\a\r") || !strings.Contains(untrusted, "[ACCEPTED]") || badgeFor(m.data.Entries[0]).word != "REPORTED" || strings.Contains(m.statusLine(), "ACCEPTED") {
 		t.Fatal("producer text escaped the data column or changed trusted state", untrusted)
 	}

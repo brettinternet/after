@@ -154,6 +154,22 @@ func Get[T Record](s *Store, id evidence.Digest) (T, error) {
 	defer s.mu.Unlock()
 	return get[T](s, id)
 }
+
+// ReadRawRecord returns bounded exact bytes for a known record namespace without
+// interpreting them. It is only for visibly limited inspection fallbacks; callers
+// must not use these bytes as typed evidence.
+func ReadRawRecord(s *Store, kind string, id evidence.Digest) ([]byte, error) {
+	if kind != "snapshot" && kind != "capture" && kind != "scenario" && kind != "receipt" && kind != "comparison" && kind != "pin" {
+		return nil, errors.New("unsupported record kind")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name, err := key(kind, string(id))
+	if err != nil {
+		return nil, err
+	}
+	return s.read(name, evidence.MaxRecordBytes)
+}
 func get[T Record](s *Store, id evidence.Digest) (T, error) {
 	record, err := readRecord[T](s, id)
 	if err != nil {

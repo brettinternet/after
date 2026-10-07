@@ -62,7 +62,11 @@ derived image ID. The driver identity covers both launcher and observer source. 
 side, case, repetition, timestamps, status, actual derived image IDs, cleanup and
 truncation flags. Each observation retains exact response status/body and
 provider-received timestamp/method/path/key/body. Counts are log lengths, never
-app diagnostics. The raw inventory still includes candidate oracle edits.
+app diagnostics. The raw inventory still includes candidate oracle edits. Readable TUI and CLI
+details present the strictly decoded receipt, comparison witnesses, case
+observations/samples and frozen scenario as shared evidence Cards, with paired
+base/candidate values and full artifact IDs. Opening those Cards reads only stored
+evidence; it does not build or execute the experiment again.
 
 Every requested sample is retained, including failed or unstarted samples.
 Denied permission, cancellation, deadline, startup/build failure, output limit,
