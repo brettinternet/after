@@ -19,7 +19,7 @@ import (
 
 func runBrowser(state *invocation, ctx *ucli.Context, cfg config.Config, selection browser.Selection, session browser.ReviewSession, captureOnStart, saveSession bool) error {
 	if !state.tty || !state.stderrTTY {
-		return invalidWithFix("review requires a terminal", "nonterminal review inspection is unavailable until AFTER-37")
+		return invalidWithFix("review requires a terminal", fmt.Sprintf("run after inspect %s %s --json to inspect this pair", selection.Pair.Base, selection.Pair.Candidate))
 	}
 	actions := &browser.Actions{Project: cfg.Project, CaptureOptions: session.CaptureOptions(), Repetitions: cfg.Repetitions, Limits: sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes}, Docker: sandbox.Docker{Binary: cfg.DockerBinary, Host: cfg.DockerHost}}
 	jobs := browser.Jobs{Actions: actions, CaptureOnStart: captureOnStart}

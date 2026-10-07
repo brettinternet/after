@@ -35,6 +35,25 @@ func commands(state *invocation) []*ucli.Command {
 	return []*ucli.Command{
 		pinCommand(state), reviewCommand(state),
 		{
+			Name: "status", Usage: "summarize stored review state without capture or execution",
+			Before: outputBefore(state), Flags: globalFlags(),
+			Action: func(ctx *ucli.Context) error {
+				if err := requireArgs(ctx, 0); err != nil {
+					return err
+				}
+				cfg, err := configFlags(ctx)
+				if err != nil {
+					return err
+				}
+				return statusCommand(state, cfg.Project)
+			},
+		},
+		{
+			Name: "log", Usage: "list recent stored captures, runs, reports, and pin events",
+			Before: outputBefore(state), ArgsUsage: "[-n N]", Flags: append(globalFlags(), &ucli.IntFlag{Name: "n", Value: defaultLogLimit, Usage: "number of newest stored events to show (default: 20)"}),
+			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return logCommand(state, ctx) },
+		},
+		{
 			Name: "capture", Usage: "capture a bounded local Git comparison without running project code",
 			Before:    outputBefore(state),
 			ArgsUsage: "[--staged | --base REF [--target REF]]", Flags: append(globalFlags(),
@@ -298,6 +317,9 @@ func reportView(id evidence.Digest, report gotestreport.Report, offset, limit in
 }
 
 func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error {
+	if ctx.NArg() == 0 {
+		return inspectNewestCommand(state, ctx, exporting)
+	}
 	if ctx.NArg() == 2 {
 		cfg, err := configFlags(ctx)
 		if err != nil {
@@ -522,6 +544,7 @@ type snapshotInspection struct {
 type snapshotView struct {
 	Base                    evidence.Digest        `json:"base_snapshot"`
 	Candidate               evidence.Digest        `json:"candidate_snapshot"`
+	Using                   *resolvedIDs           `json:"using,omitempty"`
 	BaseRecord              evidence.Snapshot      `json:"-"`
 	CandidateRecord         evidence.Snapshot      `json:"-"`
 	BaseCaptureHistory      snapshotCaptureHistory `json:"-"`
@@ -689,38 +712,81 @@ func comparisonExit(outcome evidence.ComparisonOutcome) int {
 }
 
 func compareCommand(state *invocation, ctx *ucli.Context) error {
-	if err := requireArgs(ctx, 1); err != nil {
-		return err
+	if ctx.NArg() > 1 {
+		return requireArgs(ctx, 1)
 	}
 	cfg, err := configFlags(ctx)
 	if err != nil {
 		return err
+	}
+	var id evidence.Digest
+	var using *resolvedIDs
+	if ctx.NArg() == 0 {
+		readOnly, err := store.Open(cfg.Project, false, nil)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return missingStoredRecord("capture", "run after capture to create one")
+			}
+			return operational("cannot open private evidence store for reading")
+		}
+		capture, err := newestCaptureForStore(readOnly)
+		if err != nil {
+			readOnly.Close()
+			return err
+		}
+		pair := evidence.SnapshotPair{Base: capture.Base, Candidate: capture.Candidate}
+		receipt, err := newestReceiptForStore(readOnly, pair)
+		readOnly.Close()
+		if err != nil {
+			return err
+		}
+		id = receipt.ID
+		using = &resolvedIDs{Capture: capture.ID, Base: pair.Base, Candidate: pair.Candidate, Receipt: receipt.ID}
+	} else {
+		id, err = resolveIDFromProject(cfg.Project, ctx.Args().Get(0), "receipt")
+		if err != nil {
+			return err
+		}
 	}
 	s, err := store.Open(cfg.Project, true, nil)
 	if err != nil {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
-	id, err := resolveID(s, ctx.Args().Get(0), "receipt")
-	if err != nil {
-		return err
-	}
 	comparisonRecord, err := compare.Run(s, id)
 	if err != nil {
 		return operational("comparison could not be persisted")
 	}
+	receipt, err := store.Get[evidence.Receipt](s, id)
+	if err != nil {
+		return operational("compared run receipt is corrupt or unavailable")
+	}
 	state.exit = comparisonExit(comparisonRecord.Outcome)
-	var details compare.Report
+	var details *compare.Report
 	if comparisonRecord.Details != nil {
 		raw, err := s.ReadBlob(comparisonRecord.Details.Content)
-		if err != nil || strictJSON(raw, &details) != nil {
+		if err != nil {
 			return operational("comparison details are unavailable")
 		}
+		var decoded compare.Report
+		if err := strictJSON(raw, &decoded); err != nil {
+			return operational("comparison details are invalid")
+		}
+		details = &decoded
 	}
-	return writeResult(state, "comparison", struct {
-		Comparison evidence.Comparison `json:"comparison"`
-		Details    compare.Report      `json:"details"`
-	}{comparisonRecord, details})
+	return writeResult(state, "comparison", comparisonResult{Comparison: comparisonRecord, Receipt: receipt, Details: details, Using: using})
+}
+
+func resolveIDFromProject(project, value string, kinds ...string) (evidence.Digest, error) {
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", noIDMatch(value, kinds...)
+		}
+		return "", operational("cannot open private evidence store for reading")
+	}
+	defer s.Close()
+	return resolveID(s, value, kinds...)
 }
 
 func runCommand(state *invocation, ctx *ucli.Context) error {

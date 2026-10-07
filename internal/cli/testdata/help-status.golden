@@ -1,9 +1,7 @@
-Compare the newest run for this capture, or compare a named receipt, without
-running project code.
+Summarize stored capture and review state without capture or execution.
 
 Usage
-  after compare
-  after compare RECEIPT
+  after status
 
 Options
   No command-specific options.

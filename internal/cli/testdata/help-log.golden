@@ -1,12 +1,11 @@
-Compare the newest run for this capture, or compare a named receipt, without
-running project code.
+List recent stored captures, runs, imported reports, and pin events.
 
 Usage
-  after compare
-  after compare RECEIPT
+  after log
+  after log -n N
 
 Options
-  No command-specific options.
+  -n N   number of newest events to show (default: 20; range: 1–10000)
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

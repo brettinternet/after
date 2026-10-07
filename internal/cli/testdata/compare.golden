@@ -8,3 +8,6 @@ Comparison cccccccc · different · complete
 IDs
 sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+Next
+  after inspect sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    inspect the stored comparison

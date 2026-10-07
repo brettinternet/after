@@ -20,7 +20,7 @@ func startOrResumeReview(state *invocation, ctx *ucli.Context, requested capture
 		return err
 	}
 	if !state.tty || !state.stderrTTY {
-		return invalidWithFix("review requires a terminal", "nonterminal review inspection is unavailable until AFTER-37")
+		return invalidWithFix("review requires a terminal", "run after status --json to inspect stored review state")
 	}
 	saved, found, invalidSession, err := readReviewSession(cfg.Project)
 	if err != nil {

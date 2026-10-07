@@ -4,3 +4,6 @@ Imported report cccccccc · 2 pass · 1 fail · 0 skip
   Binding      bbbbbbbb
 Reported by go test; AFTER did not run or observe these tests
   TestRetry · test · fail
+Next
+  after inspect sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    inspect the reported test results

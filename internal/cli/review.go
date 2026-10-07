@@ -23,8 +23,8 @@ func pinCommand(state *invocation) *ucli.Command {
 		&ucli.StringFlag{Name: "mode", Value: string(evidence.OriginalBase), Usage: "comparison base: original_base or last_inspected"},
 		&ucli.StringFlag{Name: "reason", Usage: "verbatim human reason for the pin history event"},
 	), Action: func(ctx *ucli.Context) error {
-		if err := requireArgs(ctx, 1); err != nil {
-			return err
+		if ctx.NArg() > 1 {
+			return requireArgs(ctx, 1)
 		}
 		create := ctx.IsSet("expectation")
 		actions := 0
@@ -35,6 +35,9 @@ func pinCommand(state *invocation) *ucli.Command {
 		}
 		if actions > 1 || (ctx.IsSet("accept") && !ctx.Bool("accept")) {
 			return invalidWithFix("choose at most one pin action", "use exactly one of --accept, --attach RECEIPT, or --select SNAPSHOT")
+		}
+		if actions > 0 && ctx.NArg() == 0 {
+			return invalidWithFix("missing pin revision ID", "try: after pin PIN --accept")
 		}
 		if create {
 			if actions > 0 || ctx.IsSet("mode") {
@@ -54,14 +57,26 @@ func pinCommand(state *invocation) *ucli.Command {
 			if err != nil {
 				return err
 			}
+			var receiptID evidence.Digest
+			var using *resolvedIDs
+			if ctx.NArg() == 0 {
+				capture, receipt, err := newestRunForProject(cfg.Project)
+				if err != nil {
+					return err
+				}
+				receiptID = receipt.ID
+				using = &resolvedIDs{Capture: capture.ID, Base: capture.Base, Candidate: capture.Candidate, Receipt: receipt.ID}
+			}
 			s, err := store.Open(cfg.Project, true, nil)
 			if err != nil {
 				return operational("cannot open private evidence store")
 			}
 			defer s.Close()
-			receiptID, err := resolveID(s, ctx.Args().First(), "receipt")
-			if err != nil {
-				return err
+			if ctx.NArg() == 1 {
+				receiptID, err = resolveID(s, ctx.Args().First(), "receipt")
+				if err != nil {
+					return err
+				}
 			}
 			reason := reasonOrDefault(ctx, "Pinned from the command line")
 			p, err := review.Create(s, receiptID, ctx.String("expectation"), scope, reason)
@@ -71,7 +86,7 @@ func pinCommand(state *invocation) *ucli.Command {
 				}
 				return invalidWithFix("receipt cannot support this pin", "use a runner receipt with concrete scenario bindings")
 			}
-			return writeReview(state, s, p.ID)
+			return writeReviewUsing(state, s, p.ID, using)
 		}
 		if actions == 0 {
 			if ctx.IsSet("scope") || ctx.IsSet("mode") || ctx.IsSet("reason") {
@@ -80,6 +95,9 @@ func pinCommand(state *invocation) *ucli.Command {
 			cfg, err := configFlags(ctx)
 			if err != nil {
 				return err
+			}
+			if ctx.NArg() == 0 {
+				return listPinHeads(state, cfg.Project)
 			}
 			s, err := store.Open(cfg.Project, false, nil)
 			if err != nil {
@@ -221,19 +239,21 @@ func reviewCommand(state *invocation) *ucli.Command {
 }
 
 func writeReview(state *invocation, s *store.Store, id evidence.Digest) error {
+	return writeReviewUsing(state, s, id, nil)
+}
+
+func writeReviewUsing(state *invocation, s *store.Store, id evidence.Digest, using *resolvedIDs) error {
 	v, err := review.Inspect(s, id)
 	if err != nil {
 		return invalidWithFix("pin revision or its bound evidence is unavailable", "use a stored pin revision ID from after pin")
 	}
-	if state.jsonOutput || state.forceJSON {
-		return writeResult(state, "review", v)
-	}
 	heads, headErr := review.NewerHeads(s, v.Pin)
-	return writeResult(state, "review", reviewInspection{View: v, NewerHeads: heads, HeadsUnavailable: headErr != nil})
+	return writeResult(state, "review", reviewInspection{View: v, NewerHeads: heads, HeadsUnavailable: headErr != nil, Using: using})
 }
 
 type reviewInspection struct {
 	review.View
 	NewerHeads       []evidence.Digest `json:"-"`
 	HeadsUnavailable bool              `json:"-"`
+	Using            *resolvedIDs      `json:"using,omitempty"`
 }

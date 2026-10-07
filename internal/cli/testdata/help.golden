@@ -2,16 +2,19 @@ Review local changes and their evidence without running project code unless
 you approve an exact plan.
 
 Everyday
-  after review                 capture a change and open or resume its review
+  after                         show this checkout's stored review status
+  after status                  show the same status explicitly
+  after review                  capture a change and open or resume its review
   after capture                 capture a local Git comparison
-  after inspect ID              inspect a stored record or snapshot pair
+  after log                     list recent stored events
+  after inspect                 inspect the newest capture or a stored record
 
 Evidence
   after run                     prepare a consented offline payment run
   after import                  read a go test -json report file
-  after compare                 compare a stored execution receipt
-  after pin                     create, inspect, or update an expectation
-  after export                  print a comparison or evidence page as JSON
+  after compare                 compare the newest stored run
+  after pin                     list pin heads or create an expectation
+  after export                  export the newest comparison as JSON
 
 Setup
   after config                  show settings and their sources

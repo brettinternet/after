@@ -8,6 +8,13 @@ with its exact-plan authorization and offline isolation unchanged.
 
 ## Pin and inspect
 
+Bare `after pin` lists only computed head revisions, including every fork; it does
+not select a revision or choose one by timestamp. Use an explicit `PIN_REVISION_ID`
+for inspection or any decision. `after pin --expectation TEXT` can default its
+receipt to the newest run of the newest capture pair, but that receipt default
+never implies a pin-revision default. When no capture/run exists, the CLI names the
+missing record and the command needed to create it.
+
 ```sh
 ./bin/after pin RECEIPT_ID --project /work/payment \
   --expectation "Twelve-hour retries must not duplicate provider calls" \

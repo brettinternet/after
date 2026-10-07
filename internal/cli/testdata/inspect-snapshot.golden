@@ -4,3 +4,6 @@ Snapshot bbbbbbbb · working tree
   Limit        two matching reads; not an atomic filesystem snapshot
 IDs
 sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+Next
+  after review sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    open the captured snapshot

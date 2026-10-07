@@ -9,7 +9,10 @@ import (
 )
 
 func helpRequest(args []string) (string, bool, error) {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+	if len(args) == 0 {
+		return "", false, nil
+	}
+	if args[0] == "--help" || args[0] == "-h" {
 		return "", true, nil
 	}
 	if args[0] == "help" {
@@ -78,10 +81,30 @@ Options
   --offset N        first report card (default: 0)
   --limit N         report cards to return (default: 128; range: 1–256)
 ` + global
-	case "inspect":
-		body = `Inspect one stored record or the complete diff between two stored snapshots.
+	case "status":
+		body = `Summarize stored capture and review state without capture or execution.
 
 Usage
+  after status
+
+Options
+  No command-specific options.
+` + global
+	case "log":
+		body = `List recent stored captures, runs, imported reports, and pin events.
+
+Usage
+  after log
+  after log -n N
+
+Options
+  -n N   number of newest events to show (default: 20; range: 1–10000)
+` + global
+	case "inspect":
+		body = `Inspect the newest capture, one stored record, or two stored snapshots.
+
+Usage
+  after inspect
   after inspect ID
   after inspect BASE CANDIDATE
 
@@ -98,18 +121,21 @@ Options
   --artifact-size N        stored artifact page bytes (default: 65536)
 ` + global
 	case "compare":
-		body = `Compare a persisted execution receipt without running project code.
+		body = `Compare the newest run for this capture, or compare a named receipt, without
+running project code.
 
 Usage
+  after compare
   after compare RECEIPT
 
 Options
   No command-specific options.
 ` + global
 	case "export":
-		body = `Export a bounded machine-readable comparison or evidence page as JSON.
+		body = `Export the newest stored comparison or a named evidence page as JSON.
 
 Usage
+  after export
   after export ID
   after export BASE CANDIDATE
 
@@ -149,7 +175,8 @@ Options
 execute project code.
 
 Usage
-  after pin RECEIPT --expectation TEXT [--scope SCOPE] [--reason TEXT]
+  after pin
+  after pin [RECEIPT] --expectation TEXT [--scope SCOPE] [--reason TEXT]
   after pin PIN
   after pin PIN --accept [--reason TEXT]
   after pin PIN --attach RECEIPT [--reason TEXT]
@@ -216,16 +243,19 @@ func topLevelHelp() string {
 you approve an exact plan.
 
 Everyday
-  after review                 capture a change and open or resume its review
+  after                         show this checkout's stored review status
+  after status                  show the same status explicitly
+  after review                  capture a change and open or resume its review
   after capture                 capture a local Git comparison
-  after inspect ID              inspect a stored record or snapshot pair
+  after log                     list recent stored events
+  after inspect                 inspect the newest capture or a stored record
 
 Evidence
   after run                     prepare a consented offline payment run
   after import                  read a go test -json report file
-  after compare                 compare a stored execution receipt
-  after pin                     create, inspect, or update an expectation
-  after export                  print a comparison or evidence page as JSON
+  after compare                 compare the newest stored run
+  after pin                     list pin heads or create an expectation
+  after export                  export the newest comparison as JSON
 
 Setup
   after config                  show settings and their sources
@@ -237,16 +267,16 @@ Run after COMMAND --help for that command's options.
 }
 
 func helpNames() []string {
-	return []string{"", "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "version"}
+	return []string{"", "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version"}
 }
 
 func commandExample(name string) string {
 	examples := map[string]string{
 		"capture": "after capture",
 		"import":  "after import FILE --producer TEXT",
-		"inspect": "after inspect ID",
-		"compare": "after compare RECEIPT",
-		"export":  "after export ID",
+		"inspect": "after inspect",
+		"compare": "after compare",
+		"export":  "after export",
 		"run":     "after run BASE CANDIDATE",
 		"pin":     "after pin RECEIPT --expectation TEXT",
 		"review":  "after review",

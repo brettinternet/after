@@ -14,7 +14,7 @@ after review                         # capture HEAD vs working tree; open or res
  after review <base-id> <candidate-id> [<evidence-id> ...]
 ```
 
-Opening an explicit snapshot, record ID or pair does not read or change the saved review. An explicit pin revision stays on exactly that immutable revision. By default, review discovers pin heads (forks appear independently), the pair's newest runs and comparisons, and reports bound to the candidate. At most 32 records load; pins needing another look come first, and Overview reports the number omitted. Historical listing with `after log` is unavailable until AFTER-37.
+Opening an explicit snapshot, record ID or pair does not read or change the saved review. An explicit pin revision stays on exactly that immutable revision. By default, review discovers pin heads (forks appear independently), the pair's newest runs and comparisons, and reports bound to the candidate. At most 32 records load; pins needing another look come first, and Overview reports the number omitted. `after log` provides a separate bounded history view.
 
 ## Frame, keys and evidence
 
@@ -222,7 +222,7 @@ the saved capture options. Different capture flags or `--new` start a new review
 
 Terminal rendering and the saved-review message use stderr. Stdout stays empty
 unless `--json` prints the versioned session JSON after terminal restoration.
-Without a terminal, bare `after review` exits 2 and reports that nonterminal inspection is unavailable until AFTER-37; `after status --json` is not implemented yet. There is no automatic file watcher. Keep the private state and evidence references private.
+Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`. There is no automatic file watcher. Keep the private state and evidence references private.
 
 The viewport is capped at 240 columns and 100 rows; extremely narrow terminals
 clip explicitly. Storage/capture/report bounds still apply. Artifact reads verify

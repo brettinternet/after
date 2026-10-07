@@ -7,3 +7,6 @@ Reported by go test; AFTER did not run or observe these tests
 IDs
 sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+Next
+  after inspect sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    inspect the reported test results

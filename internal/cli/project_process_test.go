@@ -111,6 +111,14 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		args []string
 		code int
 	}{
+		{"bare-status", nil, ExitOK},
+		{"status", []string{"status"}, ExitOK},
+		{"log", []string{"log", "-n", "10"}, ExitOK},
+		{"inspect-default", []string{"inspect"}, ExitOK},
+		{"compare-default", []string{"compare"}, ExitOperational},
+		{"export-default", []string{"export"}, ExitOK},
+		{"pin-list", []string{"pin"}, ExitOK},
+		{"pin-default-create", []string{"pin", "--expectation", "process default expectation", "--scope", "human_intent"}, ExitOK},
 		{"capture", captureArgs, ExitOK},
 		{"import", []string{"import", report, "--producer", "fixture", "--snapshot", candidateID}, ExitOK},
 		{"inspect-pair", []string{"inspect", baseID, candidateID}, ExitOK},
@@ -160,6 +168,9 @@ func TestProjectCommandProcessModes(t *testing.T) {
 						if mode != "pty" || noColor || !themeSGROnly(transcript) {
 							t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
 						}
+					}
+					if strings.Contains(command.name, "status") || command.name == "log" || strings.Contains(command.name, "default") || command.name == "pin-list" {
+						t.Logf("80-column CLI terminal verification: command=%s mode=%s NO_COLOR=%t exit=%d excerpt=%q", command.name, mode, noColor, code, trimExcerpt(transcript))
 					}
 					if command.name == "capture" && noColor && mode == "pty" {
 						t.Logf("80-column PTY capture excerpt: %s", trimExcerpt(transcript))

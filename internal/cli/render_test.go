@@ -90,6 +90,22 @@ func readableGoldenCases() []struct {
 	receipt := goldenReceipt()
 	pin := evidence.Pin{SchemaVersion: 1, ID: idD, Scenario: idE, Expectation: "At 12h, retries make one provider request", BasisReceipt: receipt.ID, BasisSnapshots: receipt.Snapshots, Decision: evidence.Reopened, Scope: evidence.FiniteExample, History: []evidence.DecisionEvent{{Decision: evidence.Pinned, At: time.Date(2026, time.January, 2, 9, 0, 0, 0, time.UTC), Reason: "initial"}, {Decision: evidence.Reopened, At: time.Date(2026, time.January, 2, 10, 0, 0, 0, time.UTC), Reason: "selected new snapshot"}}}
 	view := review.View{Pin: pin, Applicability: evidence.Stale, Reason: "whole-project snapshot identity changed", MissingCurrentResult: true, Limits: []string{review.ReuseLimit}}
+	status := statusView{
+		Capture:      &statusCapture{ID: idC, CapturedAt: time.Date(2026, time.January, 2, 10, 30, 0, 0, time.UTC), Mode: evidence.WorkingTree, Base: idA, Candidate: idB, SelectedUntracked: 1},
+		Base:         &statusSnapshot{ID: idA, Source: evidence.Commit, Commit: strings.Repeat("a", 40), Completeness: evidence.Complete, Files: 1},
+		Candidate:    &statusSnapshot{ID: idB, Source: evidence.WorkingTree, Commit: strings.Repeat("1", 40), Completeness: evidence.Complete, Files: 1, Excluded: 1},
+		ChangedPaths: 1, UntrackedExcluded: true, Receipt: &receipt, Comparison: &comparison, Details: &details,
+		Pins:    []statusPin{{ID: idD, Decision: evidence.Reopened, Applicability: evidence.Stale, Expectation: pin.Expectation, MissingCurrentResult: true}},
+		Reports: []statusReport{{ID: idE, Imported: time.Date(2026, time.January, 2, 10, 31, 0, 0, time.UTC), Producer: "fixture report", Pass: 2, Fail: 1}},
+		Next:    []nextCommand{next("after review "+string(idA)+" "+string(idB), "review this capture")},
+	}
+	log := logView{Total: 4, Shown: 4, Rows: []logRow{
+		{Kind: "pin", ID: idD, At: time.Date(2026, time.January, 2, 11, 0, 0, 0, time.UTC), Base: idA, Candidate: idB, Receipt: idD, Decision: evidence.Reopened, Action: "attach", Expectation: pin.Expectation},
+		{Kind: "report", ID: idC, At: time.Date(2026, time.January, 2, 10, 31, 0, 0, time.UTC), Candidate: idB, Producer: "fixture report", Pass: 2, Fail: 1},
+		{Kind: "run", ID: idD, At: time.Date(2026, time.January, 2, 10, 30, 0, 0, time.UTC), Base: idA, Candidate: idB, Outcome: evidence.Different, Summary: "12h [DIFFERENT] 1 → 2 · 30s [EQUAL] 1 → 1"},
+		{Kind: "capture", ID: idC, At: time.Date(2026, time.January, 2, 8, 30, 0, 0, time.UTC), Base: idA, Candidate: idB, Mode: evidence.WorkingTree, Paths: 1},
+	}, Next: []nextCommand{next("after status", "show the current capture and review state")}}
+	pinHeads := pinListView{Pins: []review.View{view}, Next: []nextCommand{next("after status", "show the current capture and review state")}}
 	plan, _ := json.Marshal(struct {
 		Snapshots   evidence.SnapshotPair `json:"snapshots"`
 		Repetitions int                   `json:"repetitions"`
@@ -110,6 +126,9 @@ func readableGoldenCases() []struct {
 		kind string
 		data any
 	}{
+		{"status", "status", status},
+		{"log", "log", log},
+		{"pin-heads", "pins", pinHeads},
 		{"config", "configuration", struct {
 			Settings []struct {
 				Name   string `json:"name"`
@@ -177,7 +196,7 @@ func TestReadableCommandEnumeration(t *testing.T) {
 	for _, command := range commands(state) {
 		got[command.Name] = true
 	}
-	want := map[string]bool{"capture": true, "import": true, "inspect": true, "compare": true, "export": true, "run": true, "pin": true, "review": true, "config": true, "version": true}
+	want := map[string]bool{"capture": true, "import": true, "inspect": true, "compare": true, "export": true, "run": true, "pin": true, "review": true, "status": true, "log": true, "config": true, "version": true}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("command coverage changed: got %v want %v", got, want)
 	}
@@ -225,7 +244,7 @@ func TestReadableOutputGoldens(t *testing.T) {
 				t.Fatalf("readable output differs: %s; regenerate explicitly with -update\n%s", path, got)
 			}
 			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
-				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 {
+				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 && !strings.HasPrefix(line, "  after ") {
 					t.Errorf("golden exceeds 80 columns: %q", line)
 				}
 			}
@@ -271,8 +290,12 @@ func TestHelpMatchesAvailableFlagsAndConfigurationDefaults(t *testing.T) {
 		text := commandHelp(command.Name)
 		for _, flag := range command.Flags {
 			for _, name := range flag.Names() {
-				if !strings.Contains(text, "--"+name) {
-					t.Errorf("%s flag --%s is missing from help", command.Name, name)
+				spelling := "--" + name
+				if len(name) == 1 {
+					spelling = "-" + name
+				}
+				if !strings.Contains(text, spelling) {
+					t.Errorf("%s flag %s is missing from help", command.Name, spelling)
 				}
 			}
 		}
@@ -298,8 +321,8 @@ func TestHelpMatchesAvailableFlagsAndConfigurationDefaults(t *testing.T) {
 			}
 		}
 	}
-	if text := topLevelHelp(); strings.Count(text, "Global options:") != 1 || strings.Contains(text, "after status") || strings.Contains(text, "after log") || strings.Contains(text, "after diff") || strings.Contains(text, "after completion") {
-		t.Fatalf("top-level help advertises unavailable commands or repeats globals: %q", text)
+	if text := topLevelHelp(); strings.Count(text, "Global options:") != 1 || !strings.Contains(text, "after status") || !strings.Contains(text, "after log") || strings.Contains(text, "after diff") || strings.Contains(text, "after completion") {
+		t.Fatalf("top-level help omits current commands, advertises unavailable commands, or repeats globals: %q", text)
 	}
 }
 

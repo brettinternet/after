@@ -1,6 +1,7 @@
-Export a bounded machine-readable comparison or evidence page as JSON.
+Export the newest stored comparison or a named evidence page as JSON.
 
 Usage
+  after export
   after export ID
   after export BASE CANDIDATE
 

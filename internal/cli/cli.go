@@ -33,21 +33,22 @@ const (
 )
 
 type invocation struct {
-	ctx        context.Context
-	stdout     io.Writer
-	stderr     io.Writer
-	reader     io.Reader
-	tty        bool
-	stdoutTTY  bool
-	stderrTTY  bool
-	columns    int
-	jsonOutput bool
-	forceJSON  bool
-	theme      terminal.Theme
-	location   *time.Location
-	now        func() time.Time
-	exit       int
-	diagnostic string
+	ctx             context.Context
+	stdout          io.Writer
+	stderr          io.Writer
+	reader          io.Reader
+	tty             bool
+	stdoutTTY       bool
+	stderrTTY       bool
+	columns         int
+	jsonOutput      bool
+	forceJSON       bool
+	suggestionFlags string
+	theme           terminal.Theme
+	location        *time.Location
+	now             func() time.Time
+	exit            int
+	diagnostic      string
 }
 
 type exitError struct {
@@ -101,12 +102,23 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		Reader:                    reader,
 		DisableSliceFlagSeparator: true,
 		HideHelpCommand:           false,
+		Flags:                     globalFlags(),
 		Action: func(ctx *ucli.Context) error {
 			if ctx.NArg() > 0 {
 				return invalidWithFix("unexpected arguments", "run after --help to list available commands")
 			}
-			_, err := io.WriteString(stdout, topLevelHelp())
-			return err
+			state.jsonOutput = ctx.Bool("json")
+			cfg, err := configFlags(ctx)
+			if err != nil {
+				var commandErr *exitError
+				if errors.As(err, &commandErr) && commandErr.code == ExitInvalid && strings.Contains(commandErr.diagnostic, "not inside a Git repository") {
+					_, writeErr := io.WriteString(stdout, topLevelHelp())
+					return writeErr
+				}
+				return err
+			}
+			state.suggestionFlags = suggestionFlags(ctx)
+			return statusCommand(state, cfg.Project)
 		},
 		OnUsageError:   usageError,
 		ExitErrHandler: func(*ucli.Context, error) {},
@@ -146,7 +158,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 
 func knownCommand(value string) bool {
 	switch value {
-	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "version", "help":
+	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version", "help":
 		return true
 	default:
 		return false
@@ -160,12 +172,17 @@ func normalizeArgs(args []string) []string {
 	if len(args) < 2 {
 		return args
 	}
+	commandFirst := !strings.HasPrefix(args[0], "-")
+	start := 0
+	if commandFirst {
+		start = 1
+	}
 	valueFlags := map[string]bool{
 		"--config": true, "--project": true, "--docker-binary": true, "--docker-host": true,
 		"--repetitions": true, "--run-seconds": true, "--output-bytes": true, "--diff-bytes": true,
 		"--base": true, "--target": true, "--include-untracked": true, "--snapshot": true,
 		"--producer": true, "--captured-at": true,
-		"--offset": true, "--limit": true, "--diff-offset": true, "--diff-size": true,
+		"--offset": true, "--limit": true, "-n": true, "--n": true, "--diff-offset": true, "--diff-size": true,
 		"--inventory-offset": true, "--inventory-limit": true, "--card-offset": true,
 		"--card-limit": true, "--plan-file": true, "--plan-out": true, "--approve": true,
 		"--artifact-offset": true, "--artifact-size": true,
@@ -174,7 +191,7 @@ func normalizeArgs(args []string) []string {
 	}
 	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--new": true, "--json": true, "--help": true, "-h": true}
 	var flags, positionals []string
-	for i := 1; i < len(args); i++ {
+	for i := start; i < len(args); i++ {
 		token := args[i]
 		if token == "--" {
 			positionals = append(positionals, args[i:]...)
@@ -198,8 +215,10 @@ func normalizeArgs(args []string) []string {
 		}
 		positionals = append(positionals, token)
 	}
-	out := make([]string, 1, len(args))
-	out[0] = args[0]
+	out := make([]string, 0, len(args))
+	if commandFirst {
+		out = append(out, args[0])
+	}
 	out = append(out, flags...)
 	out = append(out, positionals...)
 	return out
@@ -346,6 +365,7 @@ func outputBefore(state *invocation) func(*ucli.Context) error {
 	return func(ctx *ucli.Context) error {
 		state.jsonOutput = ctx.Bool("json")
 		state.forceJSON = ctx.Command != nil && ctx.Command.Name == "export"
+		state.suggestionFlags = suggestionFlags(ctx)
 		return validateIDInputs(ctx)
 	}
 }

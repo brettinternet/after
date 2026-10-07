@@ -73,7 +73,7 @@ func TestExplicitReviewIDRequiresTerminalWithoutCreatingStore(t *testing.T) {
 		t.Fatalf("nonterminal review created private store: %v", err)
 	}
 	code, out, stderr = invoke([]string{"review", "--project", project}, false, "")
-	if code != ExitInvalid || out != "" || !strings.Contains(stderr, "nonterminal review inspection is unavailable until AFTER-37") {
+	if code != ExitInvalid || out != "" || !strings.Contains(stderr, "after status --json") {
 		t.Fatalf("nonterminal implicit review: %d %q %q", code, out, stderr)
 	}
 }
@@ -148,7 +148,7 @@ func TestCommandLineDiagnosticsAndSuggestions(t *testing.T) {
 		{[]string{"capture", "--stagd"}, `after: unknown flag "--stagd" — did you mean --staged?`},
 		{[]string{"mystery"}, `after: unknown command "mystery" — run after --help to list available commands`},
 		{[]string{"capture", "--unrelated"}, `after: unknown flag "--unrelated" — run after capture --help to list this command's options`},
-		{[]string{"compare"}, `after: missing a receipt ID — try: after compare RECEIPT`},
+		{[]string{"compare"}, `after: no stored capture is available — run after capture to create one`},
 	} {
 		code, stdout, stderr := invoke(tc.args, false, "")
 		if code != ExitInvalid || stdout != "" || strings.TrimSuffix(stderr, "\n") != tc.want {

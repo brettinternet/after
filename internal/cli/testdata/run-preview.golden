@@ -5,3 +5,6 @@ Nothing has run. Execution preview requires exact authorization.
   Limits       180s · 65536 output bytes/container
 Authorization digest for this exact plan:
 sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+Next
+  after inspect sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    inspect the stored pair; nothing has run

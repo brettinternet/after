@@ -16,6 +16,45 @@ See [packaging, the repeatable demo and recovery](DEMO.md) for native distributi
 ./bin/after export COMPARISON_ID --project "/work/payment"
 ```
 
+## Bare commands and stored defaults
+
+`after` and `after status` show a read-only summary of the newest stored capture,
+its pair, any stored run/comparison, applicable pin heads, and reports bound to the
+candidate. They do not capture, import, run, compare, or create `.after/`; a
+checkout with no capture suggests `after capture`. Outside Git, bare `after` prints
+short help, while `after status` reports the checkout requirement. The JSON form
+`after status --json` returns these same facts with full IDs. A saved review on a
+different pair is named in a `Saved review` row; its resume (`after review`) and
+start-over (`after review --new`) suggestions take precedence over pin/run actions.
+
+`after log [-n N]` lists the newest 20 stored capture events, run receipts,
+imported reports, and pin revision events; `-n` accepts 1–10000. Rows are newest
+first. Its JSON rows retain full record and snapshot IDs, and a shortened readable
+list reports the total and suggests a larger `-n`. Corrupt records or reached store
+bounds fail visibly rather than returning a falsely complete history.
+
+Bare `after inspect` summarizes the newest capture record's pair and says which
+capture it resolved. Bare `after compare` compares the newest stored run receipt
+for that pair; comparison reads stored observations and may persist a comparison,
+but never captures or executes project code. Bare `after export` always emits JSON
+for the newest stored comparison associated with that capture pair. These results
+include a `using` object with the full resolved capture, snapshot, receipt, and/or
+comparison IDs. If a required record is missing, the diagnostic names the missing
+record and the command that creates it.
+
+Bare `after pin` lists computed pin heads, including forks, without choosing one.
+`after pin --expectation TEXT` may omit the receipt to use the newest run of the
+newest capture pair; this resolves a receipt, never a pin revision. Every decision
+still requires an explicit pin revision ID. Pin history corruption or the 512-head /
+16 MiB lookup limit is reported as unavailable rather than as a partial head list.
+
+Every readable result ends with a `Next` block containing at most three available,
+syntax-ready commands. Defaults do not suggest unimplemented `after diff` or bare
+`after run`; when running is the next step the suggestion includes the actual
+snapshot pair. Explicit `--project` and `--config` values are retained in suggestions
+and shell-quoted when needed. A safe suggestion can be run as written; it does not
+authorize execution.
+
 ## Grammar, help and diagnostics
 
 Snapshot pairs use `BASE CANDIDATE` in `inspect`, `review`, and `run`. `--base`
@@ -42,7 +81,7 @@ snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
 snapshot IDs unchanged but records a new event. Readable snapshot inspection shows
 recorded capture times; legacy snapshots without an event say the time is unavailable.
 History lookup limits are shown when reached. No file modification time is used.
-The existing `--json` snapshot and capture response shapes remain unchanged.
+The existing explicit `--json` snapshot and capture response shapes remain unchanged.
 
 ## Short IDs and pin heads
 
@@ -87,9 +126,9 @@ Stored artifacts (including observer response/effect channels referenced by rece
 
 `after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. A capture that finds no changed or unknown paths reports that nothing is open.
 
-A private, atomic `.after/session.json` stores only the snapshot pair, original-base comparison mode and capture flags; it contains no source bytes and is not evidence. A later bare `after review` opens that pair immediately and captures in the background. A differing capture stays pending until `u`; `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and reports that nonterminal review inspection is unavailable until AFTER-37; `after status --json` is not implemented yet.
+A private, atomic `.after/session.json` stores only the snapshot pair, original-base comparison mode and capture flags; it contains no source bytes and is not evidence. A later bare `after review` opens that pair immediately and captures in the background. A differing capture stays pending until `u`; `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`.
 
-Evidence discovery loads pin heads (including forks), the selected pair's newest runs and comparisons, and reports bound to the candidate. It loads at most 32 records, prioritizing pins that need another look, and the browser reports the omitted count. Historical listing with `after log` is not implemented yet and is deferred until AFTER-37.
+Evidence discovery loads pin heads (including forks), the selected pair's newest runs and comparisons, and reports bound to the candidate. It loads at most 32 records, prioritizing pins that need another look, and the browser reports the omitted count. `after log` provides the separate bounded history view.
 
 ## Persistent expectations
 

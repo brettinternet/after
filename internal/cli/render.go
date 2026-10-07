@@ -80,6 +80,36 @@ func addIDs(lines []readableLine, ids ...evidence.Digest) []readableLine {
 	return lines
 }
 
+func insertIDs(lines []readableLine, ids ...evidence.Digest) []readableLine {
+	index := -1
+	for i, line := range lines {
+		if line.text == "IDs" {
+			index = i
+		}
+	}
+	if index < 0 {
+		return addIDs(lines, ids...)
+	}
+	position := index + 1
+	seen := map[evidence.Digest]bool{}
+	for position < len(lines) && lines[position].full {
+		seen[evidence.Digest(lines[position].text)] = true
+		position++
+	}
+	additions := []readableLine{}
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			additions = append(additions, fullLine(string(id)))
+		}
+	}
+	oldLength := len(lines)
+	lines = append(lines, make([]readableLine, len(additions))...)
+	copy(lines[position+len(additions):], lines[position:oldLength])
+	copy(lines[position:position+len(additions)], additions)
+	return lines
+}
+
 func shortID(id evidence.Digest) string {
 	value := strings.TrimPrefix(string(id), "sha256:")
 	if len(value) > 8 {
@@ -129,6 +159,7 @@ func writeReadable(state *invocation, kind string, data any) error {
 	if err != nil {
 		return operational("cannot render readable result")
 	}
+	lines = appendNextLines(state, kind, encoded, data, lines)
 	var output bytes.Buffer
 	for _, line := range lines {
 		if line.full {
@@ -150,6 +181,24 @@ func writeReadable(state *invocation, kind string, data any) error {
 
 func readableLines(state *invocation, kind string, raw []byte, original any) ([]readableLine, error) {
 	switch kind {
+	case "status":
+		var view statusView
+		if err := json.Unmarshal(raw, &view); err != nil {
+			return nil, err
+		}
+		return statusLines(state, view), nil
+	case "log":
+		var view logView
+		if err := json.Unmarshal(raw, &view); err != nil {
+			return nil, err
+		}
+		return logLines(state, view), nil
+	case "pins":
+		var view pinListView
+		if err := json.Unmarshal(raw, &view); err != nil {
+			return nil, err
+		}
+		return pinListLines(state, view), nil
 	case "configuration":
 		var result struct {
 			Settings []struct {
@@ -224,6 +273,10 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		lines := reviewLines(state, view)
 		if inspection, ok := original.(reviewInspection); ok {
+			if inspection.Using != nil {
+				lines = append([]readableLine{usingRunLine(*inspection.Using)}, lines...)
+				lines = insertIDs(lines, inspection.Using.Capture)
+			}
 			if inspection.HeadsUnavailable {
 				lines = append(lines, textLine("Newer heads unavailable: pin history is corrupt or exceeds lookup limits; showing the requested revision.", terminal.Attention))
 			} else if len(inspection.NewerHeads) > 0 {
@@ -266,6 +319,251 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 	default:
 		return nil, fmt.Errorf("no readable renderer for %s", kind)
 	}
+}
+
+func statusLines(state *invocation, view statusView) []readableLine {
+	if view.Capture == nil {
+		return []readableLine{textLine("No capture has been stored for this checkout.", terminal.Strong)}
+	}
+	capture := view.Capture
+	base, candidate := view.Base, view.Candidate
+	baseName, candidateName := "unknown", "unknown"
+	if base != nil {
+		baseName = sourceName(base.Source, base.Commit)
+	}
+	if candidate != nil {
+		candidateName = sourceName(candidate.Source, candidate.Commit)
+	}
+	lines := []readableLine{textLine(fmt.Sprintf("Checkout · base %s (%s) → candidate %s (%s)", shortID(capture.Base), baseName, shortID(capture.Candidate), candidateName), terminal.Strong)}
+	captured := fmt.Sprintf("%s · %d %s changed", state.formatTime(capture.CapturedAt), view.ChangedPaths, plural(view.ChangedPaths, "path"))
+	if view.UntrackedExcluded {
+		captured += " · untracked paths excluded"
+	} else if view.Capture.SelectedUntracked > 0 {
+		captured += fmt.Sprintf(" · %d untracked paths selected", view.Capture.SelectedUntracked)
+	} else {
+		captured += " · no untracked paths selected"
+	}
+	lines = append(lines, readableRow("Captured", captured))
+	if view.SavedReview != nil && *view.SavedReview != (evidence.SnapshotPair{Base: capture.Base, Candidate: capture.Candidate}) {
+		lines = append(lines, readableRow("Saved review", fmt.Sprintf("%s → %s", shortID(view.SavedReview.Base), shortID(view.SavedReview.Candidate))))
+	}
+	if view.Receipt == nil {
+		if view.PriorRuns {
+			lines = append(lines, readableRow("Behavior", "no run for this pair · earlier runs exist for other captures"))
+		} else {
+			lines = append(lines, readableRow("Behavior", "no run for this pair"))
+		}
+	} else if view.Comparison != nil {
+		lines = append(lines, readableRow("Behavior", fmt.Sprintf("run %s · %s · %s", shortID(view.Receipt.ID), view.Receipt.State.Execution, view.Comparison.Outcome)))
+		if view.Details != nil && len(view.Details.Witnesses) > 0 {
+			lines = comparisonDetailLines(lines, *view.Details)
+		} else {
+			lines = append(lines, textLine("  Stored comparison has no detailed witnesses.", terminal.Muted))
+		}
+		lines = appendLimits(lines, view.Comparison.Limits)
+	} else {
+		lines = append(lines, readableRow("Behavior", fmt.Sprintf("run %s · %s / %s · no stored comparison", shortID(view.Receipt.ID), view.Receipt.State.Execution, view.Receipt.State.Comparison)))
+		lines = appendLimits(lines, view.Receipt.Limits)
+	}
+	if len(view.Pins) == 0 {
+		lines = append(lines, readableRow("Pins", "none for this pair"))
+	} else {
+		pending := 0
+		for _, pin := range view.Pins {
+			if pin.Decision == evidence.Reopened || pin.Applicability != evidence.Current || pin.MissingCurrentResult {
+				pending++
+			}
+		}
+		lines = append(lines, readableRow("Pins", fmt.Sprintf("%d · %d need another look", len(view.Pins), pending)))
+		for _, pin := range view.Pins {
+			expectation := terminal.Line(pin.Expectation, 46)
+			lines = append(lines, textLine(fmt.Sprintf("  [%s] %s  %s", strings.ToUpper(string(pin.Decision)), shortID(pin.ID), expectation), badgeStyle(string(pin.Decision))))
+		}
+	}
+	if len(view.Reports) == 0 {
+		lines = append(lines, readableRow("Reports", "none for this candidate"))
+	} else {
+		for _, report := range view.Reports {
+			producer := report.Producer
+			if producer == "" {
+				producer = "producer not stated"
+			}
+			lines = append(lines, readableRow("Reports", fmt.Sprintf("%s · %d pass · %d fail · %d skip · reported, not observed", producer, report.Pass, report.Fail, report.Skip)))
+		}
+	}
+	lines = appendLimits(lines, view.Limits)
+	return lines
+}
+
+func logLines(state *invocation, view logView) []readableLine {
+	lines := []readableLine{textLine("Recent stored records", terminal.Strong)}
+	for _, row := range view.Rows {
+		when := state.formatTime(row.At)
+		id := row.ID
+		description := ""
+		switch row.Kind {
+		case "capture":
+			id = row.Candidate
+			description = fmt.Sprintf("%s against %s", strings.ReplaceAll(string(row.Mode), "_", " "), shortID(row.Base))
+			if row.Paths != 0 {
+				description += fmt.Sprintf(" · %d %s", row.Paths, plural(row.Paths, "path"))
+			}
+		case "run":
+			description = fmt.Sprintf("%s → %s · %s", shortID(row.Base), shortID(row.Candidate), row.Outcome)
+			if row.Summary != "" {
+				description += " · " + row.Summary
+			} else if row.Outcome == evidence.NotCompared || row.Outcome == evidence.Incomparable {
+				description += " · no conclusive comparison"
+			}
+		case "report":
+			description = fmt.Sprintf("go test · %d pass · %d fail · %d skip · reported, not observed", row.Pass, row.Fail, row.Skip)
+			if row.Candidate != "" {
+				description += " · bound to " + shortID(row.Candidate)
+			}
+		case "pin":
+			description = strings.ToUpper(string(row.Decision))
+			if row.Action != "" {
+				description += " · " + row.Action
+			}
+			if row.Receipt != "" {
+				description += " " + shortID(row.Receipt)
+			}
+			description += " · " + terminal.Line(row.Expectation, 32)
+		}
+		lines = append(lines, textLine(fmt.Sprintf("%-12s %-8s %-8s %s", when, row.Kind, shortID(id), description), terminal.Plain))
+	}
+	if view.Total == 0 {
+		lines = append(lines, textLine("No stored history yet.", terminal.Muted))
+	} else {
+		lines = append(lines, readableRow("History", fmt.Sprintf("%d newest of %d stored events", view.Shown, view.Total)))
+	}
+	return lines
+}
+
+func pinListLines(state *invocation, view pinListView) []readableLine {
+	lines := []readableLine{textLine(fmt.Sprintf("%d pin %s (computed heads)", len(view.Pins), plural(len(view.Pins), "head")), terminal.Strong)}
+	for _, item := range view.Pins {
+		pin := item.Pin
+		decision := strings.ToUpper(string(pin.Decision))
+		result := "no current result"
+		if item.CurrentReceipt != nil {
+			result = "current result attached"
+		}
+		if item.MissingCurrentResult {
+			result = "no current result"
+		}
+		expectation := terminal.Line(pin.Expectation, max(8, 80-52))
+		lines = append(lines, textLine(fmt.Sprintf("  [%s] %-8s %s · %s", decision, shortID(pin.ID), expectation, result), badgeStyle(string(pin.Decision))))
+	}
+	if len(view.Pins) == 0 {
+		lines = append(lines, textLine("No pins have been stored.", terminal.Muted))
+	}
+	return lines
+}
+
+func usingCaptureLine(ids resolvedIDs) readableLine {
+	return textLine(fmt.Sprintf("Using the newest capture: base %s → candidate %s", shortID(ids.Base), shortID(ids.Candidate)), terminal.Muted)
+}
+
+func usingRunLine(ids resolvedIDs) readableLine {
+	return textLine(fmt.Sprintf("Using the newest run of base %s → candidate %s", shortID(ids.Base), shortID(ids.Candidate)), terminal.Muted)
+}
+
+func appendNextLines(state *invocation, kind string, raw []byte, original any, lines []readableLine) []readableLine {
+	var data struct {
+		Next []nextCommand `json:"next"`
+	}
+	_ = json.Unmarshal(raw, &data)
+	if len(data.Next) == 0 {
+		data.Next = suggestedNext(kind, raw, original)
+	}
+	lines = append(lines, textLine("Next", terminal.Strong))
+	if len(data.Next) == 0 {
+		return append(lines, textLine("  No further command is suggested.", terminal.Muted))
+	}
+	for _, item := range data.Next[:min(3, len(data.Next))] {
+		command := item.Command
+		if state.suggestionFlags != "" && !strings.Contains(command, "--project ") && !strings.Contains(command, "--config ") {
+			command += state.suggestionFlags
+		}
+		lines = append(lines, fullLine("  "+command))
+		if item.Description != "" {
+			lines = append(lines, textLine("    "+item.Description, terminal.Muted))
+		}
+	}
+	return lines
+}
+
+func suggestedNext(kind string, raw []byte, original any) []nextCommand {
+	switch kind {
+	case "capture":
+		var data struct {
+			Candidate snapshotSummary `json:"candidate_snapshot"`
+		}
+		if json.Unmarshal(raw, &data) == nil && data.Candidate.ID != "" {
+			return []nextCommand{next("after review "+string(data.Candidate.ID), "open this captured change")}
+		}
+	case "import":
+		var data reportViewData
+		if json.Unmarshal(raw, &data) == nil && data.ID != "" {
+			return []nextCommand{next("after inspect "+string(data.ID), "inspect the reported test results")}
+		}
+	case "receipt":
+		var receipt evidence.Receipt
+		if json.Unmarshal(raw, &receipt) == nil && receipt.ID != "" {
+			return []nextCommand{next("after compare "+string(receipt.ID), "compare the stored run")}
+		}
+	case "comparison":
+		var result comparisonResult
+		if json.Unmarshal(raw, &result) == nil && result.Comparison.ID != "" {
+			return []nextCommand{next("after inspect "+string(result.Comparison.ID), "inspect the stored comparison")}
+		}
+	case "snapshot":
+		var pair snapshotView
+		if json.Unmarshal(raw, &pair) == nil && pair.Base != "" && pair.Candidate != "" {
+			return []nextCommand{next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this snapshot pair")}
+		}
+		var snapshot evidence.Snapshot
+		if json.Unmarshal(raw, &snapshot) == nil && snapshot.ID != "" {
+			return []nextCommand{next("after review "+string(snapshot.ID), "open the captured snapshot")}
+		}
+	case "inspection":
+		var report reportViewData
+		if json.Unmarshal(raw, &report) == nil && report.ID != "" {
+			return []nextCommand{next("after inspect "+string(report.ID), "inspect the reported test results")}
+		}
+	case "artifact":
+		var data struct {
+			ID evidence.Digest `json:"id"`
+		}
+		if json.Unmarshal(raw, &data) == nil && data.ID != "" {
+			return []nextCommand{next("after inspect "+string(data.ID), "inspect the stored artifact")}
+		}
+	case "review":
+		var data review.View
+		if json.Unmarshal(raw, &data) == nil && data.Pin.ID != "" {
+			return []nextCommand{next("after pin "+string(data.Pin.ID), "inspect this exact pin revision")}
+		}
+	case "configuration":
+		return []nextCommand{next("after --help", "see available commands")}
+	case "execution_preview":
+		var data struct {
+			Plan struct {
+				Snapshots evidence.SnapshotPair `json:"snapshots"`
+			} `json:"plan"`
+		}
+		if json.Unmarshal(raw, &data) == nil && data.Plan.Snapshots.Base != "" {
+			return []nextCommand{next("after inspect "+string(data.Plan.Snapshots.Base)+" "+string(data.Plan.Snapshots.Candidate), "inspect the stored pair; nothing has run")}
+		}
+	case "run":
+		var data struct {
+			Comparison evidence.Comparison `json:"comparison"`
+		}
+		if json.Unmarshal(raw, &data) == nil && data.Comparison.ID != "" {
+			return []nextCommand{next("after inspect "+string(data.Comparison.ID), "inspect the stored comparison")}
+		}
+	}
+	return []nextCommand{next("after --help", "see available commands")}
 }
 
 func appendSnapshotSummary(lines []readableLine, label string, snapshot snapshotSummary) []readableLine {
@@ -328,6 +626,9 @@ func snapshotLines(state *invocation, raw []byte, original any) ([]readableLine,
 			return nil, err
 		}
 		lines := []readableLine{textLine(fmt.Sprintf("Captured pair %s → %s", shortID(view.Base), shortID(view.Candidate)), terminal.Strong)}
+		if view.Using != nil {
+			lines = append(lines, usingCaptureLine(*view.Using))
+		}
 		if records, ok := original.(snapshotView); ok {
 			if records.BaseRecord.ID != "" {
 				lines = appendSnapshotRecord(state, lines, "Base", records.BaseRecord, records.BaseCaptureHistory)
@@ -361,7 +662,11 @@ func snapshotLines(state *invocation, raw []byte, original any) ([]readableLine,
 			lines = append(lines, readableRow("Raw diff", "not included; use --json to retrieve a page"))
 		}
 		lines = appendLimits(lines, view.Limits)
-		return addIDs(lines, view.Base, view.Candidate), nil
+		ids := []evidence.Digest{view.Base, view.Candidate}
+		if view.Using != nil {
+			ids = append(ids, view.Using.Capture)
+		}
+		return addIDs(lines, ids...), nil
 	}
 	var snapshot evidence.Snapshot
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
@@ -509,17 +814,16 @@ func artifactLines(state *invocation, raw []byte) ([]readableLine, error) {
 }
 
 func comparisonLines(state *invocation, raw []byte) ([]readableLine, error) {
-	var result struct {
-		Comparison evidence.Comparison `json:"comparison"`
-		Receipt    evidence.Receipt    `json:"receipt"`
-		Details    *compare.Report     `json:"details,omitempty"`
-		Snapshots  *snapshotView       `json:"snapshots,omitempty"`
-	}
+	var result comparisonResult
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, err
 	}
 	comparison := result.Comparison
-	lines := []readableLine{textLine(fmt.Sprintf("Comparison %s · %s · %s", shortID(comparison.ID), comparison.Outcome, comparison.Completeness), badgeStyle(string(comparison.Outcome)))}
+	lines := []readableLine{}
+	if result.Using != nil {
+		lines = append(lines, usingRunLine(*result.Using))
+	}
+	lines = append(lines, textLine(fmt.Sprintf("Comparison %s · %s · %s", shortID(comparison.ID), comparison.Outcome, comparison.Completeness), badgeStyle(string(comparison.Outcome))))
 	if comparison.Receipt != "" {
 		lines = append(lines, readableRow("Receipt", shortID(comparison.Receipt)))
 	}
@@ -539,6 +843,9 @@ func comparisonLines(state *invocation, raw []byte) ([]readableLine, error) {
 	}
 	if comparison.Details != nil {
 		ids = append(ids, comparison.Details.Content)
+	}
+	if result.Using != nil {
+		ids = append(ids, result.Using.Capture)
 	}
 	return addIDs(lines, ids...), nil
 }

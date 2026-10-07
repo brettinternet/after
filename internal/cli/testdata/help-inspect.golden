@@ -1,6 +1,7 @@
-Inspect one stored record or the complete diff between two stored snapshots.
+Inspect the newest capture, one stored record, or two stored snapshots.
 
 Usage
+  after inspect
   after inspect ID
   after inspect BASE CANDIDATE
 

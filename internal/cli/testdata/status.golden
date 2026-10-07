@@ -1,0 +1,14 @@
+Checkout · base aaaaaaaa (commit aaaaaaa) → candidate bbbbbbbb (working tree)
+  Captured     12:30:00 · 1 path changed · untracked paths excluded
+  Behavior     run dddddddd · failed · different
+  12h responses          [EQUAL]
+  12h provider requests  [DIFFERENT] · 1 → 2
+  30s responses          [EQUAL]
+  30s provider requests  [EQUAL] · count unchanged
+  Limit        recorded samples only
+  Pins         1 · 1 need another look
+  [REOPENED] dddddddd  At 12h, retries make one provider request
+  Reports      fixture report · 2 pass · 1 fail · 0 skip · reported, not observ…
+Next
+  after review sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    review this capture

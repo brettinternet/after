@@ -5,3 +5,6 @@ Run dddddddd · incomplete · different
   30s responses          [EQUAL]
   30s provider requests  [EQUAL] · count unchanged
   Limit        recorded samples only
+Next
+  after inspect sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    inspect the stored comparison

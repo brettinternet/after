@@ -1,10 +1,10 @@
 # Command-line design
 
-**Status: staged target design.** AFTER-34 to AFTER-36 and AFTER-38 are implemented;
-AFTER-37 and the remaining command redesign tasks are still future work. This is
-the design for backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch
-in AFTER-24 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not
-copy future commands from this target into runtime help before they exist.
+**Status: staged target design.** AFTER-34 to AFTER-38 are implemented; the
+remaining command redesign tasks are still future work. This is the design for
+backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in AFTER-24
+(milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy future
+commands from this target into runtime help before they exist.
 The CLI shares vocabulary, badges, styles, and formatting with the
 [review TUI design](TUI-DESIGN.md). The product invariants in
 [AGENTS.md](../AGENTS.md) and [IMPLEMENTATION.md](IMPLEMENTATION.md) still apply.

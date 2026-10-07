@@ -2,3 +2,6 @@ Artifact eeeeeeee · 15 bytes · page 0–17 of 17
      1 │ {"key":"value"}
 IDs
 sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+Next
+  after inspect sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    inspect the stored artifact
