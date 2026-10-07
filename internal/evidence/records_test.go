@@ -45,7 +45,7 @@ func reported() Receipt {
 }
 
 func roundTrip[T interface {
-	Snapshot | Scenario | Receipt | Pin
+	Snapshot | Capture | Scenario | Receipt | Pin
 	Validate() error
 }](t *testing.T, value T) {
 	t.Helper()
@@ -79,6 +79,7 @@ func TestSyntheticDocumentationExample(t *testing.T) {
 
 func TestRoundTrips(t *testing.T) {
 	roundTrip(t, snapshot())
+	roundTrip(t, Capture{SchemaVersion: SchemaVersion, ID: syntheticDigest, CapturedAt: syntheticTime, Mode: MergeBase, Base: syntheticDigest, Candidate: Digest("sha256:" + strings.Repeat("b", 64)), SelectedUntracked: []string{}})
 	roundTrip(t, scenario())
 	roundTrip(t, receipt())
 	roundTrip(t, reported())
@@ -91,6 +92,38 @@ func TestRoundTrips(t *testing.T) {
 	r.State.Kind, r.State.Execution, r.State.Comparison = NoEvidence, Failed, Incomparable
 	r.Completeness, r.Artifacts = Incomplete, nil
 	roundTrip(t, r)
+}
+
+func TestRejectCaptureRecord(t *testing.T) {
+	valid := Capture{SchemaVersion: SchemaVersion, ID: syntheticDigest, CapturedAt: syntheticTime, Mode: WorkingTree, Base: syntheticDigest, Candidate: Digest("sha256:" + strings.Repeat("b", 64)), Index: Digest("sha256:" + strings.Repeat("c", 64)), SelectedUntracked: []string{"data/selected.json"}}
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*Capture){
+		"missing time":             func(c *Capture) { c.CapturedAt = time.Time{} },
+		"unknown mode":             func(c *Capture) { c.Mode = "branch" },
+		"missing base":             func(c *Capture) { c.Base = "" },
+		"missing index":            func(c *Capture) { c.Index = "" },
+		"duplicate selection":      func(c *Capture) { c.SelectedUntracked = []string{"data/x", "data/x"} },
+		"traversal selection":      func(c *Capture) { c.SelectedUntracked = []string{"../secret"} },
+		"private selection":        func(c *Capture) { c.SelectedUntracked = []string{".after/secret"} },
+		"index candidate mismatch": func(c *Capture) { c.Mode, c.Index = Index, syntheticDigest },
+		"index mode selected path": func(c *Capture) {
+			c.Mode, c.Candidate, c.Index = Index, syntheticDigest, syntheticDigest
+			c.SelectedUntracked = []string{"data/x"}
+		},
+		"merge-base index":         func(c *Capture) { c.Mode = MergeBase },
+		"merge-base selected path": func(c *Capture) { c.Mode, c.Index = MergeBase, "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			capture := valid
+			capture.SelectedUntracked = append([]string(nil), valid.SelectedUntracked...)
+			change(&capture)
+			if err := capture.Validate(); err == nil {
+				t.Fatal("invalid capture record accepted")
+			}
+		})
+	}
 }
 
 func TestRejectReceipt(t *testing.T) {

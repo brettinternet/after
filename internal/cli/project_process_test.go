@@ -13,7 +13,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
+	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/store"
 	"github.com/creack/pty"
 )
 
@@ -45,7 +48,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	}
 	home := t.TempDir()
 	captureArgs := []string{"capture", "--base", baseRef, "--target", candidateRef}
-	code, output, stderr, err := runCLIPipe(nested, home, false, captureArgs)
+	code, output, stderr, err := runCLIPipe(nested, home, false, append(append([]string(nil), captureArgs...), "--json"))
 	if err != nil || code != ExitOK || stderr != "" {
 		t.Fatalf("initial pipe capture: exit=%d stdout=%q stderr=%q err=%v", code, output, stderr, err)
 	}
@@ -66,7 +69,43 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	if !validDigest(baseID) || !validDigest(candidateID) {
 		t.Fatalf("capture IDs are invalid: %s", output)
 	}
-	fakeID := "sha256:" + strings.Repeat("f", 64)
+	receiptID, artifactID := seedCLIProcessRecords(t, project, baseID, candidateID)
+	importedCode, importedOutput, importedError, err := runCLIPipe(nested, home, true, []string{"import", report, "--producer", "fixture", "--json"})
+	if err != nil || importedCode != ExitOK || importedError != "" {
+		t.Fatalf("JSON import setup: exit=%d output=%q stderr=%q err=%v", importedCode, importedOutput, importedError, err)
+	}
+	var imported struct {
+		Data struct {
+			ID evidence.Digest `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(importedOutput), &imported); err != nil {
+		t.Fatal(err)
+	}
+	comparisonCode, comparisonOutput, comparisonError, err := runCLIPipe(nested, home, true, []string{"compare", string(receiptID), "--json"})
+	if err != nil || comparisonCode != ExitOperational || comparisonError != "" {
+		t.Fatalf("JSON compare setup: exit=%d output=%q stderr=%q err=%v", comparisonCode, comparisonOutput, comparisonError, err)
+	}
+	var compared struct {
+		Data struct {
+			Comparison evidence.Comparison `json:"comparison"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(comparisonOutput), &compared); err != nil {
+		t.Fatal(err)
+	}
+	pinCode, pinOutput, pinError, err := runCLIPipe(nested, home, true, []string{"pin", string(receiptID), "--scope", "human_intent", "--expectation", "finite synthetic review", "--reason", "process-mode fixture", "--json"})
+	if err != nil || pinCode != ExitOK || pinError != "" {
+		t.Fatalf("JSON pin setup: exit=%d output=%q stderr=%q err=%v", pinCode, pinOutput, pinError, err)
+	}
+	var pinned struct {
+		Data struct {
+			Pin evidence.Pin `json:"pin"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(pinOutput), &pinned); err != nil {
+		t.Fatal(err)
+	}
 	commands := []struct {
 		name string
 		args []string
@@ -74,12 +113,18 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	}{
 		{"capture", captureArgs, ExitOK},
 		{"import", []string{"import", report, "--producer", "fixture"}, ExitOK},
-		{"inspect", []string{"inspect", candidateID}, ExitOK},
-		{"compare", []string{"compare", fakeID}, ExitInvalid},
-		{"export", []string{"export", candidateID}, ExitInvalid},
+		{"inspect-pair", []string{"inspect", candidateID, "--base", baseID}, ExitOK},
+		{"inspect-snapshot", []string{"inspect", candidateID}, ExitOK},
+		{"inspect-receipt", []string{"inspect", string(receiptID)}, ExitOK},
+		{"inspect-comparison", []string{"inspect", string(compared.Data.Comparison.ID)}, ExitOperational},
+		{"inspect-report", []string{"inspect", string(imported.Data.ID)}, ExitOK},
+		{"inspect-artifact", []string{"inspect", string(artifactID)}, ExitOK},
+		{"compare", []string{"compare", string(receiptID)}, ExitOperational},
+		{"export", []string{"export", string(compared.Data.Comparison.ID)}, ExitOperational},
 		{"run", []string{"run", baseID, candidateID, "--interactive=false"}, ExitDenied},
-		{"pin", []string{"pin", fakeID, "--expectation", "fixture", "--scope", "finite_example", "--reason", "fixture"}, ExitInvalid},
-		{"review", []string{"review", fakeID}, ExitInvalid},
+		{"pin", []string{"pin", string(receiptID), "--expectation", "finite synthetic review", "--scope", "human_intent", "--reason", "process-mode fixture"}, ExitOK},
+		{"review", []string{"review", string(pinned.Data.Pin.ID)}, ExitOK},
+		{"config", []string{"config"}, ExitOK},
 	}
 	for _, command := range commands {
 		for _, noColor := range []bool{false, true} {
@@ -101,10 +146,15 @@ func TestProjectCommandProcessModes(t *testing.T) {
 						t.Fatalf("command did not use the checkout store: %q", transcript)
 					}
 					if strings.ContainsAny(transcript, "\x1b\a") {
-						t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
+						if mode != "pty" || noColor || !themeSGROnly(transcript) {
+							t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
+						}
 					}
 					if command.name == "capture" && noColor && mode == "pty" {
 						t.Logf("80-column PTY capture excerpt: %s", trimExcerpt(transcript))
+					}
+					if command.name == "inspect-snapshot" && noColor && mode == "pty" {
+						t.Logf("80-column PTY snapshot inspect excerpt: %s", trimExcerpt(transcript))
 					}
 					if command.name == "compare" && !noColor && mode == "pipe" {
 						t.Logf("pipe diagnostic excerpt: %s", trimExcerpt(transcript))
@@ -149,6 +199,47 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outside, ".after")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("help/version/config created private storage: %v", err)
 	}
+}
+
+func seedCLIProcessRecords(t *testing.T, project string, base, candidate string) (evidence.Digest, evidence.Digest) {
+	t.Helper()
+	s, err := store.Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	input, err := s.PutArtifact([]byte(`{"fixture":true}`), "fixture-input", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scenario, err := store.Put(s, evidence.Scenario{SchemaVersion: 1, Input: input.Content, Driver: processDigest("1"), Observer: processDigest("2"), Rules: processDigest("3"), Boundary: "synthetic process proof", Author: "test fixture", Limits: []string{"finite synthetic input"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := &evidence.Bindings{Scenario: scenario.ID, Input: scenario.Input, Driver: scenario.Driver, Observer: scenario.Observer, Rules: scenario.Rules}
+	environment := func(char string) *evidence.Environment {
+		return &evidence.Environment{Environment: processDigest(char), Toolchain: processDigest(char), Dependencies: processDigest(char), Argv: []string{"fixture"}}
+	}
+	receipt, err := store.Put(s, evidence.Receipt{
+		SchemaVersion: 1,
+		State:         evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.NoEvidence, Applicability: evidence.Unknown, Execution: evidence.Failed, Comparison: evidence.Incomparable, Report: evidence.NoReport},
+		Snapshots:     evidence.SnapshotPair{Base: evidence.Digest(base), Candidate: evidence.Digest(candidate)},
+		Bindings:      bindings, BaseEnvironment: environment("4"), CandidateEnvironment: environment("5"), Authorization: processDigest("6"),
+		StartedAt: time.Date(2026, time.January, 2, 10, 0, 0, 0, time.UTC), FinishedAt: time.Date(2026, time.January, 2, 10, 1, 0, 0, time.UTC),
+		Completeness: evidence.Incomplete, Artifacts: []evidence.Artifact{}, Limits: []string{"synthetic incomplete run; no observed values"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := s.PutArtifact([]byte("fixture artifact\n"), "fixture", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return receipt.ID, artifact.Content
+}
+
+func processDigest(char string) evidence.Digest {
+	return evidence.Digest("sha256:" + strings.Repeat(char, 64))
 }
 
 func runCLIPipe(dir, home string, noColor bool, args []string) (int, string, string, error) {
@@ -218,6 +309,17 @@ func processExitCode(err error) (int, error) {
 		return exitErr.ExitCode(), nil
 	}
 	return -1, err
+}
+
+func stripThemeSGR(value string) string {
+	for _, sequence := range []string{"\x1b[0m", "\x1b[32m", "\x1b[1;35m", "\x1b[1;33m", "\x1b[1;31m", "\x1b[34m", "\x1b[36m", "\x1b[2m", "\x1b[1m", "\x1b[7m"} {
+		value = strings.ReplaceAll(value, sequence, "")
+	}
+	return value
+}
+
+func themeSGROnly(value string) bool {
+	return !strings.Contains(stripThemeSGR(value), "\x1b")
 }
 
 func trimExcerpt(value string) string {

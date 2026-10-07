@@ -85,6 +85,42 @@ func (s Snapshot) Validate() error {
 	return nil
 }
 
+func (c Capture) Validate() error {
+	if err := header(c.SchemaVersion, c.ID); err != nil {
+		return err
+	}
+	if c.CapturedAt.IsZero() || !oneOf(c.Mode, WorkingTree, Index, MergeBase) || !digests(c.Base, c.Candidate) {
+		return errors.New("capture requires time, mode and snapshot identities")
+	}
+	switch c.Mode {
+	case WorkingTree:
+		if !digest(c.Index) {
+			return errors.New("working-tree capture requires an index snapshot")
+		}
+	case Index:
+		if c.Index != c.Candidate || len(c.SelectedUntracked) != 0 {
+			return errors.New("index capture must identify its candidate index snapshot")
+		}
+	case MergeBase:
+		if c.Index != "" || len(c.SelectedUntracked) != 0 {
+			return errors.New("merge-base capture cannot identify an index or untracked selection")
+		}
+	}
+	seen := map[string]bool{}
+	for _, p := range c.SelectedUntracked {
+		if len(p) > 4096 || !relativePath(p) || seen[p] {
+			return errors.New("invalid or duplicate selected untracked path")
+		}
+		for _, part := range strings.Split(p, "/") {
+			if strings.EqualFold(part, ".after") || strings.EqualFold(part, ".git") {
+				return errors.New("capture selection includes private storage")
+			}
+		}
+		seen[p] = true
+	}
+	return nil
+}
+
 func (s Scenario) Validate() error {
 	if err := header(s.SchemaVersion, s.ID); err != nil {
 		return err

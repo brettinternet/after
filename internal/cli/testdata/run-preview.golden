@@ -1,0 +1,7 @@
+Nothing has run. Execution preview requires exact authorization.
+  Status       authorization required
+  Snapshots    aaaaaaaa → bbbbbbbb
+  Runs         2 sides × 2 cases × 2 repetitions · concurrency 1
+  Limits       180s · 65536 output bytes/container
+Authorization digest for this exact plan:
+sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd

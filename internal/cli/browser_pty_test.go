@@ -23,7 +23,7 @@ func TestBrowserPTY(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "project")
 	makeProject(t, project)
 	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() {}\n// hostile \x1b]52;c;bad\a\n")
-	code, out, diagnostic := invoke([]string{"capture", "--project", project}, false, "")
+	code, out, diagnostic := invoke([]string{"capture", "--project", project, "--json"}, false, "")
 	if code != 0 {
 		t.Fatal(diagnostic)
 	}
@@ -40,7 +40,7 @@ func TestBrowserPTY(t *testing.T) {
 	if err := os.WriteFile(report, []byte("{\"Action\":\"pass\",\"Package\":\"pty-case\"}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, diagnostic = invoke([]string{"import", report, "--producer", "PTY Go report", "--project", project, "--snapshot", captured.Data.Candidate.ID}, false, "")
+	code, out, diagnostic = invoke([]string{"import", report, "--producer", "PTY Go report", "--project", project, "--snapshot", captured.Data.Candidate.ID, "--json"}, false, "")
 	if code != 0 {
 		t.Fatal(diagnostic)
 	}
@@ -105,7 +105,7 @@ func TestBrowserPTY(t *testing.T) {
 	var stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
-		done <- run(t.Context(), []string{"review", captured.Data.Candidate.ID, "--tui", "--base", captured.Data.Base.ID, "--evidence", imported.Data.ID, "--project", project, "--import-file", report, "--producer", "PTY Go report"}, slave, &stderr, slave, true)
+		done <- run(t.Context(), []string{"review", captured.Data.Candidate.ID, "--tui", "--base", captured.Data.Base.ID, "--evidence", imported.Data.ID, "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, slave, &stderr, slave, true)
 	}()
 	expect("[REPORTED]")
 	if !strings.Contains(transcript.String(), "1 Overview") {

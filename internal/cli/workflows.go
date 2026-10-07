@@ -35,6 +35,7 @@ func commands(state *invocation) []*ucli.Command {
 		pinCommand(state), reviewCommand(state),
 		{
 			Name: "capture", Usage: "capture a bounded local Git comparison without running project code",
+			Before:    outputBefore(state),
 			ArgsUsage: "[--staged | --base BASE --target TARGET]", Flags: append(commonFlags(),
 				&ucli.BoolFlag{Name: "staged", Usage: "capture HEAD versus the index"},
 				&ucli.StringFlag{Name: "base", Usage: "base commit for explicit merge-base capture"},
@@ -44,6 +45,7 @@ func commands(state *invocation) []*ucli.Command {
 		},
 		{
 			Name: "import", Usage: "import bounded stock go test -json as reported evidence",
+			Before:    outputBefore(state),
 			ArgsUsage: "<go-test-json-file>", Flags: append(commonFlags(),
 				&ucli.StringFlag{Name: "producer", Usage: "required caller-supplied producer/version provenance"},
 				&ucli.StringFlag{Name: "captured-at", Usage: "optional caller-supplied RFC3339 capture time"},
@@ -54,21 +56,25 @@ func commands(state *invocation) []*ucli.Command {
 		},
 		{
 			Name: "inspect", Usage: "inspect a snapshot, receipt, comparison, report, or artifact by stable ID",
+			Before:    outputBefore(state),
 			ArgsUsage: "<stable-id>", Flags: append(commonFlags(), inspectionFlags()...),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, false) },
 		},
 		{
 			Name: "compare", Usage: "compare a persisted execution receipt without running code",
+			Before:    outputBefore(state),
 			ArgsUsage: "<receipt-id>", Flags: commonFlags(),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return compareCommand(state, ctx) },
 		},
 		{
 			Name: "export", Usage: "export a bounded machine-readable comparison or evidence page",
+			Before:    outputBefore(state),
 			ArgsUsage: "<stable-id>", Flags: append(commonFlags(), inspectionFlags()...),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, true) },
 		},
 		{
 			Name: "run", Usage: "preview, explicitly authorize, and compare the frozen offline payment experiment",
+			Before:    outputBefore(state),
 			ArgsUsage: "<base-snapshot-id> <candidate-snapshot-id> (or --plan-file FILE --approve DIGEST)",
 			Flags: append(commonFlags(),
 				&ucli.StringFlag{Name: "plan-file", Usage: "reconstruct an exact previously saved execution preview"},
@@ -78,7 +84,8 @@ func commands(state *invocation) []*ucli.Command {
 		},
 		{
 			Name: "config", Usage: "show effective configuration and per-setting provenance without execution",
-			Flags: commonFlags(), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return configCommand(state, ctx) },
+			Before: outputBefore(state),
+			Flags:  commonFlags(), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return configCommand(state, ctx) },
 		},
 		{
 			Name: "version", Usage: "print the AFTER version",
@@ -145,7 +152,7 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 		{"docker_binary", dockerBinary, cfg.Sources["docker_binary"]},
 		{"docker_host", dockerHost, cfg.Sources["docker_host"]},
 	}
-	return writeJSON(state, "configuration", struct {
+	return writeResult(state, "configuration", struct {
 		Settings []setting `json:"settings"`
 	}{settings})
 }
@@ -180,19 +187,11 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
+	stopNotice := startElapsedNotice(state, "capture", time.Second)
+	defer stopNotice()
 	result, err := capture.Capture(state.ctx, cfg.Project, s, options)
 	if err != nil {
 		return captureFailure(err)
-	}
-	type snapshotSummary struct {
-		ID           evidence.Digest       `json:"id"`
-		Source       evidence.SourceMode   `json:"source"`
-		Completeness evidence.Completeness `json:"completeness"`
-		Files        int                   `json:"files"`
-		Excluded     int                   `json:"excluded"`
-		Unsupported  int                   `json:"unsupported"`
-		Diff         evidence.Digest       `json:"diff"`
-		Limits       []string              `json:"limits"`
 	}
 	summary := func(snapshot evidence.Snapshot) snapshotSummary {
 		return snapshotSummary{snapshot.ID, snapshot.Source, snapshot.Completeness, len(snapshot.Files), len(snapshot.Excluded), len(snapshot.Unsupported), snapshot.Diff, append([]string(nil), snapshot.Limits...)}
@@ -202,7 +201,7 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		value := summary(*result.Index)
 		index = &value
 	}
-	return writeJSON(state, "capture", struct {
+	return writeResult(state, "capture", struct {
 		Base      snapshotSummary  `json:"base_snapshot"`
 		Candidate snapshotSummary  `json:"candidate_snapshot"`
 		Index     *snapshotSummary `json:"index_snapshot,omitempty"`
@@ -259,6 +258,8 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 			return invalid("snapshot ID is unavailable")
 		}
 	}
+	stopNotice := startElapsedNotice(state, "import", time.Second)
+	defer stopNotice()
 	report, err := gotestreport.Import(file, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, Snapshot: snapshot, ImportedAt: time.Now().UTC()})
 	if err != nil {
 		return invalid("report is invalid or exceeds the 8 MiB input limit")
@@ -271,7 +272,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil || artifact.Completeness != evidence.Complete {
 		return operational("cannot persist complete imported report")
 	}
-	return writeJSON(state, "import", reportView(artifact.Content, report, offset, limit))
+	return writeResult(state, "import", reportView(artifact.Content, report, offset, limit))
 }
 
 func reportView(id evidence.Digest, report gotestreport.Report, offset, limit int) any {
@@ -284,21 +285,7 @@ func reportView(id evidence.Digest, report gotestreport.Report, offset, limit in
 	for _, card := range report.Cards {
 		counts[card.State.Report]++
 	}
-	return struct {
-		ID                    evidence.Digest                `json:"id"`
-		SchemaVersion         int                            `json:"schema_version"`
-		Dialect               string                         `json:"dialect"`
-		Metadata              gotestreport.Metadata          `json:"metadata"`
-		OriginalDigest        evidence.Digest                `json:"original_digest"`
-		Completeness          evidence.Completeness          `json:"completeness"`
-		ReportedOutcomes      map[evidence.ReportOutcome]int `json:"reported_outcomes"`
-		Cards                 []gotestreport.Card            `json:"cards"`
-		CardOffset            int                            `json:"card_offset"`
-		CardTotal             int                            `json:"card_total"`
-		CardsMore             bool                           `json:"cards_more"`
-		Diagnostics           []gotestreport.Diagnostic      `json:"diagnostics"`
-		SuppressedDiagnostics int                            `json:"suppressed_diagnostics"`
-	}{id, report.SchemaVersion, report.Dialect, report.Metadata, report.OriginalDigest, report.Completeness, counts, cards, offset, len(report.Cards), end < len(report.Cards), report.Diagnostics, report.SuppressedDiagnostics}
+	return reportViewData{id, report.SchemaVersion, report.Dialect, report.Metadata, report.OriginalDigest, report.Completeness, counts, cards, offset, len(report.Cards), end < len(report.Cards), report.Diagnostics, report.SuppressedDiagnostics}
 }
 
 func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error {
@@ -347,7 +334,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		}
 		var snapshots *snapshotView
 		if receipt.Snapshots.Base != "" {
-			view, err := snapshotBundle(s, receipt.Snapshots.Base, receipt.Snapshots.Candidate, options)
+			view, err := snapshotBundle(s, receipt.Snapshots.Base, receipt.Snapshots.Candidate, options, !state.jsonOutput && !state.forceJSON && !exporting)
 			if err != nil {
 				return operational("snapshot inventory or diff is unavailable")
 			}
@@ -360,7 +347,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		if exporting {
 			kind = "export"
 		}
-		return writeJSON(state, kind, struct {
+		return writeResult(state, kind, struct {
 			Comparison evidence.Comparison `json:"comparison"`
 			Receipt    evidence.Receipt    `json:"receipt"`
 			Details    *compare.Report     `json:"details,omitempty"`
@@ -370,7 +357,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	if value, ok, err := optionalGet[evidence.Receipt](s, id); err != nil {
 		return operational("receipt record is corrupt or unavailable")
 	} else if ok {
-		return writeJSON(state, "receipt", value)
+		return writeResult(state, "receipt", value)
 	}
 	if value, ok, err := optionalGet[evidence.Snapshot](s, id); err != nil {
 		return operational("snapshot record is corrupt or unavailable")
@@ -379,9 +366,13 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 			if exporting {
 				return invalid("export requires a comparison ID")
 			}
-			return writeJSON(state, "snapshot", value)
+			inspection := snapshotInspection{Snapshot: value}
+			if !state.jsonOutput && !state.forceJSON {
+				inspection.CaptureHistory = captureHistoryForSnapshot(s, id)
+			}
+			return writeResult(state, "snapshot", inspection)
 		}
-		view, err := snapshotBundle(s, evidence.Digest(options.base), id, options)
+		view, err := snapshotBundle(s, evidence.Digest(options.base), id, options, !state.jsonOutput && !state.forceJSON && !exporting)
 		if err != nil {
 			return operational("snapshot comparison page is unavailable")
 		}
@@ -389,7 +380,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		if exporting {
 			kind = "export"
 		}
-		return writeJSON(state, kind, view)
+		return writeResult(state, kind, view)
 	}
 	if raw, err := s.ReadBlob(id); err == nil {
 		var report gotestreport.Report
@@ -397,7 +388,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 			if options.cardOffset < 0 || options.cardLimit < 1 || options.cardLimit > maxReportPageSize {
 				return invalid("report card page is outside supported bounds")
 			}
-			return writeJSON(state, kind, reportView(id, report, options.cardOffset, options.cardLimit))
+			return writeResult(state, kind, reportView(id, report, options.cardOffset, options.cardLimit))
 		}
 		offset := min(options.artifactOffset, len(raw))
 		end := offset + min(options.artifactSize, len(raw)-offset)
@@ -407,7 +398,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		}
 		// Blob content alone establishes no producer or evidence state. Keep
 		// exact bytes available even for binary, malformed, or partial JSON.
-		return writeJSON(state, "artifact", struct {
+		return writeResult(state, "artifact", struct {
 			ID       evidence.Digest `json:"id"`
 			Offset   int             `json:"offset"`
 			Next     int             `json:"next"`
@@ -484,14 +475,30 @@ type inventoryItem struct {
 	Limits          []string       `json:"limits"`
 }
 
+type snapshotCaptureHistory struct {
+	Records     []store.CaptureSummary
+	Limited     bool
+	More        bool
+	Unavailable bool
+}
+
+type snapshotInspection struct {
+	evidence.Snapshot
+	CaptureHistory snapshotCaptureHistory `json:"-"`
+}
+
 type snapshotView struct {
-	Base            evidence.Digest `json:"base_snapshot"`
-	Candidate       evidence.Digest `json:"candidate_snapshot"`
-	Inventory       []inventoryItem `json:"inventory"`
-	InventoryOffset int             `json:"inventory_offset"`
-	InventoryTotal  int             `json:"inventory_total"`
-	InventoryMore   bool            `json:"inventory_more"`
-	Diff            struct {
+	Base                    evidence.Digest        `json:"base_snapshot"`
+	Candidate               evidence.Digest        `json:"candidate_snapshot"`
+	BaseRecord              evidence.Snapshot      `json:"-"`
+	CandidateRecord         evidence.Snapshot      `json:"-"`
+	BaseCaptureHistory      snapshotCaptureHistory `json:"-"`
+	CandidateCaptureHistory snapshotCaptureHistory `json:"-"`
+	Inventory               []inventoryItem        `json:"inventory"`
+	InventoryOffset         int                    `json:"inventory_offset"`
+	InventoryTotal          int                    `json:"inventory_total"`
+	InventoryMore           bool                   `json:"inventory_more"`
+	Diff                    struct {
 		Content   evidence.Digest `json:"content"`
 		Offset    int             `json:"offset"`
 		Next      int             `json:"next"`
@@ -504,7 +511,7 @@ type snapshotView struct {
 	Limits []string `json:"limits"`
 }
 
-func snapshotBundle(s *store.Store, baseID, candidateID evidence.Digest, options inspectOptions) (snapshotView, error) {
+func snapshotBundle(s *store.Store, baseID, candidateID evidence.Digest, options inspectOptions, includeCaptureHistory bool) (snapshotView, error) {
 	var result snapshotView
 	base, err := store.Get[evidence.Snapshot](s, baseID)
 	if err != nil {
@@ -536,6 +543,11 @@ func snapshotBundle(s *store.Store, baseID, candidateID evidence.Digest, options
 		}
 	}
 	result.Base, result.Candidate = baseID, candidateID
+	result.BaseRecord, result.CandidateRecord = base, candidate
+	if includeCaptureHistory {
+		result.BaseCaptureHistory = captureHistoryForSnapshot(s, baseID)
+		result.CandidateCaptureHistory = captureHistoryForSnapshot(s, candidateID)
+	}
 	result.Inventory, result.InventoryOffset, result.InventoryTotal, result.InventoryMore = page, options.inventoryOffset, len(inventory), end < len(inventory)
 	result.Limits = view.Limits()
 	result.Diff.Content = candidate.Diff
@@ -547,6 +559,14 @@ func snapshotBundle(s *store.Store, baseID, candidateID evidence.Digest, options
 	result.Diff.Base64 = base64.StdEncoding.EncodeToString(raw.Bytes)
 	result.Diff.Limits = view.Limits()
 	return result, nil
+}
+
+func captureHistoryForSnapshot(s *store.Store, id evidence.Digest) snapshotCaptureHistory {
+	history, err := store.CapturesForSnapshot(s, id)
+	if err != nil {
+		return snapshotCaptureHistory{Unavailable: true}
+	}
+	return snapshotCaptureHistory{Records: history.Records, Limited: history.Limited, More: history.More}
 }
 
 func optionalGet[T store.Record](s *store.Store, id evidence.Digest) (T, bool, error) {
@@ -670,7 +690,7 @@ func compareCommand(state *invocation, ctx *ucli.Context) error {
 			return operational("comparison details are unavailable")
 		}
 	}
-	return writeJSON(state, "comparison", struct {
+	return writeResult(state, "comparison", struct {
 		Comparison evidence.Comparison `json:"comparison"`
 		Details    compare.Report      `json:"details"`
 	}{comparisonRecord, details})
@@ -751,7 +771,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	if approvalSet {
 		if ctx.String("approve") != digest {
 			state.exit = ExitDenied
-			return writeJSON(state, "execution_preview", struct {
+			return writeResult(state, "execution_preview", struct {
 				Authorization string          `json:"authorization_digest"`
 				Status        string          `json:"status"`
 				Plan          json.RawMessage `json:"plan"`
@@ -760,7 +780,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	} else if cfg.Interactive && state.tty {
 		if !prompt(state, digest, preview) {
 			state.exit = ExitDenied
-			return writeJSON(state, "execution_preview", struct {
+			return writeResult(state, "execution_preview", struct {
 				Authorization string          `json:"authorization_digest"`
 				Status        string          `json:"status"`
 				Plan          json.RawMessage `json:"plan"`
@@ -768,7 +788,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		}
 	} else {
 		state.exit = ExitDenied
-		return writeJSON(state, "execution_preview", struct {
+		return writeResult(state, "execution_preview", struct {
 			Authorization string          `json:"authorization_digest"`
 			Status        string          `json:"status"`
 			Plan          json.RawMessage `json:"plan"`
@@ -811,7 +831,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	} else {
 		state.exit = comparisonExit(comparisonRecord.Outcome)
 	}
-	return writeJSON(state, "run", response)
+	return writeResult(state, "run", response)
 }
 
 func ensureReceipt(receipt evidence.Receipt) error {

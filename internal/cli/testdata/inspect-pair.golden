@@ -1,0 +1,12 @@
+Captured pair aaaaaaaa → bbbbbbbb
+  Base         aaaaaaaa · commit aaaaaaa · 1 path · complete · 0 excluded · 0 u…
+  Captured     10:30:00 · working_tree · record cccccccc · 1 selected untracked
+  Candidate    bbbbbbbb · working tree · 1 path · complete · 0 excluded · 0 uns…
+  Captured     10:30:00 · working_tree · record cccccccc · 1 selected untracked
+  Inventory    1 path · 1 shown
+  M  internal/cli/main.go · potential oracle
+  Raw diff     18 bytes · page 0–18
+  Limit        raw diff is a captured finite patch
+IDs
+sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

@@ -1,0 +1,11 @@
+Receipt dddddddd · none / failed · incomparable
+  Snapshots    aaaaaaaa → bbbbbbbb
+  Started      12:30:00
+  Finished     12:31:00
+  Artifacts    1 · incomplete
+  Limit        synthetic, finite example
+IDs
+sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

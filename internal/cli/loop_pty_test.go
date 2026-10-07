@@ -162,7 +162,7 @@ func TestReviewConsentPTY(t *testing.T) {
 	if err := os.WriteFile(config, []byte("repetitions: 1\nrun_seconds: 180\noutput_bytes: 65536\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"review", string(pair.Candidate), "--tui", "--base", string(pair.Base), "--project", project, "--config", config}
+	args := []string{"review", string(pair.Candidate), "--tui", "--base", string(pair.Base), "--project", project, "--config", config, "--json"}
 	for _, variant := range []struct {
 		width, height int
 		noColor       bool
@@ -230,7 +230,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := func(sel browser.Selection) []string {
-		out := []string{"review", string(sel.Pair.Candidate), "--tui", "--base", string(sel.Pair.Base), "--project", project, "--config", cfg}
+		out := []string{"review", string(sel.Pair.Candidate), "--tui", "--base", string(sel.Pair.Base), "--project", project, "--config", cfg, "--json"}
 		for _, id := range sel.Evidence {
 			out = append(out, "--evidence", string(id))
 		}

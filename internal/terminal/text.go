@@ -175,6 +175,10 @@ func (d *Document) HexLine(row int) string {
 	return out.String()
 }
 
+// Sanitize escapes terminal controls and format characters without clipping.
+// It is used for non-terminal output where clipping would lose information.
+func Sanitize(raw string) string { return sanitized(raw) }
+
 // Line is the untrusted-text boundary at the left edge of a line.
 func Line(raw string, width int) string { return LineAt(raw, 0, width) }
 

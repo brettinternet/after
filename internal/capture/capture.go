@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unicode/utf8"
 
 	"github.com/brettinternet/after/internal/evidence"
@@ -115,7 +116,7 @@ func capture(ctx context.Context, dir string, s *store.Store, opts Options, betw
 		if !reflect.DeepEqual(first, second) {
 			continue
 		}
-		return persist(ctx, s, first)
+		return persist(ctx, s, first, opts)
 	}
 	return zero, ErrInconsistent
 }
@@ -488,7 +489,7 @@ func (r *reader) account(e entry) (entry, error) {
 	return e, nil
 }
 
-func persist(ctx context.Context, s *store.Store, scan scan) (Result, error) {
+func persist(ctx context.Context, s *store.Store, scan scan, opts Options) (Result, error) {
 	var out Result
 	// Each snapshot's Diff is the patch from the captured base to that snapshot.
 	diff := func(candidate image) (evidence.Artifact, error) {
@@ -557,6 +558,30 @@ func persist(ctx context.Context, s *store.Store, scan scan) (Result, error) {
 		index = ""
 	}
 	out.Candidate, err = save(scan.Candidate, index, a)
+	if err != nil {
+		return out, err
+	}
+	var indexID evidence.Digest
+	if out.Index != nil {
+		indexID = out.Index.ID
+	}
+	selected := append([]string{}, opts.IncludeUntracked...)
+	sort.Strings(selected)
+	unique := selected[:0]
+	for _, path := range selected {
+		if len(unique) == 0 || unique[len(unique)-1] != path {
+			unique = append(unique, path)
+		}
+	}
+	_, err = store.Put(s, evidence.Capture{
+		SchemaVersion:     evidence.SchemaVersion,
+		CapturedAt:        time.Now().UTC(),
+		Mode:              opts.Mode,
+		Base:              out.Base.ID,
+		Candidate:         out.Candidate.ID,
+		Index:             indexID,
+		SelectedUntracked: unique,
+	})
 	return out, err
 }
 

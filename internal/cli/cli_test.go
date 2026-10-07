@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/store"
 )
 
 type brokenWriter struct{}
@@ -71,6 +72,65 @@ func TestUrfaveHelpVersionAndInvalidInput(t *testing.T) {
 	}
 }
 
+func TestSnapshotInspectionShowsRecordedCaptureTimeAndKeepsJSON(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	t.Chdir(project)
+	type captureEnvelope struct {
+		Data struct {
+			Base struct {
+				ID evidence.Digest `json:"id"`
+			} `json:"base_snapshot"`
+			Candidate struct {
+				ID evidence.Digest `json:"id"`
+			} `json:"candidate_snapshot"`
+		} `json:"data"`
+	}
+	captureOnce := func() captureEnvelope {
+		t.Helper()
+		code, output, stderr := invoke([]string{"capture", "--json"}, false, "")
+		if code != ExitOK || stderr != "" {
+			t.Fatalf("capture: exit=%d stderr=%q", code, stderr)
+		}
+		var result captureEnvelope
+		if err := json.Unmarshal([]byte(output), &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	first, second := captureOnce(), captureOnce()
+	if first.Data.Base.ID != second.Data.Base.ID || first.Data.Candidate.ID != second.Data.Candidate.ID {
+		t.Fatal("unchanged capture changed snapshot IDs")
+	}
+	code, readable, stderr := invoke([]string{"inspect", string(first.Data.Candidate.ID)}, false, "")
+	if code != ExitOK || stderr != "" || !strings.Contains(readable, "Captured") || !strings.Contains(readable, "working_tree") || !strings.Contains(readable, "record ") {
+		t.Fatalf("readable snapshot inspection did not show capture history: exit=%d stdout=%q stderr=%q", code, readable, stderr)
+	}
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	history, err := store.CapturesForSnapshot(s, first.Data.Candidate.ID)
+	if err != nil || len(history.Records) != 2 {
+		t.Fatalf("capture history: %+v %v", history, err)
+	}
+	snapshot, err := store.Get[evidence.Snapshot](s, first.Data.Candidate.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := append([]byte(`{"schema_version":1,"kind":"snapshot","data":`), data...)
+	expected = append(expected, '}', '\n')
+	code, output, stderr := invoke([]string{"inspect", string(first.Data.Candidate.ID), "--json"}, false, "")
+	if code != ExitOK || stderr != "" || !bytes.Equal([]byte(output), expected) {
+		t.Fatalf("snapshot JSON changed: exit=%d stderr=%q\n got %s\nwant %s", code, stderr, output, expected)
+	}
+}
+
 func TestConfigCLIUsesExplicitFalseAndRedactsRuntimeValues(t *testing.T) {
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, "empty config.yaml")
@@ -80,7 +140,7 @@ func TestConfigCLIUsesExplicitFalseAndRedactsRuntimeValues(t *testing.T) {
 	project := filepath.Join(dir, "project with spaces")
 	t.Setenv("AFTER_DOCKER_BINARY", "/private/DO_NOT_PRINT/docker")
 	t.Setenv("AFTER_DOCKER_HOST", "unix:///private/DO_NOT_PRINT.sock")
-	code, stdout, stderr := invoke([]string{"config", "--config", configFile, "--project", project, "--interactive=false", "--raw-diff=false", "--diff-bytes", "0"}, false, "")
+	code, stdout, stderr := invoke([]string{"config", "--config", configFile, "--project", project, "--interactive=false", "--raw-diff=false", "--diff-bytes", "0", "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("exit=%d stderr=%q", code, stderr)
 	}
@@ -137,7 +197,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	gitRun(t, project, "add", "app/main.go")
 	gitRun(t, project, "commit", "-qm", "candidate")
 	candidateCommit := strings.TrimSpace(gitRun(t, project, "rev-parse", "HEAD"))
-	code, captured, stderr := invoke([]string{"capture", "--project", project, "--config", configFile, "--base", baseID, "--target", candidateCommit}, false, "")
+	code, captured, stderr := invoke([]string{"capture", "--project", project, "--config", configFile, "--base", baseID, "--target", candidateCommit, "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("capture exit=%d stderr=%q", code, stderr)
 	}
@@ -160,7 +220,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if captureEnvelope.SchemaVersion != 1 || captureEnvelope.Kind != "capture" || !validDigest(base) || !validDigest(candidate) {
 		t.Fatalf("bad capture result: %s", captured)
 	}
-	args := []string{"inspect", candidate, "--base", base, "--project", project, "--config", configFile}
+	args := []string{"inspect", candidate, "--base", base, "--project", project, "--config", configFile, "--json"}
 	code, inspected, stderr := invoke(args, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("inspect exit=%d stderr=%q", code, stderr)
@@ -211,7 +271,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "RFC3339") {
 		t.Fatalf("invalid capture time was accepted: %d %q %q", code, stdout, stderr)
 	}
-	code, imported, stderr := invoke([]string{"import", reportPath, "--project", project, "--config", configFile, "--producer", "go1.27.1", "--captured-at", "2026-01-02T03:04:05Z", "--snapshot", candidate}, false, "")
+	code, imported, stderr := invoke([]string{"import", reportPath, "--project", project, "--config", configFile, "--producer", "go1.27.1", "--captured-at", "2026-01-02T03:04:05Z", "--snapshot", candidate, "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("import exit=%d stderr=%q", code, stderr)
 	}
@@ -237,7 +297,7 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 	if reportEnvelope.Data.Cards[0].State.Producer != evidence.Importer || reportEnvelope.Data.Cards[0].State.Kind != evidence.Reported || reportEnvelope.Data.Cards[0].State.Execution != evidence.NotRun || reportEnvelope.Data.Cards[0].State.Report != evidence.ReportPass || reportEnvelope.Data.Cards[1].State.Report != evidence.ReportFail {
 		t.Fatalf("reported outcomes were mislabeled: %+v", reportEnvelope.Data.Cards)
 	}
-	code, inspectedReport, stderr := invoke([]string{"inspect", reportEnvelope.Data.ID, "--project", project, "--config", configFile}, false, "")
+	code, inspectedReport, stderr := invoke([]string{"inspect", reportEnvelope.Data.ID, "--project", project, "--config", configFile, "--json"}, false, "")
 	if code != ExitOK || stderr != "" || !strings.Contains(inspectedReport, `"report":"fail"`) {
 		t.Fatalf("report inspection: code=%d stderr=%q output=%q", code, stderr, inspectedReport)
 	}
@@ -301,7 +361,7 @@ func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T
 		t.Fatal(err)
 	}
 	baseCommit, candidateCommit := fixtureCommits(t, project)
-	code, captured, stderr := invoke([]string{"capture", "--project", project, "--config", configFile, "--base", baseCommit, "--target", candidateCommit}, false, "")
+	code, captured, stderr := invoke([]string{"capture", "--project", project, "--config", configFile, "--base", baseCommit, "--target", candidateCommit, "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("capture: %d %q", code, stderr)
 	}
@@ -319,7 +379,7 @@ func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T
 		t.Fatal(err)
 	}
 	planPath := filepath.Join(dir, "saved preview.json")
-	code, output, stderr := invoke([]string{"run", captureResult.Data.Base.ID, captureResult.Data.Candidate.ID, "--project", project, "--config", configFile, "--plan-out", planPath}, false, "")
+	code, output, stderr := invoke([]string{"run", captureResult.Data.Base.ID, captureResult.Data.Candidate.ID, "--project", project, "--config", configFile, "--plan-out", planPath, "--json"}, false, "")
 	if code != ExitDenied || stderr != "" {
 		t.Fatalf("preview should require explicit approval: %d %q", code, stderr)
 	}
@@ -343,7 +403,7 @@ func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T
 		t.Fatalf("saved plan is not private: %v %v", info, err)
 	}
 	wrong := "sha256:" + strings.Repeat("0", 64)
-	code, output, stderr = invoke([]string{"run", "--plan-file", planPath, "--approve", wrong, "--project", project, "--config", configFile}, false, "")
+	code, output, stderr = invoke([]string{"run", "--plan-file", planPath, "--approve", wrong, "--project", project, "--config", configFile, "--json"}, false, "")
 	if code != ExitDenied || stderr != "" || !strings.Contains(output, "authorization_mismatch") {
 		t.Fatalf("wrong digest was not refused: %d %q %q", code, output, stderr)
 	}

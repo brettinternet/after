@@ -41,6 +41,7 @@ commit() { git add -A && git commit -qm "$1"; }
 after() {
 	local want=$1 out code=0
 	shift
+	set -- "$@" --json
 	printf '$ after %s\n' "$*" | sed -E 's/(sha256:[0-9a-f]{8})[0-9a-f]{56}/\1…/g' >&2
 	out=$("$AFTER_BIN" "$@") || code=$?
 	if [[ $code != "$want" ]]; then
@@ -142,7 +143,7 @@ witnesses() {
 provider_counts() {
 	local id side seconds count
 	while read -r id side seconds; do
-		count=$("$AFTER_BIN" inspect "$id" | jq '.data.document.provider_calls | length')
+		count=$("$AFTER_BIN" inspect "$id" --json | jq '.data.document.provider_calls | length')
 		printf '   %-9s %5ss retry: %s provider request(s)\n' "$side" "$seconds" "$count" >&2
 	done < <(jq -r '.data.samples[] | . as $s | .artifacts[] | select(.channel | endswith("/observation")) | "\(.content) \($s.side) \($s.case_seconds)"' <<<"$1")
 }

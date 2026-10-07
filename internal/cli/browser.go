@@ -76,6 +76,8 @@ func browseCommand(state *invocation, ctx *ucli.Context) error {
 	if err := browser.Run(m, state.reader, state.stdout); err != nil {
 		return operational("terminal review failed")
 	}
-	_, err = fmt.Fprintln(state.stdout, string(m.SessionJSON()))
+	if state.jsonOutput {
+		_, err = fmt.Fprintln(state.stdout, string(m.SessionJSON()))
+	}
 	return err
 }

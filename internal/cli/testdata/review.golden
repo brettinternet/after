@@ -1,0 +1,13 @@
+Pin dddddddd · [REOPENED] · stale
+  Expectation  At 12h, retries make one provider request
+  Scope        finite example
+  Basis        aaaaaaaa → bbbbbbbb · receipt dddddddd
+  Review       whole-project snapshot identity changed
+  Current result none attached
+  Latest decision 12:00:00
+  Limit        Exact complete whole-project bindings only; finite examples, not…
+IDs
+sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

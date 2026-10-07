@@ -1,0 +1,14 @@
+Comparison cccccccc · different · complete
+  Receipt      dddddddd
+  Snapshots    aaaaaaaa → bbbbbbbb
+  12h responses          [EQUAL]
+  12h provider requests  [DIFFERENT] · 1 → 2
+  30s responses          [EQUAL]
+  30s provider requests  [EQUAL] · count unchanged
+  Limit        recorded samples only
+IDs
+sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

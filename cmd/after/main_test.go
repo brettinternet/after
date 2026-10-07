@@ -353,6 +353,12 @@ func TestPaymentCLIProof(t *testing.T) {
 }
 
 func native(exe, dir, home string, args, extraEnv []string) (int, string, string) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config":
+			args = append(args, "--json")
+		}
+	}
 	encoded, _ := json.Marshal(args)
 	cmd := exec.Command(exe, "-test.run=^TestNativeCLI$")
 	cmd.Dir = dir

@@ -38,7 +38,7 @@ func TestInspectArtifactPages(t *testing.T) {
 		for _, command := range []string{"inspect", "export"} {
 			var recovered []byte
 			for offset := 0; ; {
-				code, output, stderr := invoke([]string{command, string(artifact.Content), "--project", project, "--config", config, "--artifact-offset", strconv.Itoa(offset)}, false, "")
+				code, output, stderr := invoke([]string{command, string(artifact.Content), "--project", project, "--config", config, "--artifact-offset", strconv.Itoa(offset), "--json"}, false, "")
 				if code != ExitOK || stderr != "" {
 					t.Fatalf("%d %s %s", code, output, stderr)
 				}

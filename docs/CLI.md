@@ -3,7 +3,7 @@
 This page documents current behavior; the planned redesign (AFTER-34
 to AFTER-45) is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
 
-`after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Headless commands emit one versioned JSON object on stdout; diagnostics use stderr. `review --tui <candidate-id> --base <base-id>` instead opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
+`after` is the headless entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, and comparison APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `review --tui <candidate-id> --base <base-id>` instead opens the [captured evidence browser](TUI.md) on a terminal, without execution on open. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
 
 See [packaging, the repeatable demo and recovery](DEMO.md) for native distributions and a prepared-checkout walkthrough. Build with `mise exec -- task build`, then run commands from any directory with a selected project:
 
@@ -17,6 +17,13 @@ See [packaging, the repeatable demo and recovery](DEMO.md) for native distributi
 ```
 
 Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. Explicit `--base REF --target REF` selects a merge-base capture. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import requires caller-supplied `--producer` provenance and accepts optional `--captured-at RFC3339`; these claims are retained but not authenticated. `--snapshot` is an optional validated content digest, not proof the report ran on that capture. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect CANDIDATE_ID --base BASE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
+
+Each successful capture also writes an immutable capture event with its time, mode,
+snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
+snapshot IDs unchanged but records a new event. Readable snapshot inspection shows
+recorded capture times; legacy snapshots without an event say the time is unavailable.
+History lookup limits are shown when reached. No file modification time is used.
+The existing `--json` snapshot and capture response shapes remain unchanged.
 
 ## Checkout root and private storage
 
@@ -42,7 +49,7 @@ reuse rules, broader-intent limits, historical revisions and rerun authorization
 
 ## Execution authorization
 
-The first run command prepares the payment-specific frozen plan; it does not execute it before authorization. In a non-TTY invocation, save the exact plan and read its digest from the JSON response:
+The first run command prepares the payment-specific frozen plan; it does not execute it before authorization. In a non-TTY invocation, save the exact plan; readable output prints its authorization digest on its own untruncated line. Pass `--json` when a script must parse that digest:
 
 ```sh
 ./bin/after run BASE_ID CANDIDATE_ID --project "/work/payment" \
@@ -87,7 +94,19 @@ Docker binary and host must be configured together. There is deliberately no con
 
 ## Output and exit status
 
-Every command result is a single JSON object with `schema_version: 1`, a `kind`, and `data`, capped at 16 MiB. Raw patch bytes are base64; report and inventory results are paged. Imported test passes/failures retain producer `importer`, kind `reported`, unknown applicability, `not_run` execution, and `not_compared` state. They are never runner observations.
+Readable output uses a leading result sentence and aligned rows or lists. On terminals, the AFTER theme styles output unless `NO_COLOR` is set or `TERM=dumb`; pipes never contain color sequences. Untrusted paths, report text, expectations, producers and errors pass through the terminal sanitizer. Rows clip only on a terminal, with full IDs retained in the `IDs` section of inspect results. Artifact inspection uses the bounded text/hex content viewer; use `after inspect ID --json` for exact base64 pages and raw patch pages.
+
+Use `--json` on a command whose result a script consumes:
+
+```sh
+./bin/after capture --project /work/payment --json
+./bin/after inspect CANDIDATE_ID --base BASE_ID --project /work/payment --json
+./bin/after import report.jsonl --producer go1.27.1 --project /work/payment --json
+./bin/after run BASE_ID CANDIDATE_ID --project /work/payment --json
+./bin/after export COMPARISON_ID --project /work/payment # JSON is always emitted
+```
+
+The envelope is unchanged: one JSON object with `schema_version: 1`, a `kind`, and `data`, capped at 16 MiB. Raw patch bytes are base64; report and inventory results are paged. Imported test passes/failures retain producer `importer`, kind `reported`, unknown applicability, `not_run` execution, and `not_compared` state. They are never runner observations. A capture or import that remains active for one second on a terminal reports elapsed time on stderr; pipes receive no progress notice.
 
 | Status | Meaning                                                                               |
 | ------ | ------------------------------------------------------------------------------------- |

@@ -63,6 +63,84 @@ func roundTrip[T Record](t *testing.T, s *Store, r T) {
 	}
 }
 
+func TestCaptureHistoryRejectsInvalidReferences(t *testing.T) {
+	for _, missing := range []bool{true, false} {
+		t.Run(fmt.Sprint("missing=", missing), func(t *testing.T) {
+			s, project := openTest(t)
+			snapshot, _, _, _, _ := fixtures(t, s)
+			candidate := snapshot.ID
+			if missing {
+				candidate = evidence.Digest("sha256:" + strings.Repeat("f", 64))
+			}
+			// Bypass Put as an on-disk attacker could: canonical hash and schema
+			// are valid, but the referenced snapshots are missing or mismatched.
+			record := evidence.Capture{SchemaVersion: evidence.SchemaVersion,
+				CapturedAt: time.Unix(1000, 0).UTC(), Mode: evidence.MergeBase,
+				Base: snapshot.ID, Candidate: candidate, SelectedUntracked: []string{}}
+			if _, err := Put(s, record); err == nil {
+				t.Fatal("Put accepted invalid references")
+			}
+			canonical, err := json.Marshal(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.ID = evidence.Digest(hash(canonical))
+			data, err := json.Marshal(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			name, err := key("capture", string(record.ID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(project, ".after", name), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := readRecord[evidence.Capture](s, record.ID); err != nil {
+				t.Fatalf("fixture must have valid hash/schema: %v", err)
+			}
+			if history, err := CapturesForSnapshot(s, snapshot.ID); !errors.Is(err, ErrCorrupt) || len(history.Records) != 0 {
+				t.Fatalf("invalid history accepted: %+v %v", history, err)
+			}
+		})
+	}
+}
+
+func TestCaptureRecordRoundTripAndHistoryBounds(t *testing.T) {
+	s, _ := openTest(t)
+	snapshot, _, _, _, _ := fixtures(t, s)
+	base := snapshot
+	base.ID = ""
+	base.Source = evidence.Commit
+	base.IndexSnapshot = ""
+	base = mustPut(t, s, base)
+	candidate := snapshot
+	candidate.ID = ""
+	candidate.Source = evidence.MergeBase
+	candidate.MergeBase = base.Commit
+	candidate.BaseCommit = strings.Repeat("b", 40)
+	candidate = mustPut(t, s, candidate)
+	var latest evidence.Capture
+	for i := 0; i <= maxCaptureHistoryScan; i++ {
+		latest = mustPut(t, s, evidence.Capture{
+			SchemaVersion:     evidence.SchemaVersion,
+			CapturedAt:        time.Unix(int64(1000+i), 0).UTC(),
+			Mode:              evidence.MergeBase,
+			Base:              base.ID,
+			Candidate:         candidate.ID,
+			SelectedUntracked: []string{},
+		})
+	}
+	stored, err := Get[evidence.Capture](s, latest.ID)
+	if err != nil || !reflect.DeepEqual(stored, latest) {
+		t.Fatalf("capture record round trip: %v", err)
+	}
+	history, err := CapturesForSnapshot(s, candidate.ID)
+	if err != nil || !history.Limited || !history.More || len(history.Records) != maxCaptureHistoryShown {
+		t.Fatalf("capture history limit was not visible: %+v %v", history, err)
+	}
+}
+
 func TestWritableOpenPublishesGitignoreAndReadOnlyOpenDoesNot(t *testing.T) {
 	project := t.TempDir()
 	writer, err := Open(project, true, nil)

@@ -67,7 +67,7 @@ func TestCaptureFromNestedDirectoryUsesCheckoutRootAndIgnoresStore(t *testing.T)
 	}
 	t.Chdir(nested)
 
-	code, fromNested, stderr := invoke([]string{"capture"}, false, "")
+	code, fromNested, stderr := invoke([]string{"capture", "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("nested capture: exit=%d stderr=%q", code, stderr)
 	}
@@ -110,7 +110,7 @@ func TestCaptureFromNestedDirectoryUsesCheckoutRootAndIgnoresStore(t *testing.T)
 	}
 
 	t.Chdir(project)
-	code, fromRoot, stderr := invoke([]string{"capture"}, false, "")
+	code, fromRoot, stderr := invoke([]string{"capture", "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("root capture: exit=%d stderr=%q", code, stderr)
 	}
@@ -130,7 +130,7 @@ func TestCaptureFromNestedDirectoryUsesCheckoutRootAndIgnoresStore(t *testing.T)
 	if rootResult.Data.Base.ID != nestedResult.Data.Base.ID || rootResult.Data.Candidate.ID != nestedResult.Data.Candidate.ID {
 		t.Fatalf("nested capture differs from root: nested=%+v root=%+v", nestedResult.Data, rootResult.Data)
 	}
-	code, explicit, stderr := invoke([]string{"capture", "--project", nested}, false, "")
+	code, explicit, stderr := invoke([]string{"capture", "--project", nested, "--json"}, false, "")
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("explicit nested project capture: exit=%d stderr=%q", code, stderr)
 	}

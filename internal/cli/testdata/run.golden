@@ -1,0 +1,7 @@
+Run dddddddd · incomplete · different
+  Snapshots    aaaaaaaa → bbbbbbbb
+  12h responses          [EQUAL]
+  12h provider requests  [DIFFERENT] · 1 → 2
+  30s responses          [EQUAL]
+  30s provider requests  [EQUAL] · count unchanged
+  Limit        recorded samples only

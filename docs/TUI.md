@@ -214,9 +214,10 @@ its incomplete receipt. Success adds the real comparison without accepting behav
 Late results stay at their originating pair and cannot replace the selected result.
 
 Pins are immutable revisions, shared with the [headless review API](REVIEW.md).
-Use `s` for full references; on normal quit, session JSON is printed after terminal
-restoration. Restart with its pair and `--evidence <latest-pin-revision-id>` (and any
-comparison/history IDs desired). There is no implicit newest-pin selection,
+Use `s` for full references; on normal quit, the screen remains readable by default.
+Pass `--json` to print the session JSON after terminal restoration. Restart with its
+pair and `--evidence <latest-pin-revision-id>` (and any comparison/history IDs desired).
+There is no implicit newest-pin selection,
 automatic refresh or filesystem watcher. Keep these references private.
 
 The viewport is capped at 240 columns and 100 rows; extremely narrow terminals

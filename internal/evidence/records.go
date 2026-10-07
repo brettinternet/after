@@ -122,6 +122,19 @@ type Snapshot struct {
 	Limits        []string     `json:"limits"`
 }
 
+// Capture is the immutable event that associates a snapshot set with a capture time and selection.
+// Snapshots remain content-addressed independently; repeating a capture creates a new Capture.
+type Capture struct {
+	SchemaVersion     int        `json:"schema_version"`
+	ID                Digest     `json:"id"`
+	CapturedAt        time.Time  `json:"captured_at"`
+	Mode              SourceMode `json:"mode"`
+	Base              Digest     `json:"base_snapshot"`
+	Candidate         Digest     `json:"candidate_snapshot"`
+	Index             Digest     `json:"index_snapshot,omitempty"`
+	SelectedUntracked []string   `json:"selected_untracked"`
+}
+
 // Scenario points to frozen concrete setup/actions, independently of expectations.
 type Scenario struct {
 	SchemaVersion int      `json:"schema_version"`

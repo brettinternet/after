@@ -106,6 +106,7 @@ func (d *demo) command(binary string, args ...string) ([]byte, int, error) {
 	return out.Bytes(), code, nil
 }
 func (d *demo) cli(want int, value any, args ...string) error {
+	args = append(args, "--json")
 	fmt.Printf("after %s\n", strings.Join(args, " "))
 	raw, code, err := d.command(d.binary, append(args, "--project", d.project)...)
 	if err != nil {

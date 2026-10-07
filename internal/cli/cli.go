@@ -12,8 +12,10 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/brettinternet/after/internal/config"
+	"github.com/brettinternet/after/internal/terminal"
 	ucli "github.com/urfave/cli/v2"
 	"golang.org/x/term"
 )
@@ -36,6 +38,14 @@ type invocation struct {
 	stderr     io.Writer
 	reader     io.Reader
 	tty        bool
+	stdoutTTY  bool
+	stderrTTY  bool
+	columns    int
+	jsonOutput bool
+	forceJSON  bool
+	theme      terminal.Theme
+	location   *time.Location
+	now        func() time.Time
 	exit       int
 	diagnostic string
 }
@@ -55,7 +65,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io.Reader, tty bool) int {
-	state := &invocation{ctx: ctx, stdout: stdout, stderr: stderr, reader: reader, tty: tty}
+	state := &invocation{
+		ctx: ctx, stdout: stdout, stderr: stderr, reader: reader, tty: tty,
+		stdoutTTY: terminalOutput(stdout), stderrTTY: terminalOutput(stderr), columns: 80,
+		theme: terminal.DefaultTheme(), location: time.Local, now: time.Now,
+	}
+	if file, ok := stdout.(*os.File); ok && state.stdoutTTY {
+		if width, _, err := term.GetSize(int(file.Fd())); err == nil && width > 0 {
+			state.columns = width
+		}
+	}
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
@@ -140,7 +159,7 @@ func normalizeArgs(args []string) []string {
 		"--evidence": true, "--import-file": true,
 		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true,
 	}
-	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--help": true, "-h": true}
+	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--json": true, "--help": true, "-h": true}
 	var flags, positionals []string
 	for i := 1; i < len(args); i++ {
 		token := args[i]
@@ -183,6 +202,7 @@ func commonFlags() []ucli.Flag {
 		&ucli.IntFlag{Name: "run-seconds", Usage: "sandbox time limit (1-300 seconds)"},
 		&ucli.IntFlag{Name: "output-bytes", Usage: "per-container output limit (1-1048576)"},
 		&ucli.BoolFlag{Name: "interactive", Usage: "allow an exact-plan confirmation prompt on a terminal"},
+		&ucli.BoolFlag{Name: "json", Usage: "print the versioned JSON result"},
 		&ucli.BoolFlag{Name: "raw-diff", Usage: "include a bounded captured patch"},
 		&ucli.IntFlag{Name: "diff-bytes", Usage: "maximum raw patch bytes (0-65536)"},
 	}
@@ -228,6 +248,13 @@ func configFlags(ctx *ucli.Context) (config.Config, error) {
 	return cfg, nil
 }
 
+func writeResult(state *invocation, kind string, data any) error {
+	if state.jsonOutput || state.forceJSON || kind == "export" {
+		return writeJSON(state, kind, data)
+	}
+	return writeReadable(state, kind, data)
+}
+
 func writeJSON(state *invocation, kind string, data any) error {
 	result := struct {
 		SchemaVersion int    `json:"schema_version"`
@@ -271,6 +298,48 @@ func terminalInput(reader io.Reader) bool {
 		return false
 	}
 	return term.IsTerminal(int(file.Fd()))
+}
+
+func terminalOutput(writer io.Writer) bool {
+	file, ok := writer.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
+}
+
+func outputBefore(state *invocation) func(*ucli.Context) error {
+	return func(ctx *ucli.Context) error {
+		state.jsonOutput = ctx.Bool("json")
+		state.forceJSON = ctx.Command != nil && ctx.Command.Name == "export"
+		return nil
+	}
+}
+
+func startElapsedNotice(state *invocation, action string, delay time.Duration) func() {
+	return startElapsedNoticeWith(state, action, delay, nil)
+}
+
+func startElapsedNoticeWith(state *invocation, action string, delay time.Duration, noticed chan<- struct{}) func() {
+	if !state.stderrTTY {
+		return func() {}
+	}
+	started := time.Now()
+	done, finished := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(finished)
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			_, _ = fmt.Fprintf(state.stderr, "after: %s still running · %s\n", action, time.Since(started).Round(time.Second))
+			if noticed != nil {
+				noticed <- struct{}{}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-finished
+	}
 }
 
 func prompt(state *invocation, digest string, preview []byte) bool {

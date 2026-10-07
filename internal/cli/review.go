@@ -12,7 +12,7 @@ import (
 )
 
 func pinCommand(state *invocation) *ucli.Command {
-	return &ucli.Command{Name: "pin", Usage: "pin a finite example or broader human intent against a stored receipt (no execution)", ArgsUsage: "<receipt-id>", Flags: append(commonFlags(),
+	return &ucli.Command{Name: "pin", Usage: "pin a finite example or broader human intent against a stored receipt (no execution)", ArgsUsage: "<receipt-id>", Before: outputBefore(state), Flags: append(commonFlags(),
 		&ucli.StringFlag{Name: "expectation", Usage: "explicit human expectation (maximum 4096 bytes)"},
 		&ucli.StringFlag{Name: "scope", Usage: "required finite_example or human_intent; neither asserts universal proof"},
 		&ucli.StringFlag{Name: "reason", Usage: "required human reason"},
@@ -43,7 +43,7 @@ func pinCommand(state *invocation) *ucli.Command {
 func reviewReason(reason string) bool { return strings.TrimSpace(reason) != "" && len(reason) <= 4096 }
 
 func reviewCommand(state *invocation) *ucli.Command {
-	return &ucli.Command{Name: "review", Usage: "browse captured evidence with --tui, or inspect/mutate a headless pin revision", ArgsUsage: "<pin-revision-id> OR --tui <candidate-id> --base <base-id>", Flags: append(commonFlags(),
+	return &ucli.Command{Name: "review", Usage: "browse captured evidence with --tui, or inspect/mutate a headless pin revision", ArgsUsage: "<pin-revision-id> OR --tui <candidate-id> --base <base-id>", Before: outputBefore(state), Flags: append(commonFlags(),
 		&ucli.BoolFlag{Name: "tui", Usage: "browse immutable captures without execution (requires terminal)"},
 		&ucli.StringFlag{Name: "base", Usage: "matching captured base snapshot for --tui"},
 		&ucli.StringSliceFlag{Name: "evidence", Usage: "stored comparison, receipt, imported report or pin revision ID for --tui (repeatable, maximum 32)"},
@@ -142,5 +142,5 @@ func writeReview(state *invocation, s *store.Store, id evidence.Digest) error {
 	if err != nil {
 		return invalid("pin revision or its bound evidence is unavailable")
 	}
-	return writeJSON(state, "review", v)
+	return writeResult(state, "review", v)
 }

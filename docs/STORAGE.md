@@ -12,16 +12,26 @@ publishes `.after/.gitignore` containing `*` through the same private, durable,
 no-overwrite publication path used for store objects. This also supplies the file
 for an existing store that predates it. The rule ignores store contents without
 changing the checkout's `.gitignore` or `.git/info/exclude`. `Put`/`Get` support
-snapshots, scenarios, receipts, comparisons and pins. Leave a new record ID empty;
-storage derives it from SHA-256 of the Go JSON encoding with `id` set to the empty
-string. A supplied ID must match. Ordered slices, nil versus empty slices, and
-all other fields participate in identity. This is a local encoding contract, not
-a cross-language canonical JSON or signature scheme.
+snapshots, capture records, scenarios, receipts, comparisons and pins. Leave a new
+record ID empty; storage derives it from SHA-256 of the Go JSON encoding with
+`id` set to the empty string. A supplied ID must match. Ordered slices, nil
+versus empty slices, and all other fields participate in identity. This is a
+local encoding contract, not a cross-language canonical JSON or signature
+scheme.
 
-Every version is immutable, including pin history revisions. This task stores
-pin versions; AFTER-11 owns append-only history transitions and stable review
-selection. Comparison records currently bind a result and scope to a receipt;
-AFTER-9 owns channel witnesses and actual comparison computation.
+Every version is immutable, including capture events and pin history revisions.
+A successful capture publishes one new event even when its snapshot identities
+are unchanged; failed capture attempts do not create an event. Snapshot identity
+never includes a capture time. `CapturesForSnapshot` searches at most 512 capture
+records and 16 MiB of capture-record data, then returns at most the eight latest
+matching events found. It reports when a scan or result bound was reached, so a
+partial history is never presented as complete. No filesystem modification time
+is used to fill missing capture history. Legacy snapshots with no event have no
+recorded capture time.
+
+This task stores pin versions; AFTER-11 owns append-only history transitions and
+stable review selection. Comparison records currently bind a result and scope to
+a receipt; AFTER-9 owns channel witnesses and actual comparison computation.
 
 Artifacts have a hash of retained bytes plus an immutable descriptor containing
 channel, retained/max bytes, redaction policy and completeness. Receipts must

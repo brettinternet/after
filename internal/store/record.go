@@ -11,7 +11,7 @@ import (
 )
 
 type Record interface {
-	evidence.Snapshot | evidence.Scenario | evidence.Receipt | evidence.Comparison | evidence.Pin
+	evidence.Snapshot | evidence.Capture | evidence.Scenario | evidence.Receipt | evidence.Comparison | evidence.Pin
 	Validate() error
 }
 
@@ -19,6 +19,8 @@ func identity[T Record](r *T) (string, *evidence.Digest) {
 	switch v := any(r).(type) {
 	case *evidence.Snapshot:
 		return "snapshot", &v.ID
+	case *evidence.Capture:
+		return "capture", &v.ID
 	case *evidence.Scenario:
 		return "scenario", &v.ID
 	case *evidence.Receipt:
@@ -153,6 +155,19 @@ func Get[T Record](s *Store, id evidence.Digest) (T, error) {
 	return get[T](s, id)
 }
 func get[T Record](s *Store, id evidence.Digest) (T, error) {
+	record, err := readRecord[T](s, id)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	if err := references(s, record); err != nil {
+		var zero T
+		return zero, err
+	}
+	return record, nil
+}
+
+func readRecord[T Record](s *Store, id evidence.Digest) (T, error) {
 	var zero T
 	kind, _ := identity(&zero)
 	name, err := key(kind, string(id))
@@ -177,9 +192,6 @@ func get[T Record](s *Store, id evidence.Digest) (T, error) {
 		return zero, ErrCorrupt
 	}
 	*actual = id
-	if err := references(s, record); err != nil {
-		return zero, err
-	}
 	return record, nil
 }
 
@@ -202,6 +214,36 @@ func references[T Record](s *Store, record T) error {
 		for _, f := range r.Files {
 			if _, err = s.blob(f.Content); err != nil {
 				return fmt.Errorf("snapshot content: %w", err)
+			}
+		}
+	case evidence.Capture:
+		base, e := get[evidence.Snapshot](s, r.Base)
+		if e != nil {
+			return e
+		}
+		candidate, e := get[evidence.Snapshot](s, r.Candidate)
+		if e != nil {
+			return e
+		}
+		if base.Source != evidence.Commit {
+			return errors.New("capture base must be a commit snapshot")
+		}
+		switch r.Mode {
+		case evidence.WorkingTree:
+			index, e := get[evidence.Snapshot](s, r.Index)
+			if e != nil {
+				return e
+			}
+			if candidate.Source != evidence.WorkingTree || candidate.IndexSnapshot != r.Index || index.Source != evidence.Index || index.Commit != candidate.Commit || index.Unborn != candidate.Unborn || base.Commit != candidate.Commit || base.Unborn != candidate.Unborn {
+				return errors.New("working-tree capture snapshot associations differ")
+			}
+		case evidence.Index:
+			if candidate.Source != evidence.Index || r.Index != r.Candidate || base.Commit != candidate.Commit || base.Unborn != candidate.Unborn {
+				return errors.New("index capture snapshot associations differ")
+			}
+		case evidence.MergeBase:
+			if candidate.Source != evidence.MergeBase || candidate.MergeBase != base.Commit || candidate.Unborn || base.Unborn {
+				return errors.New("merge-base capture snapshot associations differ")
 			}
 		}
 	case evidence.Scenario:

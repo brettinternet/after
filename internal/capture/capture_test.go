@@ -212,6 +212,39 @@ func TestModesPathsAndNoSourceMutation(t *testing.T) {
 		t.Fatal("capture changed source repository, index, refs or files")
 	}
 }
+func TestCaptureRecordsRepeatWithoutChangingSnapshotIdentity(t *testing.T) {
+	d := repo(t)
+	put(t, d, "tracked", []byte("base"))
+	commit(t, d)
+	put(t, d, "z-selected", []byte("z"))
+	put(t, d, "a-selected", []byte("a"))
+	s := openStore(t, d)
+	options := Options{IncludeUntracked: []string{"z-selected", "a-selected"}}
+	first := take(t, d, s, options)
+	second := take(t, d, s, options)
+	if first.Base.ID != second.Base.ID || first.Candidate.ID != second.Candidate.ID || first.Index == nil || second.Index == nil || first.Index.ID != second.Index.ID {
+		t.Fatal("recapture changed immutable snapshot identities")
+	}
+	history, err := store.CapturesForSnapshot(s, first.Candidate.ID)
+	if err != nil || history.Limited || history.More || len(history.Records) != 2 {
+		t.Fatalf("capture history: %+v %v", history, err)
+	}
+	if history.Records[0].ID == history.Records[1].ID || history.Records[0].CapturedAt.IsZero() || history.Records[1].CapturedAt.IsZero() {
+		t.Fatalf("recapture did not create distinct timed records: %+v", history.Records)
+	}
+	record, err := store.Get[evidence.Capture](s, history.Records[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Mode != evidence.WorkingTree || record.Base != first.Base.ID || record.Candidate != first.Candidate.ID || record.Index != first.Index.ID || !reflect.DeepEqual(record.SelectedUntracked, []string{"a-selected", "z-selected"}) {
+		t.Fatalf("incomplete capture record: %+v", record)
+	}
+	indexHistory, err := store.CapturesForSnapshot(s, first.Index.ID)
+	if err != nil || len(indexHistory.Records) != 2 {
+		t.Fatalf("index capture history: %+v %v", indexHistory, err)
+	}
+}
+
 func TestMergeBaseAndUnborn(t *testing.T) {
 	t.Run("unborn", func(t *testing.T) {
 		d := repo(t)
@@ -454,6 +487,15 @@ func TestBoundsCancellationAndRedaction(t *testing.T) {
 		cancel()
 		if _, err := Capture(ctx, d, s, Options{}); err == nil {
 			t.Fatal("cancel ignored")
+		}
+		entries, err := os.ReadDir(filepath.Join(d, ".after"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "capture-") {
+				t.Fatal("failed capture wrote a capture record")
+			}
 		}
 	})
 	t.Run("redact", func(t *testing.T) {

@@ -24,10 +24,11 @@ referenced bytes against digests belong to capture/storage, not this validator.
 Stored pin IDs identify immutable content versions; AFTER-11 owns stable review
 selection and append-only history transitions.
 
-`Decode[Snapshot|Scenario|Receipt|Comparison|Pin]` accepts one JSON object, at most 4 MiB,
-rejects unknown fields, unsupported versions (including zero), trailing values
-and invalid records, and returns a zero record on failure. It never rewrites or
-migrates input. Strings are UTF-8 JSON; times use RFC 3339. The Go JSON decoder's
+`Decode[Snapshot|Capture|Scenario|Receipt|Comparison|Pin]` accepts one JSON
+object, at most 4 MiB, rejects unknown fields, unsupported versions (including
+zero), trailing values and invalid records, and returns a zero record on failure.
+It never rewrites or migrates input. Strings are UTF-8 JSON; times use RFC 3339.
+The Go JSON decoder's
 duplicate-key handling applies (later values replace/merge earlier values);
 records are local data, not signed canonical JSON.
 
@@ -37,11 +38,21 @@ than overwrite them. Optional fields use `omitempty`; required enums have no
 implicit safe-success zero value. A nil collection means no entries, not evidence
 of coverage.
 
+An immutable **Capture** record identifies one successful capture event: its
+`captured_at` RFC 3339 time, `mode`, base/candidate snapshot IDs, optional index
+snapshot ID, and exact selected untracked paths. It is stored separately from
+snapshots so recapturing unchanged content preserves snapshot IDs but records a
+new event. Capture times are event metadata, never inferred from file mtimes;
+older snapshots without a matching Capture record have no recorded capture time.
+The event ID is content-addressed like other records and does not change snapshot
+identity.
+
 ## Record fields
 
 | Record   | Required content and meaning                                                                                                                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Snapshot | Source mode (`commit`, `working_tree`, `index`, `merge_base`), resolved commit, merge-base only for that mode, files with relative path/content digest/Git mode, excluded and unsupported entries with reasons, completeness, ordinary diff digest, limits.                               |
+| Capture  | Successful capture time and mode, base/candidate and optional index snapshot IDs, and selected untracked paths. It is a new immutable event on every successful capture, even when all snapshot IDs are unchanged.                                                                        |
 | Scenario | Frozen concrete input/setup/actions artifact digest, driver, observer and rules digests, supported boundary, author and explicit limits. Expectations are deliberately absent.                                                                                                            |
 | Receipt  | Independent state fields, selected snapshot identities, ordered start/finish times, completeness, bounded artifact references and limits. Runner records additionally require both snapshots, scenario/input/driver/observer/rules bindings, both environments, and authorization digest. |
 | Pin      | Scenario, human expectation text (specific result or explicitly broader requirement), basis receipt and snapshot pair, human decision and chronological history. No evidence state, execution authority or observation fields.                                                            |
