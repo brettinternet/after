@@ -18,6 +18,14 @@ See [packaging, the repeatable demo and recovery](DEMO.md) for native distributi
 
 Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. Explicit `--base REF --target REF` selects a merge-base capture. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import requires caller-supplied `--producer` provenance and accepts optional `--captured-at RFC3339`; these claims are retained but not authenticated. `--snapshot` is an optional validated content digest, not proof the report ran on that capture. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect CANDIDATE_ID --base BASE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
 
+## Checkout root and private storage
+
+Project commands resolve the checkout root by checking for a `.git` directory or worktree `.git` file in the selected directory and its parents. The default selected directory is the invocation directory; `--project`, `AFTER_PROJECT`, or the YAML `project` setting can select another path inside a checkout. Resolution is filesystem-only and runs no Git command. It is shared by capture, import, inspect, compare, export, run, pin and review. The capture API itself still requires its caller to pass the resolved repository root explicitly.
+
+Outside a checkout, project commands exit 2 with exactly `after: not inside a Git repository — run AFTER in a checkout, or pass --project DIR` and create no `.after/` directory or lock file. `help`, `version` and `config` do not require a checkout; read-only project commands never create storage. Writable store opens create `.after/.gitignore` with `*` using the store's durable, no-overwrite publication path, including when an older store has no ignore file yet. This ignores only private store contents and does not edit the checkout's `.gitignore` or `.git/info/exclude`.
+
+Capture failures retain exit 1 and use fixed allowlisted reason/fix text, for example `after: capture failed: unmerged index is unsupported — resolve the index conflicts, then retry capture`. Repository content and absolute project paths are never interpolated into these diagnostics.
+
 Stored artifacts (including observer response/effect channels referenced by receipts) can also be inspected or exported by content ID. `--artifact-offset` and `--artifact-size` return exact base64 byte pages, up to 65536 bytes, with `next`, `total`, and `more`. A complete valid JSON artifact fitting one page also has a `document` field preserving numeric precision. Artifact content alone does not establish its producer or evidence state; inspect its referring receipt for provenance.
 
 ## Persistent expectations
@@ -63,17 +71,17 @@ AFTER reads configuration only when a command needs it. The explicit `--config F
 
 Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/whitespace strings and YAML `null` are unset and allow a lower layer to win. Explicit booleans and integers are values: `false` is not a default, and zero is not silently discarded. `diff_bytes: 0` is supported and suppresses patch bytes while retaining the change inventory; `repetitions: 0` is invalid.
 
-| YAML key        | Environment           | Flag              | Type and default           | Bounds/meaning                                        |
-| --------------- | --------------------- | ----------------- | -------------------------- | ----------------------------------------------------- |
-| `project`       | `AFTER_PROJECT`       | `--project`       | path; invocation directory | project root; output path hidden                      |
-| `repetitions`   | `AFTER_REPETITIONS`   | `--repetitions`   | integer; `1`               | 1–5 paired repetitions                                |
-| `run_seconds`   | `AFTER_RUN_SECONDS`   | `--run-seconds`   | integer; `180`             | 1–300 seconds per sandbox plan                        |
-| `output_bytes`  | `AFTER_OUTPUT_BYTES`  | `--output-bytes`  | integer; `65536`           | 1–1048576 bytes per container                         |
-| `interactive`   | `AFTER_INTERACTIVE`   | `--interactive`   | boolean; `true`            | permits a TTY prompt only; never authorizes execution |
-| `raw_diff`      | `AFTER_RAW_DIFF`      | `--raw-diff`      | boolean; `true`            | include patch bytes in inspection output              |
-| `diff_bytes`    | `AFTER_DIFF_BYTES`    | `--diff-bytes`    | integer; `65536`           | 0–65536 bytes per raw-diff page                       |
-| `docker_binary` | `AFTER_DOCKER_BINARY` | `--docker-binary` | string; unset              | must be an absolute trusted CLI path when set         |
-| `docker_host`   | `AFTER_DOCKER_HOST`   | `--docker-host`   | string; unset              | must be a local `unix:///` socket when set            |
+| YAML key        | Environment           | Flag              | Type and default           | Bounds/meaning                                                         |
+| --------------- | --------------------- | ----------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `project`       | `AFTER_PROJECT`       | `--project`       | path; invocation directory | selected checkout path; nearest `.git` ancestor is used; output hidden |
+| `repetitions`   | `AFTER_REPETITIONS`   | `--repetitions`   | integer; `1`               | 1–5 paired repetitions                                                 |
+| `run_seconds`   | `AFTER_RUN_SECONDS`   | `--run-seconds`   | integer; `180`             | 1–300 seconds per sandbox plan                                         |
+| `output_bytes`  | `AFTER_OUTPUT_BYTES`  | `--output-bytes`  | integer; `65536`           | 1–1048576 bytes per container                                          |
+| `interactive`   | `AFTER_INTERACTIVE`   | `--interactive`   | boolean; `true`            | permits a TTY prompt only; never authorizes execution                  |
+| `raw_diff`      | `AFTER_RAW_DIFF`      | `--raw-diff`      | boolean; `true`            | include patch bytes in inspection output                               |
+| `diff_bytes`    | `AFTER_DIFF_BYTES`    | `--diff-bytes`    | integer; `65536`           | 0–65536 bytes per raw-diff page                                        |
+| `docker_binary` | `AFTER_DOCKER_BINARY` | `--docker-binary` | string; unset              | must be an absolute trusted CLI path when set                          |
+| `docker_host`   | `AFTER_DOCKER_HOST`   | `--docker-host`   | string; unset              | must be a local `unix:///` socket when set                             |
 
 Docker binary and host must be configured together. There is deliberately no consent/authorization setting: permission is an interactive action or the specific `--approve` digest. Runtime values remain hidden in config output. YAML is limited to 64 KiB, one mapping document, regular non-symlink files, scalar values, and the listed keys. Duplicate/unknown keys, anchors/aliases, malformed documents, invalid types/ranges, and missing explicit files fail with a setting/source diagnostic.
 

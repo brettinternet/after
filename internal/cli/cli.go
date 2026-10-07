@@ -176,7 +176,7 @@ func normalizeArgs(args []string) []string {
 func commonFlags() []ucli.Flag {
 	return []ucli.Flag{
 		&ucli.StringFlag{Name: "config", Usage: "select a YAML configuration file"},
-		&ucli.StringFlag{Name: "project", Usage: "select the project directory"},
+		&ucli.StringFlag{Name: "project", Usage: "select a checkout path; root is its nearest .git ancestor"},
 		&ucli.StringFlag{Name: "docker-binary", Usage: "trusted absolute Docker CLI path"},
 		&ucli.StringFlag{Name: "docker-host", Usage: "explicit local unix:/// Docker socket"},
 		&ucli.IntFlag{Name: "repetitions", Usage: "paired run repetitions (1-5)"},
@@ -210,7 +210,22 @@ func configFlags(ctx *ucli.Context) (config.Config, error) {
 		}
 		values[key] = config.FlagValue{Value: value, Set: true}
 	}
-	return config.Load(config.Input{Flags: values})
+	cfg, err := config.Load(config.Input{Flags: values})
+	if err != nil {
+		return config.Config{}, err
+	}
+	if ctx.Command != nil && ctx.Command.Name == "config" {
+		return cfg, nil
+	}
+	root, ok := projectRoot(cfg.Project)
+	if !ok {
+		return config.Config{}, &exitError{
+			code:       ExitInvalid,
+			diagnostic: "after: not inside a Git repository — run AFTER in a checkout, or pass --project DIR",
+		}
+	}
+	cfg.Project = root
+	return cfg, nil
 }
 
 func writeJSON(state *invocation, kind string, data any) error {

@@ -282,8 +282,8 @@ func TestConcurrentEdits(t *testing.T) {
 					t.Fatalf("failure: %v %d", err, calls)
 				}
 				entries, _ := os.ReadDir(filepath.Join(d, ".after"))
-				if len(entries) != 1 {
-					t.Fatal("published failed capture")
+				if len(entries) != 2 || entries[0].Name() != ".gitignore" || entries[1].Name() != "writer.lock" {
+					t.Fatal("published failed capture", entries)
 				}
 			}
 		})

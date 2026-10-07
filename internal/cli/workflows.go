@@ -182,7 +182,7 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 	defer s.Close()
 	result, err := capture.Capture(state.ctx, cfg.Project, s, options)
 	if err != nil {
-		return operational("capture failed; repository was not changed")
+		return captureFailure(err)
 	}
 	type snapshotSummary struct {
 		ID           evidence.Digest       `json:"id"`

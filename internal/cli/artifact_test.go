@@ -15,6 +15,7 @@ import (
 
 func TestInspectArtifactPages(t *testing.T) {
 	project := t.TempDir()
+	makeProject(t, project)
 	config := filepath.Join(project, "empty.yaml")
 	if err := os.WriteFile(config, nil, 0600); err != nil {
 		t.Fatal(err)

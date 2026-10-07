@@ -63,6 +63,49 @@ func roundTrip[T Record](t *testing.T, s *Store, r T) {
 	}
 }
 
+func TestWritableOpenPublishesGitignoreAndReadOnlyOpenDoesNot(t *testing.T) {
+	project := t.TempDir()
+	writer, err := Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ignore := filepath.Join(project, ".after", ".gitignore")
+	assertIgnore := func() {
+		t.Helper()
+		data, err := os.ReadFile(ignore)
+		if err != nil || string(data) != "*\n" {
+			t.Fatalf("store ignore file: %q %v", data, err)
+		}
+		info, err := os.Stat(ignore)
+		if err != nil || info.Mode().Perm() != 0600 {
+			t.Fatalf("store ignore permissions: %v %v", info, err)
+		}
+	}
+	assertIgnore()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(ignore); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(ignore); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read-only open created the ignore file: %v", err)
+	}
+	writer, err = Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	assertIgnore()
+}
+
 func TestRoundTripImmutableRecords(t *testing.T) {
 	s, project := openTest(t)
 	snapshot, scenario, receipt, comparison, pin := fixtures(t, s)

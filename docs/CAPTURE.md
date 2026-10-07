@@ -4,6 +4,14 @@
 The [headless CLI](CLI.md) exposes capture and raw-diff inspection. Capture reads
 source; it never builds, tests, runs project commands or creates an execution receipt.
 
+Project commands resolve their checkout root by checking for a `.git` directory
+or worktree `.git` file from the selected directory upward. This lookup is
+filesystem-only; it runs no Git command. The CLI passes that root explicitly to
+`Capture`, which retains its no-discovery rule. If capture fails, the CLI prints
+an allowlisted fixed reason and fix, such as `after: capture failed: unmerged
+index is unsupported — resolve the index conflicts, then retry capture`. Git
+output, repository-controlled text and absolute project paths are never included.
+
 ## Selection and identity
 
 - Default: HEAD versus tracked working-tree files, plus explicitly selected

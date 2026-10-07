@@ -93,6 +93,10 @@ func Open(project string, writable bool, secrets []string) (*Store, error) {
 			return nil, fmt.Errorf("acquire writer lock: %w", err)
 		}
 		s.lock = lock
+		if err := s.publish(".gitignore", []byte("*\n")); err != nil {
+			s.Close()
+			return nil, fmt.Errorf("publish store ignore file: %w", err)
+		}
 	}
 	return s, nil
 }
