@@ -4,6 +4,7 @@ title: 'Accept short ID prefixes, record every capture, and list pin heads'
 status: To Do
 assignee: []
 created_date: '2026-10-06 21:14'
+updated_date: '2026-10-07 05:38'
 labels:
   - poc
   - cli
@@ -34,7 +35,7 @@ Scope, per docs/CLI-DESIGN.md "IDs and defaults": prefix resolution for every ID
 <!-- AC:BEGIN -->
 - [ ] #1 Every ID argument accepts a unique prefix of at least 4 hex characters, with or without `sha256:`, in any case, considering only valid record kinds; full IDs keep working, and fewer than 4 characters is an error that says so.
 - [ ] #2 No match exits 2 naming the kinds searched and `after log`; an ambiguous prefix exits 2 listing up to 10 matches as short ID, kind and a sanitized one-line description, with tests for ties across kinds and hostile descriptions.
-- [ ] #3 Each successful capture writes one immutable capture record; recapturing an unchanged tree yields the same snapshot IDs and a new capture record; failed captures write none; the record is in docs/SCHEMA.md with a validation test.
+- [x] #3 Each successful capture writes one immutable capture record; recapturing an unchanged tree yields the same snapshot IDs and a new capture record; failed captures write none; the record is in docs/SCHEMA.md with a validation test.
 - [ ] #4 Pin heads are the revisions no other revision extends, computed on each call; a fork returns each head, and readable output for an explicit older revision opens exactly that revision and names its newer heads.
 - [ ] #5 `--approve` rejects prefixes with an error that shows the full-digest form; docs/CLI.md documents prefixes and capture records.
 <!-- AC:END -->
@@ -46,3 +47,11 @@ Scope, per docs/CLI-DESIGN.md "IDs and defaults": prefix resolution for every ID
 - [ ] #3 Run each changed command in a real terminal at 80 columns and in a pipe, with and without NO_COLOR; record output excerpts in task notes.
 - [ ] #4 Commit implementation and final task state using the repository delivery workflow; no credentials or private receipts committed.
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Operator approved moving the immutable capture-record slice (AC3) into AFTER-35 to satisfy snapshot inspection capture times. AFTER-35 is implementing records in capture.Capture with unchanged snapshot IDs; this task must reuse that implementation rather than duplicate it. Prefix resolution and pin heads remain here. Recheck delivered evidence before checking AC3.
+
+Capture-record AC3 delivered on main in 71251bc through operator-approved AFTER-35 scope transfer. capture.Capture writes immutable evidence.Capture records; recapture/failure/validation tests and schema docs added. Independent focused verification confirmed new events with stable snapshot IDs and unchanged existing JSON. Parent fixed reference validation during bounded history lookup and added missing/mismatched reference regression tests; full task check:go and test passed after correction. Remaining scope: ID prefixes, ambiguity handling, pin heads and approval-prefix rules; do not recreate capture records.
+<!-- SECTION:NOTES:END -->
