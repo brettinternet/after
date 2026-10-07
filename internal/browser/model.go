@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 
 // Job persists its own engine results before returning IDs. Cancellation or a
 // stale UI completion must never erase those records. No job runs on selection.
-type Job func(context.Context) (string, error)
+type Job func(context.Context, Selection) (string, error)
 type Jobs struct {
 	Capture, Import Job
 	Actions         *Actions
@@ -35,9 +36,17 @@ type documentReady struct {
 	err     error
 }
 type finished struct {
-	request uint64
-	result  string
-	err     error
+	request   uint64
+	kind      string
+	selection Selection
+	result    string
+	err       error
+}
+type importedLoaded struct {
+	request   uint64
+	selection Selection
+	data      *Data
+	err       error
 }
 
 type Model struct {
@@ -50,9 +59,17 @@ type Model struct {
 	ctx, parent                          context.Context
 	cancel                               context.CancelFunc
 	workers                              sync.WaitGroup
-	jobCancel                            context.CancelFunc
+	jobCancel, captureCancel             context.CancelFunc
 	jobID, request, loadID               uint64
+	captureStarted                       time.Time
 	busy                                 bool
+	busyKind                             string
+	busyStarted                          time.Time
+	clockScheduled                       bool
+	activity                             []ActivityEvent
+	activityDropped, activityIndex       int
+	sessionActivityDetail                string
+	quitConfirm                          bool
 	width, height                        int
 	screen                               string
 	returnTo, helpFrom                   string
@@ -95,10 +112,22 @@ func (m *Model) Init() tea.Cmd {
 	commands := []tea.Cmd{m.spawn(func() tea.Msg { d, err := Load(m.ctx, selected); return loaded{id, d, err} })}
 	if m.jobs.CaptureOnStart && m.jobs.Actions != nil {
 		m.capturing = true
+		m.captureStarted = m.now()
+		m.recordActivity("capture started", "capturing the working tree", []evidence.Digest{selected.Pair.Base, selected.Pair.Candidate}, "")
+		ctx, cancel := context.WithCancel(m.ctx)
+		m.captureCancel = cancel
 		commands = append(commands, m.spawn(func() tea.Msg {
-			pair, err := m.jobs.Actions.Capture(m.ctx)
+			pair, err := m.jobs.Actions.Capture(ctx)
 			return snapshotReady{pair, err}
 		}))
+		if cmd := m.scheduleClock(); cmd != nil {
+			commands = append(commands, cmd)
+		}
+	}
+	if m.activeClock() {
+		if cmd := m.scheduleClock(); cmd != nil {
+			commands = append(commands, cmd)
+		}
 	}
 	return tea.Batch(commands...)
 }
@@ -120,7 +149,7 @@ func (m *Model) secondaryRow() bool {
 	if m.height <= 2 {
 		return false
 	}
-	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch"))
+	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity"))
 }
 func (m *Model) bodyRows() int {
 	_, jobLines := m.frameHeader()
@@ -136,6 +165,9 @@ func (m *Model) bodyRows() int {
 }
 func (m *Model) rows() int {
 	rows := m.bodyRows()
+	if m.screen == "activity" {
+		return m.activityRows()
+	}
 	if m.screen == "examples" || m.screen == "inventory" {
 		rows -= 2 // explanatory rows above the list
 		if m.screen == "examples" && m.data != nil && (m.data.Selection.OmittedEvidence > 0 || m.data.Selection.DiscoveryWarning) {
@@ -174,6 +206,13 @@ func (m *Model) cursor() *int {
 	return &m.index
 }
 func (m *Model) sections() []Section {
+	if m.screen == "inspector" && m.returnTo == "activity" {
+		index := len(m.activity) - 1 - m.activityIndex
+		if index >= 0 && index < len(m.activity) {
+			return activityDetail(m.activity[index])
+		}
+		return nil
+	}
 	if m.screen == "plan" {
 		if m.summaryUnavailable {
 			return []Section{{Name: "Exact plan", Content: m.preview}}
@@ -216,7 +255,7 @@ func (m *Model) loadDocument() tea.Cmd {
 		return documentReady{request: id, doc: doc, err: err}
 	})
 }
-func (m *Model) startJob(name string, job Job) tea.Cmd {
+func (m *Model) startJob(name, kind string, job Job) tea.Cmd {
 	if m.data == nil {
 		m.status = "Action unavailable until immutable records finish loading"
 		return nil
@@ -228,14 +267,43 @@ func (m *Model) startJob(name string, job Job) tea.Cmd {
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.jobCancel = cancel
 	m.busy = true
+	m.busyKind = kind
+	m.busyStarted = m.now()
 	m.jobID++
-	id := m.jobID
+	id, selected := m.jobID, m.selected
+	selected.Evidence = append([]evidence.Digest(nil), selected.Evidence...)
+	m.recordActivity(kind+" started", strings.ToLower(name)+" started for selected candidate", []evidence.Digest{selected.Pair.Candidate}, "")
 	m.status = name + " running for selected immutable basis | x cancel; navigation remains available"
-	return m.spawn(func() tea.Msg { result, err := job(ctx); cancel(); return finished{id, result, err} })
+	cmd := m.spawn(func() tea.Msg {
+		result, err := job(ctx, selected)
+		cancel()
+		return finished{request: id, kind: kind, selection: selected, result: result, err: err}
+	})
+	if tick := m.scheduleClock(); tick != nil {
+		return tea.Batch(cmd, tick)
+	}
+	return cmd
 }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if key.Paste {
+			return m, nil
+		}
+		if key.String() == "ctrl+c" {
+			m.quitConfirm = false
+			m.quitNow()
+			return m, tea.Quit
+		}
+		if m.quitConfirm {
+			switch key.String() {
+			case "y", "enter":
+				m.quitConfirm = false
+				m.quitNow()
+				return m, tea.Quit
+			case "n", "esc":
+				m.quitConfirm = false
+				m.status = "Run continues; q asks again and Ctrl-C quits now"
+			}
 			return m, nil
 		}
 		binding, found := keyBindingFor(key.String())
@@ -244,6 +312,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if reason := m.keyReason(binding, false); reason != "" {
 			m.status = "Can't " + binding.label + ": " + reason
+			m.recordActivity("action unavailable", binding.label, []evidence.Digest{m.selected.Pair.Base, m.selected.Pair.Candidate}, m.status)
 			return m, nil
 		}
 		return m, m.dispatch(binding)
@@ -299,20 +368,85 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.busy = false
+		m.busyKind = ""
+		m.busyStarted = time.Time{}
 		m.jobCancel = nil
-		m.status = "Job finished; stored result retained, selection unchanged"
-		result := msg.result
 		if msg.err != nil {
 			m.status = "Job failed/cancelled; stored results retained if published"
-			result += "\n" + msg.err.Error()
+			failure := msg.kind + " failed"
+			summary := "operation failed; any published result remains stored"
+			if errors.Is(msg.err, context.Canceled) {
+				failure, summary = msg.kind+" cancelled", "operation cancelled; any published result remains stored"
+			}
+			m.recordActivity(failure, summary, []evidence.Digest{msg.selection.Pair.Candidate}, msg.err.Error())
+			return m, nil
 		}
-		// Keep full IDs and errors in a data view, never a clipped-only toast.
-		if m.data != nil {
-			m.data.Entries = append(m.data.Entries, Entry{Summary: "job completion, not evidence", Name: "background result", Sections: []Section{{Name: "stored result IDs / diagnostic", Content: []byte(result)}}})
+		if msg.kind == "import" {
+			id := evidence.Digest(msg.result)
+			ids := []evidence.Digest{id, msg.selection.Pair.Candidate}
+			if containsDigest(m.selected.Evidence, id) {
+				m.recordActivity("import finished", "report stored and already loaded", ids, "")
+				m.status = "Report stored and loaded · s Activity"
+				return m, nil
+			}
+			if len(m.selected.Evidence) >= MaxEvidence {
+				m.recordActivity("import finished", "report stored; 32 evidence IDs already loaded", ids, "report remains stored but was not added to the loaded evidence")
+				m.status = "Report stored; 32 evidence IDs already loaded · s Activity"
+				return m, nil
+			}
+			m.recordActivity("import finished", "report stored and added to loaded evidence", ids, "")
+			selected := m.selected
+			selected.Discover = false
+			selected.Evidence = append(append([]evidence.Digest(nil), selected.Evidence...), id)
+			m.loadID++
+			request := m.loadID
+			m.status = "Report stored; loading its reported cards"
+			return m, m.spawn(func() tea.Msg {
+				data, err := Load(m.ctx, selected)
+				return importedLoaded{request: request, selection: selected, data: data, err: err}
+			})
+		}
+		m.status = "Capture finished; selected pair unchanged · s Activity"
+		if msg.kind == "capture" {
+			m.recordActivity("capture finished", "capture completed; review the new candidate with u", []evidence.Digest{msg.selection.Pair.Candidate}, msg.result)
+		} else {
+			m.recordActivity(msg.kind+" finished", "operation finished; stored result retained", []evidence.Digest{msg.selection.Pair.Candidate, evidence.Digest(msg.result)}, "")
+		}
+	case importedLoaded:
+		if msg.request != m.loadID {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.status = "Report remains stored; its cards could not be loaded · s Activity"
+			m.recordActivity("import load failed", "stored report cards could not be loaded", []evidence.Digest{msg.selection.Pair.Candidate}, msg.err.Error())
+			return m, nil
+		}
+		m.selected, m.data = msg.data.Selection, msg.data
+		m.index = max(len(m.data.Entries)-1, 0)
+		m.status = "Imported report cards loaded without restart · s Activity"
+		if m.screen == "inspector" {
+			m.screen = "examples"
+			m.returnTo = ""
+			m.doc = nil
+		}
+		m.request++
+		m.loadID++
+		if m.screen == "patch" {
+			return m, m.loadDocument()
 		}
 	}
 	m.top = max(0, m.top)
 	return m, nil
+}
+
+func (m *Model) quitNow() {
+	if m.screen == "plan" || m.screen == "help" && m.helpFrom == "plan" {
+		m.recordActivity("plan denied", "quitting denied the prepared plan; no project execution", []evidence.Digest{m.planPair.Base, m.planPair.Candidate}, "")
+		m.invalidatePlan()
+		m.screen, m.helpFrom = "examples", ""
+		m.status = "Execution denied; no project execution"
+	}
+	m.cancel()
 }
 
 func (m *Model) dispatch(binding keyBinding) tea.Cmd {
@@ -321,12 +455,12 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 	}
 	switch binding.action {
 	case keyQuit:
-		if m.screen == "plan" || m.screen == "help" && m.helpFrom == "plan" {
-			m.invalidatePlan()
-			m.screen, m.helpFrom = "examples", ""
-			m.status = "Execution denied; no project execution"
+		if m.running {
+			m.quitConfirm = true
+			m.status = "Confirm quit? y cancels the run and quits · n keeps running"
+			return nil
 		}
-		m.cancel()
+		m.quitNow()
 		return tea.Quit
 	case keyHelp:
 		m.request++
@@ -352,6 +486,8 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		return m.switchView(1)
 	case keyDiff:
 		return m.switchView(2)
+	case keyActivity:
+		return m.switchView(3)
 	case keyNextFile, keyPreviousFile:
 		delta := 1
 		if binding.action == keyPreviousFile {
@@ -374,10 +510,10 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 			m.section = (m.section + delta + count) % count
 			return m.loadDocument()
 		}
-		current := map[string]int{"examples": 0, "inventory": 1, "patch": 2}[m.screen]
+		current := map[string]int{"examples": 0, "inventory": 1, "patch": 2, "activity": 3}[m.screen]
 		count := 1
 		if m.data != nil {
-			count = 3
+			count = 4
 		}
 		delta := 1
 		if binding.action == keyPrevious {
@@ -408,10 +544,10 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		m.move(binding.action)
 	case keyCapture:
 		if m.jobs.Actions == nil {
-			return m.startJob("Capture", m.jobs.Capture)
+			return m.startJob("Capture", "capture", m.jobs.Capture)
 		}
 	case keyImport:
-		return m.startJob("Import", m.jobs.Import)
+		return m.startJob("Import", "import", m.jobs.Import)
 	}
 	return nil
 }
@@ -440,6 +576,9 @@ func (m *Model) switchView(view int) tea.Cmd {
 			}
 		}
 		return m.loadDocument()
+	case 3:
+		m.screen = "activity"
+		return nil
 	default:
 		return nil
 	}
@@ -456,6 +595,15 @@ func (m *Model) move(action keyAction) {
 		delta = -m.rows()
 	}
 	switch m.screen {
+	case "activity":
+		m.activityIndex += delta
+		if action == keyStart {
+			m.activityIndex = 0
+		}
+		if action == keyEnd {
+			m.activityIndex = len(m.activity) - 1
+		}
+		m.activityIndex = min(max(m.activityIndex, 0), max(len(m.activity)-1, 0))
 	case "examples", "inventory":
 		p := m.cursor()
 		*p += delta
@@ -538,7 +686,10 @@ func (m *Model) frameHeader() (string, []string) {
 	}
 	indicators := []string{}
 	if m.capturing {
-		indicators = append(indicators, "capturing")
+		indicators = append(indicators, "capturing "+elapsed(m.now().Sub(m.captureStarted)))
+	}
+	if m.busy {
+		indicators = append(indicators, strings.ToLower(m.busyKind)+" "+elapsed(m.now().Sub(m.busyStarted)))
 	}
 	if m.pending != nil {
 		indicators = append(indicators, "new capture "+shortID(m.pending.Candidate)+" · u")
@@ -589,11 +740,11 @@ func elapsed(duration time.Duration) string {
 }
 
 func (m *Model) tabBar() string {
-	labels := []string{"1 Overview", fmt.Sprintf("2 Changes %d", lenInventory(m.data)), "3 Diff"}
+	labels := []string{"1 Overview", fmt.Sprintf("2 Changes %d", lenInventory(m.data)), "3 Diff", "4 Activity"}
 	if m.width < 60 {
-		labels = []string{"1 Ov", fmt.Sprintf("2 Ch %d", lenInventory(m.data)), "3 Df"}
+		labels = []string{"1 Ov", fmt.Sprintf("2 Ch %d", lenInventory(m.data)), "3 Df", "4 Ac"}
 	}
-	active := map[string]int{"examples": 0, "inventory": 1, "patch": 2}[m.screen]
+	active := map[string]int{"examples": 0, "inventory": 1, "patch": 2, "activity": 3}[m.screen]
 	count := 1
 	if m.data != nil {
 		count = len(labels)
@@ -674,6 +825,12 @@ func (m *Model) breadcrumb() string {
 	root := "Overview"
 	if m.returnTo == "inventory" {
 		root = "Changes"
+	} else if m.returnTo == "activity" {
+		index := len(m.activity) - 1 - m.activityIndex
+		if index >= 0 && index < len(m.activity) {
+			return m.theme.Render("Activity › "+m.activity[index].Kind, m.width, terminal.Strong, false)
+		}
+		return m.theme.Render("Activity", m.width, terminal.Strong, false)
 	}
 	entries := m.entries()
 	i := *m.cursor()
@@ -705,6 +862,9 @@ func lenInventory(data *Data) int {
 }
 
 func (m *Model) statusLine() string {
+	if m.quitConfirm {
+		return "Confirm quit? y cancels the run and quits · n keeps running"
+	}
 	if m.pending != nil {
 		if strings.HasPrefix(m.status, "New capture ") {
 			return "New capture " + shortID(m.pending.Candidate) + " — u reviews it"
@@ -712,7 +872,20 @@ func (m *Model) statusLine() string {
 		return m.status + " · new capture " + shortID(m.pending.Candidate) + " · u"
 	}
 	if m.running {
-		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels"
+		if strings.HasPrefix(m.status, "Run continues") {
+			return "Run continues · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels · q confirms quit"
+		}
+		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels · q confirms quit"
+	}
+	if m.capturing {
+		return "Capturing · " + elapsed(m.now().Sub(m.captureStarted)) + " · x cancels"
+	}
+	if m.busy {
+		kind := m.busyKind
+		if kind != "" {
+			kind = strings.ToUpper(kind[:1]) + kind[1:]
+		}
+		return kind + " · " + elapsed(m.now().Sub(m.busyStarted)) + " · x cancels"
 	}
 	return m.status
 }
@@ -727,7 +900,7 @@ func (m *Model) View() string {
 		lines = append(lines, m.theme.Render(indicator, m.width, terminal.Attention, false))
 	}
 	if m.secondaryRow() {
-		if m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" {
+		if m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity" {
 			lines = append(lines, m.tabBar())
 		} else {
 			lines = append(lines, m.breadcrumb())
@@ -749,6 +922,22 @@ func (m *Model) View() string {
 		top := min(m.top, max(len(help)-1, 0))
 		for _, line := range help[top:min(top+m.bodyRows(), len(help))] {
 			add(window(line, m.left, m.width))
+		}
+	case "activity":
+		for _, line := range m.activitySessionLines() {
+			add(line)
+		}
+		add("ACTIVITY")
+		if m.activityDropped > 0 {
+			add(fmt.Sprintf("%d older activity events dropped", m.activityDropped))
+		}
+		if len(m.activity) == 0 {
+			add("No Activity events yet")
+		} else {
+			top := max(0, m.activityIndex-m.activityRows()+1)
+			for index := top; index < min(len(m.activity), top+m.activityRows()); index++ {
+				body = append(body, m.activityLine(index, index == m.activityIndex))
+			}
 		}
 	case "examples":
 		entries := m.entries()

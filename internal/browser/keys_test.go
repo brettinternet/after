@@ -17,7 +17,7 @@ func TestEveryDispatchedKeyHasOneKeyMapEntry(t *testing.T) {
 	dispatched := []string{
 		"q", "ctrl+c", "x", "c", "i", "?", "esc", "d", "enter", "tab", "shift+tab",
 		"b", "right", "l", "left", "h", "j", "down", "k", "up", "pgdown", "pgup",
-		"home", "end", "g", "G", "s", "p", "u", "r", "y", "n", "a", "1", "2", "3", "]", "[", "}", "{",
+		"home", "end", "g", "G", "s", "p", "u", "r", "y", "n", "a", "1", "2", "3", "4", "]", "[", "}", "{",
 	}
 	seen := make(map[string]bool)
 	for _, key := range dispatched {
@@ -51,7 +51,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	drain(m, m.Init())
 	m.width, m.height = 120, 100
 	hints := m.keyHints()
-	for _, want := range []string{"q quit", "? help", "1 Overview", "2 Changes", "3 Diff", "Enter open"} {
+	for _, want := range []string{"q quit", "? help", "1 Overview", "2 Changes", "3 Diff", "4 Activity", "Enter open"} {
 		if !strings.Contains(hints, want) {
 			t.Fatalf("missing enabled hint %q in %q", want, hints)
 		}
@@ -63,7 +63,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	}
 	step(m, key("?"))
 	help := m.View()
-	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin, not a snapshot", "pin acceptance is not available"} {
+	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin, not a snapshot", "pin acceptance is not available", "s  Open Activity and record this session reference"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("grouped help missing %q:\n%s", want, help)
 		}
@@ -194,6 +194,14 @@ func TestNumberAndTabNavigationAndColorlessActiveTab(t *testing.T) {
 	step(m, tea.KeyMsg{Type: tea.KeyShiftTab})
 	if m.screen != "inventory" {
 		t.Fatal("Shift+Tab did not return to Changes")
+	}
+	step(m, key("4"))
+	if m.screen != "activity" || !strings.Contains(m.View(), "[4 Activity]") {
+		t.Fatal("4 did not switch to Activity", m.View())
+	}
+	step(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.screen != "examples" {
+		t.Fatal("Tab did not cycle from Activity to Overview")
 	}
 	step(m, key("1"))
 	if m.screen != "examples" || !strings.Contains(m.View(), "[1 Overview]") {

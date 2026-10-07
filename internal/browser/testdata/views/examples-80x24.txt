@@ -1,5 +1,5 @@
 AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
-[1 Overview]   2 Changes 6   3 Diff
+[1 Overview]   2 Changes 6   3 Diff   4 Activity
 Badges: finite evidence only · Enter for full state and scope
 > [DIFFERENT]   12h same-key retry · provider requests … observed · current
   [EQUAL]       30s same-key retry · provider requests … observed · current

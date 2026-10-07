@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brettinternet/after/internal/gotestreport"
+	"github.com/brettinternet/after/internal/store"
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
@@ -44,6 +46,7 @@ func TestBrowserPTY(t *testing.T) {
 	if code != 0 {
 		t.Fatal(diagnostic)
 	}
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() {}\n// candidate changed after launch\n")
 	var imported struct{ Data struct{ ID string } }
 	if err := json.Unmarshal([]byte(out), &imported); err != nil {
 		t.Fatal(err)
@@ -76,23 +79,27 @@ func TestBrowserPTY(t *testing.T) {
 		}
 	}()
 	var transcript, unread strings.Builder
-	expect := func(want string) {
+	expect := func(wants ...string) {
 		t.Helper()
 		deadline := time.After(10 * time.Second)
 		for {
-			if strings.Contains(unread.String(), want) {
+			found := true
+			for _, want := range wants {
+				found = found && strings.Contains(unread.String(), want)
+			}
+			if found {
 				unread.Reset()
 				return
 			}
 			select {
 			case chunk, ok := <-chunks:
 				if !ok {
-					t.Fatal("PTY closed before", want)
+					t.Fatal("PTY closed before", wants)
 				}
 				transcript.WriteString(chunk)
 				unread.WriteString(chunk)
 			case <-deadline:
-				t.Fatalf("no %q in PTY: %q", want, transcript.String())
+				t.Fatalf("no %v in PTY: %q", wants, transcript.String())
 			}
 		}
 	}
@@ -124,9 +131,18 @@ func TestBrowserPTY(t *testing.T) {
 	send("\x1b")
 	expect("1 Overview")
 	send("c")
-	expect("No new capture; the selected pair is unchanged")
+	expect("u reviews it")
+	if !strings.Contains(transcript.String(), "New capture ") {
+		t.Fatal("capture completion ID missing from the PTY")
+	}
+	send("u")
+	expect("Snapshot selected")
 	send("i")
-	expect("Job finished; stored result retained")
+	expect("Imported report cards loaded without restart")
+	send("1")
+	expect("[STALE]", "[REPORTED]")
+	send("s")
+	expect("4 Activity", "SESSION", "import finished")
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 8, Cols: 32}); err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +165,42 @@ func TestBrowserPTY(t *testing.T) {
 	}
 	var result struct {
 		Kind string `json:"kind"`
+		Data struct {
+			Pair struct {
+				Candidate string `json:"candidate"`
+			} `json:"pair"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Kind != "review_session" {
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.Kind != "review_session" || result.Data.Pair.Candidate == "" {
 		t.Fatalf("--json review result missing from stdout: %q %v", stdout.String(), err)
+	}
+	records, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := records.List("artifact")
+	if err != nil {
+		records.Close()
+		t.Fatal(err)
+	}
+	boundToSelected := false
+	for _, artifact := range artifacts {
+		metadata, err := records.ReadArtifactMetadata(artifact.ID)
+		if err != nil || metadata.Channel != "report" {
+			continue
+		}
+		raw, err := records.ReadBlob(metadata.Content)
+		if err != nil {
+			continue
+		}
+		var importedReport gotestreport.Report
+		if json.Unmarshal(raw, &importedReport) == nil && importedReport.Metadata.Producer == "PTY Go report" && string(importedReport.Metadata.Snapshot) == result.Data.Pair.Candidate {
+			boundToSelected = true
+		}
+	}
+	records.Close()
+	if !boundToSelected {
+		t.Fatal("live i import was not bound to the candidate selected before keypress")
 	}
 	slave.Close()
 	for chunk := range chunks {
@@ -167,7 +216,7 @@ func TestBrowserPTY(t *testing.T) {
 			t.Fatal("missing restoration", required)
 		}
 	}
-	t.Log("PTY: capture -> import -> review reported/unknown -> inspector -> inventory -> raw captured patch -> help -> background capture -> background import -> 32x8 resize -> quit; termios/alternate-screen/cursor restored, no payload controls")
+	t.Log("PTY: review stored report -> help -> live capture/select -> keypress-bound import -> immediate reported cards -> Activity/session -> 32x8 resize -> quit; import candidate binding and terminal restoration verified, no payload controls")
 }
 
 func TestBrowserArgumentSafety(t *testing.T) {

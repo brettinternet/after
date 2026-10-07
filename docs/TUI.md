@@ -1,8 +1,8 @@
 # Captured evidence review loop
 
 `after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
-The responsive frame and contextual key map from AFTER-23 are implemented; the
-remaining redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
+The responsive frame, contextual key map, review session and Activity view are
+implemented; later redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after review                         # capture HEAD vs working tree; open or resume
@@ -21,14 +21,14 @@ Opening an explicit snapshot, record ID or pair does not read or change the save
 The frame header shows the sanitized project directory name, short base and
 candidate snapshot IDs, and source words from the stored snapshot records:
 `commit <short hash>`, `working tree`, `staged`, or `merge base <short hash>`.
-A ready capture is shown as `new capture <id> · u`; an authorized run shows its
-elapsed time and `x` cancellation key. The Overview, Changes (with inventory
-count), and Diff tabs exist after records load. The active tab is reverse video
+A ready capture is shown as `new capture <id> · u`; active capture, import and run
+work show elapsed time, updated once per second, and no percentage. The Overview,
+Changes (with inventory count), Diff and Activity tabs exist after records load. The active tab is reverse video
 in color mode and bracketed in `NO_COLOR` mode. A detail screen replaces tabs
 with a breadcrumb and the selected row's typed badge.
 
-Number keys `1`–`3` and Tab/Shift+Tab switch between Overview, Changes, and Diff.
-In a detail or preview, Tab/Shift+Tab moves between document sections. In Diff,
+Number keys `1`–`4` and Tab/Shift+Tab switch between Overview, Changes, Diff and
+Activity. In a detail or preview, Tab/Shift+Tab moves between document sections. In Diff,
 `]`/`[` move through indexed files and `}`/`{` move through indexed hunks. At fewer
 than 12 rows the tab bar hides (number keys still work); below 7 rows the status
 line hides and hints shrink to `? help · q quit`. Below 60 columns the project
@@ -43,7 +43,7 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | Key                                                | Action                                                                                      |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                                 |
-| `1`–`3`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                             |
+| `1`–`4`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                             |
 | Enter                                              | Inspect the selected record or inventory entry                                              |
 | `d` / `2`                                          | Open Changes: the complete unclassified inventory                                           |
 | `3`                                                | Open the captured raw Diff                                                                  |
@@ -59,9 +59,19 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | `p`                                                | Pin the selected measured provider-request count as a finite expectation                    |
 | `r`                                                | Prepare the exact frozen offline execution plan without executing                           |
 | `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                        |
-| `s`                                                | Inspect snapshot IDs, pin revisions and retained result IDs for restart                     |
+| `s` / `4`                                          | Open Activity and inspect the saved review, pair and loaded evidence                        |
 | `x`                                                | Request cancellation of an active owned job                                                 |
-| `q` / Ctrl-C                                       | Quit, cancel and join owned work, restore the terminal                                      |
+| `q` / Ctrl-C                                       | During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits now   |
+
+`s` opens Activity and records the session references without adding evidence
+rows. Activity records capture/import/run lifecycle, plan decisions, selection
+changes and failures; `Enter` opens full IDs and the full sanitized error. The
+log keeps at most 64 events and states how many older events were dropped. A
+successful `i` import is bound to the candidate selected at keypress and its
+reported cards load immediately when fewer than 32 evidence IDs are already
+loaded. At that limit the immutable report remains stored and Activity retains
+its ID. Repeated `s` presses with unchanged session references grow neither
+Activity nor the evidence list.
 
 `a` no longer accepts a capture. It is reserved for pin acceptance, which is not
 yet available in this TUI; help reports that action as disabled.

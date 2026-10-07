@@ -365,8 +365,8 @@ func TestConsentFallbackKeepsAndApprovesExactPreviewBytes(t *testing.T) {
 		t.Fatalf("runner did not strictly decode the exact malformed preview: %#v", result)
 	}
 	m.Update(result)
-	if m.running || !strings.Contains(m.status, "saved execution plan no longer matches stored inputs") {
-		t.Fatal("malformed approved bytes did not fail closed", m.status)
+	if m.running || len(m.activity) == 0 || !strings.Contains(m.activity[len(m.activity)-1].Detail, "saved execution plan no longer matches stored inputs") {
+		t.Fatal("malformed approved bytes did not fail closed or log the full error", m.status, m.activity)
 	}
 }
 

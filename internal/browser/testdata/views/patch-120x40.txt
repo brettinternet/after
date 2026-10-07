@@ -1,5 +1,5 @@
 AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
-1 Overview   2 Changes 6   [3 Diff]
+1 Overview   2 Changes 6   [3 Diff]   4 Activity
 Section 1/2 | 470 stored bytes | text | pan 0
 data | captured raw diff
 app/config.go · file 1 of 2 · captured patch · modified
@@ -25,4 +25,4 @@ app/config.go · file 1 of 2 · captured patch · modified
             │ KcmZQzWC8#H2LJ>B
             │
 Stored records only; no project execution
-q quit · ? help · Esc back · 1 Overview · 2 Changes · 3 Diff · Tab next view · Shift+Tab previous · ] next file
+q quit · ? help · Esc back · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous

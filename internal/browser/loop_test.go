@@ -18,7 +18,18 @@ import (
 
 func drain(m *Model, cmd tea.Cmd) {
 	for cmd != nil {
-		_, cmd = m.Update(cmd())
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for index, command := range batch {
+				if m.clockScheduled && index == len(batch)-1 {
+					m.clockScheduled = false
+					continue
+				}
+				drain(m, command)
+			}
+			return
+		}
+		_, cmd = m.Update(msg)
 	}
 }
 func press(m *Model, s string) { _, cmd := m.Update(key(s)); drain(m, cmd) }

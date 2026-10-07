@@ -25,8 +25,7 @@ func runBrowser(state *invocation, ctx *ucli.Context, cfg config.Config, selecti
 	jobs := browser.Jobs{Actions: actions, CaptureOnStart: captureOnStart}
 	if ctx.IsSet("import-file") {
 		file, producer := ctx.String("import-file"), ctx.String("producer")
-		candidate := selection.Pair.Candidate
-		jobs.Import = func(jobctx context.Context) (string, error) {
+		jobs.Import = func(jobctx context.Context, selected browser.Selection) (string, error) {
 			if err := jobctx.Err(); err != nil {
 				return "", err
 			}
@@ -35,7 +34,7 @@ func runBrowser(state *invocation, ctx *ucli.Context, cfg config.Config, selecti
 				return "", err
 			}
 			defer input.Close()
-			report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, Snapshot: candidate, ImportedAt: time.Now().UTC()})
+			report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, Snapshot: selected.Pair.Candidate, ImportedAt: time.Now().UTC()})
 			if err != nil {
 				return "", err
 			}
@@ -52,12 +51,11 @@ func runBrowser(state *invocation, ctx *ucli.Context, cfg config.Config, selecti
 		}
 	}
 	m := browser.New(state.ctx, selection, jobs)
-	m.SetReviewSession(session, func(updated browser.ReviewSession) error {
-		if !saveSession {
-			return nil
-		}
-		return actions.SaveReviewSession(updated)
-	})
+	var persistSession func(browser.ReviewSession) error
+	if saveSession {
+		persistSession = func(updated browser.ReviewSession) error { return actions.SaveReviewSession(updated) }
+	}
+	m.SetReviewSession(session, persistSession)
 	err := browser.Run(m, state.reader, state.stderr)
 	if err != nil {
 		return operational("terminal review failed")

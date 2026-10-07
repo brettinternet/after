@@ -246,8 +246,9 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(2) }\n")
 			p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
 			p.expect("AFTER · project")
-			p.expect("Stored records only")
-			p.expect("New capture ")
+			// The transient loaded status can be replaced before the next frame.
+			// The pending-capture header survives either completion order.
+			p.expect("new capture ")
 			p.send("u")
 			p.expect("Snapshot selected; prior evidence remains history")
 			selectedBeforeQuit := readSession()
@@ -267,7 +268,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			p.expect("Replaced saved review ")
 			p.expect("AFTER · project")
 			p.send("c")
-			p.expect("Capture running; selected pair unchanged")
+			// A fast capture may finish between renderer frames.
 			p.expect("No new capture; the selected pair is unchanged")
 			replacedSelection, _ := p.finish()
 			allTranscript.WriteString(p.transcript.String())

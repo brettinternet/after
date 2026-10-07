@@ -114,9 +114,7 @@ func imported(t *testing.T, s *store.Store, pair evidence.SnapshotPair) evidence
 func key(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 func step(m *Model, msg tea.Msg) {
 	_, cmd := m.Update(msg)
-	if cmd != nil {
-		m.Update(cmd())
-	}
+	drain(m, cmd)
 }
 func TestEngineBrowserAndCapturedPages(t *testing.T) {
 	s, sel := setup(t, true)
@@ -386,7 +384,7 @@ func TestStatesAndLatePersistedRun(t *testing.T) {
 	defer m.Close()
 	m.data = &Data{}
 	var receipt evidence.Receipt
-	cmd := m.startJob("Run", func(ctx context.Context) (string, error) {
+	cmd := m.startJob("Run", "run", func(ctx context.Context, _ Selection) (string, error) {
 		close(entered)
 		<-release
 		r, err := (runner.Executor{}).Run(ctx, s, plan, "not authorized")
@@ -398,8 +396,12 @@ func TestStatesAndLatePersistedRun(t *testing.T) {
 	step(m, tea.WindowSizeMsg{Width: 40, Height: 10})
 	m.jobID++ // completion belongs to an older selection/request
 	close(release)
-	msg := cmd()
-	m.Update(msg)
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != 2 {
+		t.Fatal("run operation did not schedule its clock")
+	}
+	m.clockScheduled = false
+	m.Update(batch[0]())
 	if len(m.data.Entries) != 0 {
 		t.Fatal("late result attached")
 	}
@@ -426,25 +428,44 @@ func TestStatesAndLatePersistedRun(t *testing.T) {
 		}
 	}
 }
-func TestJobsWaitForInitialLoad(t *testing.T) {
+func TestJobsWaitForInitialLoadAndImportIntoLoadedEvidence(t *testing.T) {
 	for _, action := range []string{"c", "i"} {
 		t.Run(action, func(t *testing.T) {
-			job := func(context.Context) (string, error) { return "persisted-result-id", nil }
-			m := New(t.Context(), Selection{}, Jobs{Capture: job, Import: job})
+			s, selected := setup(t, false)
+			defer s.Close()
+			reportID := imported(t, s, selected.Pair)
+			seenCandidate := evidence.Digest("")
+			job := func(_ context.Context, selection Selection) (string, error) {
+				seenCandidate = selection.Pair.Candidate
+				if action == "i" {
+					return string(reportID), nil
+				}
+				return "capture-result", nil
+			}
+			m := New(t.Context(), selected, Jobs{Capture: job, Import: job})
 			defer m.Close()
 			m.loadID = 1
 			_, cmd := m.Update(key(action))
 			if cmd != nil || m.busy || !strings.Contains(m.status, "wait for stored records to load") {
 				t.Fatal("job started before its result could be retained", m.status)
 			}
-			m.Update(loaded{request: 1, data: &Data{}})
-			step(m, key(action))
-			if len(m.data.Entries) != 1 {
-				t.Fatal("completion lost after initial load")
+			data, err := Load(t.Context(), selected)
+			if err != nil {
+				t.Fatal(err)
 			}
-			step(m, tea.KeyMsg{Type: tea.KeyEnter})
-			if m.doc == nil || !strings.Contains(string(m.doc.RawBytes()), "persisted-result-id") {
-				t.Fatal("returned ID not inspectable", m.View())
+			m.Update(loaded{request: 1, data: data})
+			step(m, key(action))
+			if seenCandidate != selected.Pair.Candidate {
+				t.Fatal("background job did not receive the selected candidate", seenCandidate)
+			}
+			if action == "c" {
+				if len(m.data.Entries) != 0 || len(m.activity) == 0 {
+					t.Fatal("capture completion polluted evidence instead of Activity", m.data.Entries, m.activity)
+				}
+				return
+			}
+			if !containsDigest(m.selected.Evidence, reportID) || len(m.data.Entries) == 0 || !strings.Contains(m.status, "cards loaded") {
+				t.Fatal("import did not immediately add report cards", m.status, m.selected.Evidence, m.data.Entries)
 			}
 		})
 	}
@@ -465,7 +486,7 @@ func TestBackgroundCaptureFailureKeepsReviewOpen(t *testing.T) {
 
 func TestCancelDoesNotBlockNavigation(t *testing.T) {
 	started, stopped := make(chan struct{}), make(chan struct{})
-	m := New(context.Background(), Selection{}, Jobs{Capture: func(ctx context.Context) (string, error) {
+	m := New(context.Background(), Selection{}, Jobs{Capture: func(ctx context.Context, _ Selection) (string, error) {
 		close(started)
 		<-ctx.Done()
 		close(stopped)
@@ -478,7 +499,7 @@ func TestCancelDoesNotBlockNavigation(t *testing.T) {
 	step(m, key("j"))
 	step(m, key("?"))
 	step(m, key("x"))
-	m.Update(cmd())
+	drain(m, cmd)
 	<-stopped
 	if m.index != 1 || m.busy || !strings.Contains(m.status, "cancelled") {
 		t.Fatal("navigation/cancellation lost")

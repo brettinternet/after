@@ -136,7 +136,7 @@ func TestCaseRowsFromStoredWitnesses(t *testing.T) {
 func TestGoldenViews(t *testing.T) {
 	sel := viewSelection(t)
 	for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 40}, {Width: 80, Height: 24}, {Width: 40, Height: 12}} {
-		for _, screen := range []string{"examples", "inventory", "patch"} {
+		for _, screen := range []string{"examples", "inventory", "patch", "activity"} {
 			name := fmt.Sprintf("%s-%dx%d", screen, size.Width, size.Height)
 			t.Run(name, func(t *testing.T) {
 				m := New(t.Context(), sel, Jobs{})
@@ -147,6 +147,10 @@ func TestGoldenViews(t *testing.T) {
 				step(m, size)
 				if screen == "patch" {
 					step(m, key("3"))
+				} else if screen == "activity" {
+					m.recordActivity("capture finished", "candidate ready", []evidence.Digest{sel.Pair.Base, sel.Pair.Candidate}, "")
+					m.recordActivity("session opened", "opened Activity", []evidence.Digest{sel.Pair.Base, sel.Pair.Candidate}, "")
+					m.screen = screen
 				} else {
 					m.screen = screen
 				}

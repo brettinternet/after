@@ -4,6 +4,7 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/store"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
@@ -146,6 +148,10 @@ func TestResponsiveFramePTY(t *testing.T) {
 					t.Fatal(err)
 				}
 				waitFor("Can't Go to the next indexed hunk")
+				if _, err := master.Write([]byte("s")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("4 Activity", "SESSION", "ACTIVITY", "capture finished")
 				if _, err := master.Write([]byte("q")); err != nil {
 					t.Fatal(err)
 				}
@@ -189,9 +195,147 @@ func TestResponsiveFramePTY(t *testing.T) {
 				t.Logf("real PTY %dx%d %s excerpt:\n%s", size.width, size.height, name, excerpt)
 				t.Logf("real PTY Changes excerpt: %s", ptyExcerpt(changeExcerpt, "computed from captured sources — not Git's patch"))
 				t.Logf("real PTY Diff excerpt: %s", ptyExcerpt(plain, "computed from captured sources — not Git's patch"))
+				t.Logf("real PTY Activity excerpt: %s", ptyExcerpt(plain, "ACTIVITY"))
 			})
 		}
 	}
+}
+
+func TestRunQuitPTYConfirmationAndCtrlC(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{80, 24}, {120, 40}} {
+		for _, noColor := range []bool{false, true} {
+			for _, quit := range []string{"q-confirm", "ctrl-c"} {
+				name := fmt.Sprintf("%dx%d/no-color=%t/%s", size.width, size.height, noColor, quit)
+				t.Run(name, func(t *testing.T) {
+					if noColor {
+						t.Setenv("NO_COLOR", "1")
+					} else {
+						t.Setenv("NO_COLOR", "")
+					}
+					t.Setenv("TERM", "xterm-256color")
+					pair := evidence.SnapshotPair{Base: evidence.Digest("sha256:" + strings.Repeat("a", 64)), Candidate: evidence.Digest("sha256:" + strings.Repeat("b", 64))}
+					m := New(context.Background(), Selection{Project: "pty-run", Pair: pair}, Jobs{})
+					m.data = &Data{}
+					m.running, m.runStarted = true, time.Now().Add(-65*time.Second)
+					runCtx, cancel := context.WithCancel(m.ctx)
+					m.runCancel = cancel
+					joined := make(chan struct{})
+					m.spawn(func() tea.Msg {
+						<-runCtx.Done()
+						close(joined)
+						return ran{pair: pair, err: runCtx.Err()}
+					})
+					master, slave, err := pty.Open()
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer master.Close()
+					defer slave.Close()
+					if err := pty.Setsize(master, &pty.Winsize{Rows: uint16(size.height), Cols: uint16(size.width)}); err != nil {
+						t.Fatal(err)
+					}
+					before, err := term.GetState(int(slave.Fd()))
+					if err != nil {
+						t.Fatal(err)
+					}
+					chunks := make(chan string, 256)
+					go func() {
+						defer close(chunks)
+						buf := make([]byte, 4096)
+						for {
+							n, err := master.Read(buf)
+							if n > 0 {
+								chunks <- string(buf[:n])
+							}
+							if err != nil {
+								return
+							}
+						}
+					}()
+					var transcript strings.Builder
+					done := make(chan error, 1)
+					go func() { done <- Run(m, slave, slave) }()
+					waitFor := func(wants ...string) {
+						t.Helper()
+						deadline := time.After(5 * time.Second)
+						for {
+							plain := stripPTYControls(transcript.String())
+							found := true
+							for _, want := range wants {
+								found = found && strings.Contains(plain, want)
+							}
+							if found {
+								return
+							}
+							select {
+							case chunk, ok := <-chunks:
+								if !ok {
+									t.Fatalf("PTY closed before %v: %s", wants, plain)
+								}
+								transcript.WriteString(chunk)
+							case err := <-done:
+								t.Fatalf("TUI exited before %v: %v", wants, err)
+							case <-deadline:
+								t.Fatalf("missing PTY text %v: %s", wants, plain)
+							}
+						}
+					}
+					waitFor("Running the approved plan")
+					if quit == "q-confirm" {
+						if _, err := master.Write([]byte("q")); err != nil {
+							t.Fatal(err)
+						}
+						waitFor("Confirm quit?", "y cancels the run and quits")
+						select {
+						case err := <-done:
+							t.Fatalf("q quit without confirmation: %v", err)
+						case <-time.After(50 * time.Millisecond):
+						}
+						if _, err := master.Write([]byte("n")); err != nil {
+							t.Fatal(err)
+						}
+						waitFor("Run continues")
+						if _, err := master.Write([]byte("q")); err != nil {
+							t.Fatal(err)
+						}
+						waitFor("Confirm quit?")
+						if _, err := master.Write([]byte("y")); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						if _, err := master.Write([]byte("\x03")); err != nil {
+							t.Fatal(err)
+						}
+					}
+					select {
+					case err := <-done:
+						if err != nil {
+							t.Fatal(err)
+						}
+					case <-time.After(5 * time.Second):
+						t.Fatal("quit did not join the owned run")
+					}
+					select {
+					case <-joined:
+					case <-time.After(time.Second):
+						t.Fatal("owned run did not observe cancellation before terminal restoration")
+					}
+					after, err := term.GetState(int(slave.Fd()))
+					if err != nil || !reflect.DeepEqual(before, after) {
+						t.Fatal("quit path did not restore terminal state", err)
+					}
+					if quit == "ctrl-c" && strings.Contains(stripPTYControls(transcript.String()), "Confirm quit?") {
+						t.Fatal("Ctrl-C incorrectly asked for confirmation")
+					}
+					m.Close()
+				})
+			}
+		}
+	}
+}
+
+func stripPTYControls(raw string) string {
+	return regexp.MustCompile("\\x1b\\[[0-?]*[ -/]*[@-~]").ReplaceAllString(raw, "")
 }
 
 func paymentLoopSelection(t *testing.T) Selection {

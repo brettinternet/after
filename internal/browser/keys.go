@@ -35,6 +35,7 @@ const (
 	keyPreview
 	keyApprove
 	keyDeny
+	keyActivity
 	keySession
 	keyCancel
 )
@@ -45,14 +46,15 @@ const (
 	contextOverview  keyContext = "Overview"
 	contextChanges   keyContext = "Changes"
 	contextDiff      keyContext = "Diff"
+	contextActivity  keyContext = "Activity"
 	contextInspector keyContext = "Inspector"
 	contextPlan      keyContext = "Preview"
 	contextHelp      keyContext = "Help"
 )
 
-var allKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextInspector, contextPlan, contextHelp}
-var listKeyContexts = []keyContext{contextOverview, contextChanges}
-var topKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff}
+var allKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextActivity, contextInspector, contextPlan, contextHelp}
+var listKeyContexts = []keyContext{contextOverview, contextChanges, contextActivity}
+var topKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextActivity}
 var documentKeyContexts = []keyContext{contextInspector, contextPlan}
 var browseKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextInspector}
 
@@ -69,24 +71,25 @@ type keyBinding struct {
 
 // keyMap is the single source for keyboard dispatch, contextual hints, and help.
 var keyMap = []keyBinding{
-	{keys: []string{"q", "ctrl+c"}, hint: "q quit", label: "Quit and restore the terminal", group: "Session", action: keyQuit, contexts: allKeyContexts, priority: 0},
+	{keys: []string{"q", "ctrl+c"}, hint: "q quit", label: "Quit (q confirms during a run; Ctrl-C quits now)", group: "Session", action: keyQuit, contexts: allKeyContexts, priority: 0},
 	{keys: []string{"?"}, hint: "? help", label: "Open grouped key help", group: "Session", action: keyHelp, contexts: allKeyContexts, priority: 1},
 	{keys: []string{"esc"}, hint: "Esc back", label: "Return to the previous view", group: "Navigation", action: keyBack, contexts: allKeyContexts, priority: 2, disabled: canGoBack},
 	{keys: []string{"1"}, hint: "1 Overview", label: "Switch to Overview", group: "Views", action: keyOverview, contexts: topKeyContexts, priority: 3},
 	{keys: []string{"2"}, hint: "2 Changes", label: "Switch to Changes", group: "Views", action: keyChanges, contexts: topKeyContexts, priority: 3, disabled: needsData},
 	{keys: []string{"3"}, hint: "3 Diff", label: "Switch to Diff", group: "Views", action: keyDiff, contexts: topKeyContexts, priority: 3, disabled: needsData},
+	{keys: []string{"4"}, hint: "4 Activity", label: "Switch to Activity", group: "Views", action: keyActivity, contexts: topKeyContexts, priority: 3, disabled: needsData},
 	{keys: []string{"tab"}, hint: "Tab next view", label: "Switch to the next view or section", group: "Views", action: keyNext, contexts: append(append([]keyContext{}, topKeyContexts...), documentKeyContexts...), priority: 3, disabled: canMoveView},
 	{keys: []string{"shift+tab"}, hint: "Shift+Tab previous", label: "Switch to the previous view or section", group: "Views", action: keyPrevious, contexts: append(append([]keyContext{}, topKeyContexts...), documentKeyContexts...), priority: 3, disabled: canMoveView},
 	{keys: []string{"]"}, hint: "] next file", label: "Go to the next captured file", group: "Diff", action: keyNextFile, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateFiles},
 	{keys: []string{"["}, hint: "[ previous file", label: "Go to the previous captured file", group: "Diff", action: keyPreviousFile, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateFiles},
 	{keys: []string{"}"}, hint: "} next hunk", label: "Go to the next indexed hunk", group: "Diff", action: keyNextHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
 	{keys: []string{"{"}, hint: "{ previous hunk", label: "Go to the previous indexed hunk", group: "Diff", action: keyPreviousHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
-	{keys: []string{"j", "down"}, hint: "↓/j down", label: "Move down or scroll", group: "Navigation", action: keyDown, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
-	{keys: []string{"k", "up"}, hint: "↑/k up", label: "Move up or scroll", group: "Navigation", action: keyUp, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
-	{keys: []string{"pgdown"}, hint: "PgDn page", label: "Move down one page", group: "Navigation", action: keyPageDown, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
-	{keys: []string{"pgup"}, hint: "PgUp page", label: "Move up one page", group: "Navigation", action: keyPageUp, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
-	{keys: []string{"home", "g"}, hint: "Home/g start", label: "Move to the beginning", group: "Navigation", action: keyStart, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
-	{keys: []string{"end", "G"}, hint: "End/G end", label: "Move to the end", group: "Navigation", action: keyEnd, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
+	{keys: []string{"j", "down"}, hint: "↓/j down", label: "Move down or scroll", group: "Navigation", action: keyDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
+	{keys: []string{"k", "up"}, hint: "↑/k up", label: "Move up or scroll", group: "Navigation", action: keyUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
+	{keys: []string{"pgdown"}, hint: "PgDn page", label: "Move down one page", group: "Navigation", action: keyPageDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
+	{keys: []string{"pgup"}, hint: "PgUp page", label: "Move up one page", group: "Navigation", action: keyPageUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
+	{keys: []string{"home", "g"}, hint: "Home/g start", label: "Move to the beginning", group: "Navigation", action: keyStart, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
+	{keys: []string{"end", "G"}, hint: "End/G end", label: "Move to the end", group: "Navigation", action: keyEnd, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
 	{keys: []string{"enter"}, hint: "Enter open", label: "Inspect the selected row", group: "Navigation", action: keyEnter, contexts: listKeyContexts, priority: 2, disabled: canOpen},
 	{keys: []string{"h", "left"}, hint: "←/h pan", label: "Pan left", group: "Documents", action: keyPanLeft, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
 	{keys: []string{"l", "right"}, hint: "→/l pan", label: "Pan right", group: "Documents", action: keyPanRight, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
@@ -100,7 +103,7 @@ var keyMap = []keyBinding{
 	{keys: []string{"r"}, hint: "r rerun", label: "Prepare an exact rerun preview; nothing runs", group: "Review", action: keyPreview, contexts: browseKeyContexts, priority: 8, disabled: canPreview},
 	{keys: []string{"y"}, hint: "y approve", label: "Run this exact preview once", group: "Consent", action: keyApprove, contexts: []keyContext{contextPlan}, priority: 4, disabled: canApprove},
 	{keys: []string{"n"}, hint: "n deny", label: "Deny this preview without execution", group: "Consent", action: keyDeny, contexts: []keyContext{contextPlan}, priority: 5},
-	{keys: []string{"s"}, hint: "s session IDs", label: "Inspect restart references", group: "Session", action: keySession, contexts: []keyContext{contextOverview, contextChanges, contextDiff, contextInspector, contextHelp}, priority: 10, disabled: needsData},
+	{keys: []string{"s"}, hint: "s Activity", label: "Open Activity and record this session reference", group: "Session", action: keySession, contexts: []keyContext{contextOverview, contextChanges, contextDiff, contextActivity, contextInspector, contextHelp}, priority: 10, disabled: needsData},
 	{keys: []string{"x"}, hint: "x cancel", label: "Cancel an active owned job", group: "Jobs", action: keyCancel, contexts: allKeyContexts, priority: 11, disabled: canCancel},
 }
 
@@ -123,6 +126,8 @@ func contextForScreen(screen string) keyContext {
 		return contextChanges
 	case "patch":
 		return contextDiff
+	case "activity":
+		return contextActivity
 	case "inspector":
 		return contextInspector
 	case "plan":
@@ -168,7 +173,7 @@ func containsContext(contexts []keyContext, want keyContext) bool {
 
 func canGoBack(m *Model) string {
 	switch m.screen {
-	case "help", "inspector", "plan", "inventory", "patch":
+	case "help", "inspector", "plan", "inventory", "patch", "activity":
 		return ""
 	default:
 		return "already on Overview"
@@ -202,7 +207,7 @@ func canMoveView(m *Model) string {
 		}
 		return ""
 	}
-	if screen == "examples" || screen == "inventory" || screen == "patch" {
+	if screen == "examples" || screen == "inventory" || screen == "patch" || screen == "activity" {
 		if m.data == nil {
 			return "wait for stored records to load"
 		}
@@ -226,6 +231,12 @@ func selectedEntry(m *Model, screen string) *Entry {
 	return nil
 }
 func canOpen(m *Model) string {
+	if keyScreen(m) == "activity" {
+		if len(m.activity) == 0 {
+			return "there is no Activity event to inspect"
+		}
+		return ""
+	}
 	if selectedEntry(m, keyScreen(m)) == nil {
 		return "there is no selected row to inspect"
 	}
@@ -296,12 +307,18 @@ func canImport(m *Model) string {
 	if m.busy {
 		return "another import is already running"
 	}
+	if m.running || m.actionBusy {
+		return "wait for the active run or review action to finish"
+	}
 	if m.jobs.Import == nil {
 		return "no --import-file was configured"
 	}
 	return ""
 }
 func canUseCapture(m *Model) string {
+	if m.busy {
+		return "wait for the import to finish before switching candidates"
+	}
 	if m.pending == nil {
 		return "no new capture is waiting"
 	}
@@ -320,8 +337,8 @@ func canPin(m *Model) string {
 	if m.jobs.Actions == nil {
 		return "pin actions are unavailable in this review"
 	}
-	if m.actionBusy {
-		return "another review action is running"
+	if m.actionBusy || m.busy || m.running {
+		return "another review action, import or run is active"
 	}
 	i := min(max(m.index, 0), len(m.data.Entries)-1)
 	if m.data.Entries[i].Receipt == "" || m.data.Entries[i].Expectation == "" {
@@ -339,8 +356,8 @@ func canPreview(m *Model) string {
 	if m.jobs.Actions == nil {
 		return "rerun actions are unavailable in this review"
 	}
-	if m.actionBusy || m.running {
-		return "another review action or run is active"
+	if m.actionBusy || m.busy || m.running {
+		return "another review action, import or run is active"
 	}
 	return ""
 }
@@ -354,7 +371,7 @@ func canApprove(m *Model) string {
 	return ""
 }
 func canCancel(m *Model) string {
-	if m.jobCancel == nil && m.runCancel == nil {
+	if m.jobCancel == nil && m.captureCancel == nil && m.runCancel == nil {
 		return "no cancellable job is active"
 	}
 	return ""
