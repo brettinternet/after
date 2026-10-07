@@ -9,6 +9,7 @@ import (
 	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/rawdiff"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
@@ -81,13 +82,38 @@ func (a *Actions) Prepare(pair evidence.SnapshotPair) ([]byte, string, error) {
 	raw, digest := p.Preview()
 	return raw, digest, nil
 }
-func (a *Actions) Pin(entry Entry, pair evidence.SnapshotPair) (evidence.Digest, error) {
+func (a *Actions) FindDuplicatePin(entry Entry) (evidence.Pin, bool, error) {
+	if entry.Receipt == "" || entry.Expectation == "" {
+		return evidence.Pin{}, false, errors.New("select a complete current payment observation to pin")
+	}
+	s, err := store.Open(a.Project, false, nil)
+	if err != nil {
+		return evidence.Pin{}, false, err
+	}
+	defer s.Close()
+	pins, err := review.Heads(s)
+	if err != nil {
+		return evidence.Pin{}, false, err
+	}
+	for _, pin := range pins {
+		if pin.BasisReceipt == entry.Receipt && pin.Expectation == entry.Expectation {
+			return pin, true, nil
+		}
+	}
+	return evidence.Pin{}, false, nil
+}
+func (a *Actions) Pin(entry Entry, pair evidence.SnapshotPair, reason string) (evidence.Digest, error) {
 	if entry.Receipt == "" || entry.Expectation == "" {
 		return "", errors.New("select a complete current payment observation to pin")
 	}
 	s, err := a.Store()
 	if err != nil {
 		return "", err
+	}
+	if duplicate, found, err := a.FindDuplicatePin(entry); err != nil {
+		return "", err
+	} else if found {
+		return "", fmt.Errorf("matching pin already exists: %s", duplicate.ID)
 	}
 	r, err := store.Get[evidence.Receipt](s, entry.Receipt)
 	if err != nil {
@@ -96,10 +122,30 @@ func (a *Actions) Pin(entry Entry, pair evidence.SnapshotPair) (evidence.Digest,
 	if r.Snapshots != pair {
 		return "", errors.New("historical observation cannot pin the selected pair")
 	}
-	p, err := review.Create(s, r.ID, entry.Expectation, evidence.FiniteExample, "Explicit TUI p: preserve selected finite provider-request count, not whole-change approval")
+	p, err := review.Create(s, r.ID, entry.Expectation, evidence.FiniteExample, reason)
 	return p.ID, err
 }
-func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair) (Selection, error) {
+func (a *Actions) ChangedPathCount(before, after evidence.Digest) (int, error) {
+	s, err := store.Open(a.Project, false, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer s.Close()
+	oldSnapshot, err := store.Get[evidence.Snapshot](s, before)
+	if err != nil {
+		return 0, err
+	}
+	newSnapshot, err := store.Get[evidence.Snapshot](s, after)
+	if err != nil {
+		return 0, err
+	}
+	view, err := rawdiff.Open(s, oldSnapshot, newSnapshot)
+	if err != nil {
+		return 0, err
+	}
+	return len(view.Inventory()), nil
+}
+func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair, reason string) (Selection, error) {
 	s, err := a.Store()
 	if err != nil {
 		return sel, err
@@ -123,13 +169,21 @@ func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair) (Selection, 
 		if old.BasisSnapshots.Base != pair.Base {
 			return sel, errors.New("snapshot acceptance retains the original base")
 		}
-		pin, err := review.Select(s, id, target, evidence.OriginalBase, "Explicit TUI u: use captured snapshot, not its behavior")
+		pin, err := review.Select(s, id, target, evidence.OriginalBase, reason)
 		if err != nil {
 			return sel, err
 		}
 		next.Evidence[i] = pin.ID
 	}
 	return next, nil
+}
+func (a *Actions) AcceptPin(id evidence.Digest, reason string) (evidence.Digest, error) {
+	s, err := a.Store()
+	if err != nil {
+		return "", err
+	}
+	pin, err := review.Accept(s, id, reason)
+	return pin.ID, err
 }
 func (a *Actions) Run(ctx context.Context, pair evidence.SnapshotPair, preview []byte, digest string) (evidence.Digest, error) {
 	s, err := a.Store()

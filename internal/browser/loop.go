@@ -38,10 +38,11 @@ type prepared struct {
 	err        error
 }
 type changed struct {
-	selected Selection
-	data     *Data
-	status   string
-	err      error
+	selected     Selection
+	data         *Data
+	status       string
+	clearPending bool
+	err          error
 }
 type ran struct {
 	pair       evidence.SnapshotPair
@@ -72,6 +73,9 @@ func (m *Model) scheduleClock() tea.Cmd {
 }
 
 func (m *Model) change(work func() (Selection, error), status string) tea.Cmd {
+	return m.changeWith(work, status, false)
+}
+func (m *Model) changeWith(work func() (Selection, error), status string, clearPending bool) tea.Cmd {
 	m.actionBusy = true
 	return m.spawn(func() tea.Msg {
 		sel, err := work()
@@ -79,7 +83,7 @@ func (m *Model) change(work func() (Selection, error), status string) tea.Cmd {
 		if err == nil {
 			d, err = Load(m.ctx, sel)
 		}
-		return changed{sel, d, status, err}
+		return changed{selected: sel, data: d, status: status, clearPending: clearPending, err: err}
 	})
 }
 func (m *Model) invalidatePlan() {
@@ -119,6 +123,9 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			m.recordActivity("capture finished", "new candidate ready; u reviews it", []evidence.Digest{msg.pair.Base, msg.pair.Candidate}, "")
 		}
 		return nil, true
+	case usePromptReady:
+		m.prepareUsePrompt(msg)
+		return nil, true
 	case prepared:
 		m.actionBusy = false
 		if msg.generation != m.generation || msg.pair != m.selected.Pair {
@@ -148,6 +155,9 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		previousSelection := m.selected
 		previousPair := m.selected.Pair
 		persistFailed := false
+		if msg.clearPending {
+			m.pending = nil
+		}
 		m.selected = msg.selected
 		if msg.data != nil && msg.selected.Discover {
 			m.selected = msg.data.Selection
@@ -170,6 +180,8 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		kind, summary := "selection changed", msg.status
 		if strings.HasPrefix(msg.status, "Pinned") {
 			kind, summary = "pin created", msg.status
+		} else if strings.HasPrefix(msg.status, "Pin accepted") {
+			kind, summary = "pin accepted", msg.status
 		} else if strings.Contains(msg.status, "result attached") {
 			kind, summary = "result attached", msg.status
 		}
@@ -248,27 +260,31 @@ func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
 		if m.pending == nil || m.actionBusy || m.data == nil || a == nil {
 			return nil, true
 		}
-		sel := m.selected
-		pair := evidence.SnapshotPair{Base: sel.Pair.Base, Candidate: m.pending.Candidate}
-		m.pending = nil
-		m.invalidatePlan()
-		return m.change(func() (Selection, error) { return a.Select(sel, pair) }, "Snapshot selected; prior evidence remains history"), true
+		return m.startUseCapturePrompt(), true
 	case keyPin:
-		if a == nil || m.data == nil || m.actionBusy || m.busy || m.running || len(m.data.Entries) == 0 {
+		entry := m.selectedOverviewEntry()
+		if a == nil || entry == nil {
 			return nil, true
 		}
-		entry, sel := m.data.Entries[m.index], m.selected
-		return m.change(func() (Selection, error) {
-			if len(sel.Evidence) >= MaxEvidence {
-				return sel, errors.New("evidence limit reached")
-			}
-			id, err := a.Pin(entry, sel.Pair)
-			if err != nil {
-				return sel, err
-			}
-			sel.Evidence = append(append([]evidence.Digest(nil), sel.Evidence...), id)
-			return sel, nil
-		}, "Pinned selected finite provider-request expectation"), true
+		duplicate, found, err := a.FindDuplicatePin(*entry)
+		if err != nil {
+			m.status = "Can't pin: " + err.Error()
+			return nil, true
+		}
+		if found {
+			m.status = "Matching pin already exists: " + shortID(duplicate.ID)
+			m.recordActivity("duplicate pin refused", "matching basis receipt and expectation already pinned", []evidence.Digest{entry.Receipt, duplicate.ID}, string(duplicate.ID))
+			return nil, true
+		}
+		m.startPinPrompt(*entry)
+		return nil, true
+	case keyAcceptPin:
+		entry := m.selectedOverviewEntry()
+		if entry == nil {
+			return nil, true
+		}
+		m.startAcceptPrompt(*entry)
+		return nil, true
 	case keyPreview:
 		if a == nil || m.actionBusy || m.busy || m.running || m.data == nil {
 			return nil, true

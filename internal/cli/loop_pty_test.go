@@ -250,6 +250,9 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			// The pending-capture header survives either completion order.
 			p.expect("new capture ")
 			p.send("u")
+			p.expect("Use this captured candidate?")
+			p.expect("Pins may reopen; earlier results become history")
+			p.send("\r")
 			p.expect("Snapshot selected; prior evidence remains history")
 			selectedBeforeQuit := readSession()
 			if selectedBeforeQuit.Pair.Base != first.Pair.Base || selectedBeforeQuit.Pair.Candidate == first.Pair.Candidate {
@@ -488,62 +491,145 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		return out
 	}
 	sel := browser.Selection{Project: project, Pair: pair, Evidence: []evidence.Digest{id}}
-	p := startLoopPTY(t, args(sel))
-	p.expect("[EQUAL]")
-	p.send("\r")
-	p.expect("measured provider-request counts")
-	p.send("\x1b")
-	p.expect("1 Overview")
-	p.send("d")
-	p.expect("2 Changes")
-	p.send("\t")
-	p.expect("captured raw diff")
-	p.send("\x1b")
-	p.expect("1 Overview")
-	p.send("p")
-	p.expect("Pinned selected finite provider-request expectation")
-	sel, _ = p.finish()
-	sel.Project = project
+	initialStore, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialComparison, err := store.Get[evidence.Comparison](initialStore, id)
+	initialStore.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptID := initialComparison.Receipt
+	variants := []struct {
+		width, height int
+		noColor       bool
+	}{{80, 24, false}, {120, 40, false}, {80, 24, true}, {120, 40, true}}
+	setTerminal := func(variant struct {
+		width, height int
+		noColor       bool
+	}) {
+		t.Setenv("TERM", "xterm-256color")
+		if variant.noColor {
+			t.Setenv("NO_COLOR", "1")
+		} else {
+			t.Setenv("NO_COLOR", "")
+		}
+	}
+	verifyPromptTerminal := func(p *loopPTY, variant struct {
+		width, height int
+		noColor       bool
+	}) {
+		transcript := p.transcript.String()
+		if variant.noColor {
+			if regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(transcript) {
+				t.Fatal("NO_COLOR mutation prompt emitted SGR")
+			}
+		} else if !strings.Contains(transcript, "\x1b[7m[1 Overview]") {
+			t.Fatal("color mutation prompt did not retain the active tab style")
+		}
+	}
+	var duplicateTargetID evidence.Digest
+	for index, variant := range variants {
+		setTerminal(variant)
+		p := startLoopPTYSize(t, args(sel), variant.width, variant.height)
+		p.expect("AFTER · payment")
+		p.expect("12h same-key retry")
+		p.send("p")
+		p.expect("Pin this finite expectation?")
+		p.expect(string(receiptID))
+		if index < len(variants)-1 {
+			p.send("\x1b")
+			p.expect("Cancelled; no changes")
+			unchanged, _ := p.finish()
+			if unchanged.Pair != pair {
+				t.Fatal("cancelled pin prompt changed the selected pair")
+			}
+			verifyPromptTerminal(p, variant)
+			continue
+		}
+		p.send("\x15")
+		p.send("\x1b[200~PTY pin reason\n\x1b]52;c;not-a-command\a\x1b[201~")
+		p.send("\r")
+		p.expect("Pinned selected finite provider-request expectation")
+		duplicateTargetID = latestPinID(t, project)
+		p.send("p")
+		p.expect("Matching pin already exists: " + shortID(duplicateTargetID))
+		p.send("d")
+		p.expect("2 Changes")
+		p.send("\t")
+		p.expect("captured raw diff")
+		p.send("\x1b")
+		p.expect("1 Overview")
+		p.finish()
+		verifyPromptTerminal(p, variant)
+	}
 	pinID := latestPinID(t, project)
-	sel.Evidence = []evidence.Digest{pinID}
+	if pinID != duplicateTargetID {
+		t.Fatalf("duplicate pin refusal created a new pin: existing=%s latest=%s", duplicateTargetID, pinID)
+	}
+	sel.Evidence = []evidence.Digest{pinID, id}
 	s, err := store.Open(project, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	v, err := review.Inspect(s, pinID)
 	s.Close()
-	if err != nil || !strings.Contains(v.Pin.Expectation, "expect 1 provider") {
+	if err != nil || !strings.Contains(v.Pin.Expectation, "expect 1 provider") || v.Pin.History[len(v.Pin.History)-1].Reason != `PTY pin reason\u000a\u001b]52;c;not-a-command\u0007` {
 		t.Fatal(v, err)
 	}
 	// Restart before editing proves the selected expectation is a durable record.
-	p = startLoopPTY(t, args(sel))
+	p := startLoopPTY(t, args(sel))
 	p.expect("[PINNED]")
 	configBytes, err := os.ReadFile(filepath.Join(project, "app/config.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeProjectFile(t, project, "app/config.go", strings.Replace(string(configBytes), "24 * 60 * 60", "5 * 60", 1))
-	p.send("c")
-	p.expect("new capture")
-	p.send("u")
-	p.expect("Snapshot selected; prior evidence remains history")
-	p.send("\x1b[H\x1b[B")
-	p.expect("Pin reopened: no result for this candidate yet")
-	p.send("\r")
-	p.expect("exact reopening reason")
-	sel, _ = p.finish()
+	p.finish()
+	for index, variant := range variants {
+		setTerminal(variant)
+		p = startLoopPTYSize(t, args(sel), variant.width, variant.height)
+		p.expect("AFTER · payment")
+		p.expect("Current complete result attached")
+		p.send("c")
+		p.expect("New capture")
+		p.send("u")
+		p.expect("Use this captured candidate?")
+		p.expect("paths differ from candidate")
+		p.expect("Pins may reopen; earlier results become history")
+		if index < len(variants)-1 {
+			p.send("\x1b")
+			p.expect("u reviews it")
+			unchanged, _ := p.finish()
+			if unchanged.Pair != pair || latestPinID(t, project) != pinID {
+				t.Fatal("cancelled snapshot prompt changed the selected pair or pin history")
+			}
+			verifyPromptTerminal(p, variant)
+			continue
+		}
+		p.send("\x15TUI snapshot reason\r")
+		p.expect("Snapshot selected; prior evidence remains history")
+		selected, _ := p.finish()
+		if selected.Pair.Base != pair.Base || selected.Pair.Candidate == pair.Candidate {
+			t.Fatalf("confirmed selection did not keep original base: %+v", selected.Pair)
+		}
+		verifyPromptTerminal(p, variant)
+		sel.Pair = selected.Pair
+	}
 	sel.Project = project
 	pinID = latestPinID(t, project)
-	sel.Evidence = []evidence.Digest{pinID}
+	sel.Evidence = []evidence.Digest{pinID, id}
 	s, err = store.Open(project, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	v, err = review.Inspect(s, pinID)
 	s.Close()
-	if err != nil || !v.MissingCurrentResult || v.CurrentReceipt != nil || v.Applicability != evidence.Stale || !strings.Contains(v.Reason, "whole-project snapshot identity changed") {
+	if err != nil || !v.MissingCurrentResult || v.CurrentReceipt != nil || v.Applicability != evidence.Stale || !strings.Contains(v.Reason, "whole-project snapshot identity changed") || v.Pin.History[len(v.Pin.History)-1].Reason != "TUI snapshot reason" {
 		t.Fatal("reopening invented evidence or lost reason", v, err)
 	}
+	t.Log("mutation PTY excerpt (80x24/120x40, color/NO_COLOR): Pin this finite expectation? · Matching pin already exists · Use this captured candidate? · original base is kept · 1 paths differ · Pins may reopen; earlier results become history")
 	p = startLoopPTY(t, args(sel))
 	p.expect("[REOPENED]")
 	p.send("r")
@@ -577,8 +663,61 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("30s same-key retry · provider requests 1 → 1")
 	p.expect("▸ EARLIER SNAPSHOTS 2")
 	p.send("\x1b[H" + strings.Repeat("\x1b[B", 5) + "\r") // Expand the history header after the attention rows and control.
-	p.expect("ran on " + shortID(pair.Candidate))
+	p.expect("▾ EARLIER SNAPSHOTS 2")
+	p.expect("[STALE]")
+	sel, _ = p.finish()
+	sel.Project = project
+	pinID = latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
+	s, err = store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = review.Inspect(s, pinID)
+	s.Close()
+	if err != nil || v.CurrentReceipt == nil || v.Applicability != evidence.Current || v.MissingCurrentResult {
+		t.Fatal("rerun did not attach a current complete result", v, err)
+	}
+	currentReceiptID := v.CurrentReceipt.ID
+	for index, variant := range variants {
+		setTerminal(variant)
+		p = startLoopPTYSize(t, args(sel), variant.width, variant.height)
+		p.expect("[REOPENED]")
+		p.send("a")
+		p.expect("Accept this pin's current result?")
+		p.expect(string(pinID))
+		p.expect(string(currentReceiptID))
+		if index < len(variants)-1 {
+			p.send("\x1b")
+			p.expect("Cancelled; no changes")
+			unchanged, _ := p.finish()
+			if unchanged.Pair != sel.Pair {
+				t.Fatal("cancelled acceptance changed the selected pair")
+			}
+			verifyPromptTerminal(p, variant)
+			continue
+		}
+		p.send("\x15TUI acceptance reason\r")
+		p.expect("[ACCEPTED]")
+		p.expect("Pin accepted for this current complete result")
+		p.finish()
+		verifyPromptTerminal(p, variant)
+	}
+	pinID = latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
+	s, err = store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = review.Inspect(s, pinID)
+	s.Close()
+	if err != nil || v.Pin.Decision != evidence.Accepted || v.Pin.History[len(v.Pin.History)-1].Reason != "TUI acceptance reason" {
+		t.Fatal("confirmed acceptance was not recorded", v, err)
+	}
 	// Real authorized cancellation persists an incomplete result, not equality.
+	setTerminal(variants[len(variants)-1])
+	p = startLoopPTY(t, args(sel))
+	p.expect("[ACCEPTED]")
 	p.send("r")
 	p.expect("Run this exact plan?")
 	p.send("y")
@@ -621,7 +760,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p = startLoopPTY(t, args(sel))
 	p.expect("[REOPENED]")
 	p.send("\r")
-	p.expect("exact reopening reason")
+	p.expect("receipt is not a complete observed execution")
 	p.finish()
 	t.Log("Real PTY: inspect/raw diff, pin one request, restart, edit retention, capture notification/explicit acceptance, missing current evidence, deny preview, authorize 1->2 witness and 1->1 control, cancel, reopen after restart; terminal restored")
 }

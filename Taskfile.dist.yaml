@@ -131,6 +131,10 @@ tasks:
     desc: Check bounded computed source diffs, browser integration and responsive PTY review
     cmd: go test -race -v ./internal/rawdiff ./internal/browser -run '^(FuzzUnifiedDiffAppliesAndIsDeterministic|TestComputed.*|TestPairWithoutSharedPatchNeverUsesAnotherPatch|TestChangesDiffNavigationAndCapturedBytes|TestResponsiveFramePTY)$'
 
+  test:tui-mutations:
+    desc: Check confirmed TUI pin, snapshot and acceptance prompt behavior
+    cmd: go test -race -v ./internal/browser -run '^Test(PinPromptReasonDuplicateAndCancellation|SnapshotUsePromptRetainsBaseAndHistoryReason|AcceptPinPromptEngineAndCancellation|AcceptHintUnavailableWithoutCurrentPin|PromptReasonBoundsAndEmptyRefusal)$'
+
   test:views:
     desc: Check deterministic browser golden views (pass -- -update only to regenerate)
     cmd: go test -race ./internal/browser -run '^TestGoldenViews$' {{.CLI_ARGS}}

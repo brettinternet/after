@@ -25,14 +25,18 @@ cat >&2 <<EOF
 
 Try in the TUI:
   1. Enter on a case row: exact responses and provider calls. Esc.
-  2. On the 43200s (12h) row, p: pin its measured count (1) as a finite expectation.
+  2. On the 43200s (12h) row, p: review the exact receipt/pair, then Enter pins its
+     measured count (1). Ctrl-U clears the prefilled reason; Esc cancels. Press p again
+     to see the duplicate-basis refusal and existing pin ID.
   3. In another terminal:  $regress
-  4. c captures the edit; u uses it as the reviewed candidate, retaining the original base.
-     End selects the pin: reopened | stale | missing current evidence. Enter shows why.
+  4. c captures the edit; u confirms the new candidate ID, changed-path count and
+     original base. Esc cancels; Enter selects it. End selects the pin: reopened | stale
+     | missing current evidence. Enter shows why.
   5. r previews the exact offline rerun plan; n denies (nothing runs), y approves once.
      Navigation stays live during the run; x cancels it.
   6. New rows appear: 43200s base=[1] candidate=[2] breaks the pinned expectation;
-     the 30s control is unchanged. Accepting or rejecting it remains your decision.
+     the 30s control is unchanged. Press a, review the pin/current-receipt IDs and
+     reason, then Enter records acceptance; Esc cancels. The row shows [ACCEPTED].
   7. s shows snapshot/pin/result IDs for restarting later; q quits.
 EOF
 open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.comparison.id <<<"$result")"

@@ -56,10 +56,11 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | `?`                                                | Open grouped help with contextual disabled reasons                                          |
 | `c`                                                | Capture again with this review's saved flags (or HEAD versus working tree for explicit IDs) |
 | `i`                                                | Import the file configured at launch, if any                                                |
-| `u`                                                | Use a pending capture with the original review base; selection is explicit                  |
-| `p`                                                | Pin the selected measured provider-request count as a finite expectation                    |
+| `u`                                                | Confirm use of a pending capture, retaining the original base and recording a reason        |
+| `p`                                                | Confirm a finite pin of the selected measured count; duplicate basis/expectation is refused |
 | `r`                                                | Prepare the exact frozen offline execution plan without executing                           |
 | `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                        |
+| `a`                                                | Confirm acceptance of a pin only when its current complete result matches this pair         |
 | `s` / `4`                                          | Open Activity and inspect the saved review, pair and loaded evidence                        |
 | `x`                                                | Request cancellation of an active owned job                                                 |
 | `q` / Ctrl-C                                       | During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits now   |
@@ -74,8 +75,18 @@ loaded. At that limit the immutable report remains stored and Activity retains
 its ID. Repeated `s` presses with unchanged session references grow neither
 Activity nor the evidence list.
 
-`a` no longer accepts a capture. Pin acceptance is not yet available in this TUI;
-help points to `after pin PIN --accept` for the explicit CLI decision.
+`p`, `u`, and `a` open confirmations naming their exact receipt, pin, base, and
+candidate IDs. Their one-line reason is prefilled, editable, capped at 4,096 bytes,
+and recorded in pin history. Ctrl-U clears the default; bracketed paste is sanitized
+data and cannot trigger actions; Esc cancels. Empty reasons are refused.
+
+`p` refuses an existing pin with the same basis receipt and expectation, showing
+its ID instead of adding another revision. `u` counts paths differing from the
+candidate under review, keeps the original base, and warns that pins may reopen
+while earlier results become history. `a` is hinted only for a pin with a current
+complete receipt on the selected pair; the review engine independently enforces
+that requirement and any rejection remains visible. An accepted row shows
+`[ACCEPTED]`.
 
 ## Changes and Diff
 
@@ -176,9 +187,9 @@ runs on open`; `Couldn't load this pair — check the IDs with after inspect`;
 a pending-capture notice; reopened-pin and current-result guidance; and, when no
 evidence is loaded, `Not checked — read the change, or c captures again after
 editing`. Otherwise it is blank. A transient action result replaces the line only
-until the next keypress. A current pin's available command is
-`after pin PIN --accept`; report names, output, and producer prose never become
-badges, group labels, or Next-line text.
+until the next keypress. A current pin's available action is `a accept pin`;
+report names, output, and producer prose never become badges, group labels, or
+Next-line text.
 
 Rows read, for example, `12h same-key retry · provider requests 1 → 2 · responses same`.
 When repetitions disagree, every count is listed (`1 → 2,1`).
@@ -232,14 +243,18 @@ a stored receipt.
 
 ## Pin, edit, reopen, rerun
 
-Select a complete current payment observation and press `p`. The pin preserves
-that case's measured candidate provider-request count, with explicit finite scope;
-it is not acceptance of the whole change. Twelve-hour and thirty-second rows show
-all recorded repetition counts. Imported, incomplete, historical or unstable
-candidate counts cannot become this finite-count pin.
+Select a complete current payment observation and press `p`. Confirm the exact
+receipt and snapshot IDs and enter a reason. The pin preserves that case's measured
+candidate provider-request count, with explicit finite scope; it is not acceptance
+of the whole change. A pin with the same basis receipt and expectation is refused
+and identified. Twelve-hour and thirty-second rows show all recorded repetition
+counts. Imported, incomplete, historical or unstable candidate counts cannot become
+this finite-count pin.
 
-Edit the checkout externally, then press `c`. Only `u` uses the captured
-candidate, retaining the original base. Pin revisions reopen conservatively on whole-project basis changes;
+Edit the checkout externally, then press `c`. `u` confirms the full new candidate
+ID, reports how many paths differ from the candidate under review, and keeps the
+original base. The confirmation explains that pins may reopen and earlier results
+become history. Pin revisions reopen conservatively on whole-project basis changes;
 the inspector gives the exact reason and **missing current evidence** state.
 Prior observations, including the control, remain inspectable under their original
 snapshot IDs. Their values are history, not predictions for the new candidate.
@@ -303,9 +318,11 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
   styling, and terminal restoration. No payload terminal controls escape.
 - `mise exec -- task tui:proof` with explicit `AFTER_DOCKER_BINARY` and
   `AFTER_DOCKER_HOST`: real offline payment execution and PTY-driven inspect,
-  raw diff, one-request pin, restart, retention edit, capture acceptance, reopening,
-  denial, authorized one-versus-two witness and unchanged control, cancellation,
-  and reopened history after restart. No fabricated observations or accounts.
+  raw diff, confirmed/reasoned one-request pin, duplicate refusal, restart, retention
+  edit, confirmed capture selection, reopening, denial, authorized one-versus-two
+  witness and unchanged control, confirmed pin acceptance, cancellation, and reopened
+  history after restart. Mutation prompts are exercised at 80×24 and 120×40, with
+  and without `NO_COLOR`. No fabricated observations or accounts.
 - `mise exec -- task cli:proof` with the separately provisioned Docker settings:
   real paired synthetic payment execution, then native CLI PTY browsing of its
   observed receipt and all eight observations. Twelve-hour provider calls are

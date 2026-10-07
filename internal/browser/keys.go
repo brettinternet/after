@@ -1,6 +1,10 @@
 package browser
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/brettinternet/after/internal/evidence"
+)
 
 type keyAction uint8
 
@@ -98,8 +102,8 @@ var keyMap = []keyBinding{
 	{keys: []string{"c"}, hint: "c capture", label: "Capture the working tree in the background", group: "Review", action: keyCapture, contexts: browseKeyContexts, priority: 8, disabled: canCapture},
 	{keys: []string{"i"}, hint: "i import", label: "Import the configured report", group: "Review", action: keyImport, contexts: browseKeyContexts, priority: 9, disabled: canImport},
 	{keys: []string{"u"}, hint: "u use capture", label: "Use the pending capture with the original base", group: "Review", action: keyUseCapture, contexts: browseKeyContexts, priority: 6, disabled: canUseCapture},
-	{keys: []string{"p"}, hint: "p pin", label: "Pin the selected measured count", group: "Review", action: keyPin, contexts: []keyContext{contextOverview}, priority: 8, disabled: canPin},
-	{keys: []string{"a"}, hint: "a accept pin", label: "Accept a pin, not a snapshot", group: "Review", action: keyAcceptPin, contexts: allKeyContexts, priority: 10, disabled: func(*Model) string { return "use after pin PIN --accept" }},
+	{keys: []string{"p"}, hint: "p pin", label: "Pin the selected measured count (confirms)", group: "Review", action: keyPin, contexts: []keyContext{contextOverview}, priority: 8, disabled: canPin},
+	{keys: []string{"a"}, hint: "a accept pin", label: "Accept a pin's current complete result (confirms)", group: "Review", action: keyAcceptPin, contexts: allKeyContexts, priority: 2, disabled: canAcceptPin},
 	{keys: []string{"r"}, hint: "r rerun", label: "Prepare an exact rerun preview; nothing runs", group: "Review", action: keyPreview, contexts: browseKeyContexts, priority: 8, disabled: canPreview},
 	{keys: []string{"y"}, hint: "y approve", label: "Run this exact preview once", group: "Consent", action: keyApprove, contexts: []keyContext{contextPlan}, priority: 4, disabled: canApprove},
 	{keys: []string{"n"}, hint: "n deny", label: "Deny this preview without execution", group: "Consent", action: keyDeny, contexts: []keyContext{contextPlan}, priority: 5},
@@ -348,12 +352,34 @@ func canPin(m *Model) string {
 	if m.actionBusy || m.busy || m.running {
 		return "another review action, import or run is active"
 	}
-	entry := selectedEntry(m, keyScreen(m))
-	if entry == nil || entry.Receipt == "" || entry.Expectation == "" {
+	entry := m.selectedOverviewEntry()
+	if entry == nil || entry.Receipt == "" || entry.Expectation == "" || entry.State.Kind != evidence.Observed || entry.State.Applicability != evidence.Current || entry.State.Execution != evidence.Completed || entry.Completeness != evidence.Complete {
 		return "select a complete current observation"
 	}
 	if len(m.selected.Evidence) >= MaxEvidence {
 		return "the evidence limit has been reached"
+	}
+	return ""
+}
+func canAcceptPin(m *Model) string {
+	if m.data == nil {
+		return "wait for stored records to load"
+	}
+	if m.jobs.Actions == nil {
+		return "pin actions are unavailable in this review"
+	}
+	if m.actionBusy || m.busy || m.running {
+		return "another review action, import or run is active"
+	}
+	if keyScreen(m) != "examples" {
+		return "select a pin on Overview"
+	}
+	entry := m.selectedOverviewEntry()
+	if entry == nil || entry.Decision == "" || entry.PinID == "" {
+		return "select a pin on Overview"
+	}
+	if entry.CurrentReceipt == "" || entry.State.Applicability != evidence.Current || entry.MissingCurrentResult {
+		return "the selected pin has no current complete result for this pair"
 	}
 	return ""
 }
@@ -386,6 +412,9 @@ func canCancel(m *Model) string {
 }
 
 func (m *Model) keyHints() string {
+	if m.screen == "prompt" {
+		return "Enter confirm · Esc cancel · Ctrl-U clear · Ctrl-C quit"
+	}
 	if m.height < 7 {
 		return "? help · q quit"
 	}

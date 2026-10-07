@@ -70,6 +70,8 @@ type ReportCounts struct {
 
 type Entry struct {
 	Receipt              evidence.Digest
+	PinID                evidence.Digest
+	CurrentReceipt       evidence.Digest
 	SourceReceipt        evidence.Digest
 	HasComparison        bool
 	Expectation          string
@@ -308,7 +310,11 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		if err != nil {
 			return nil, err
 		}
-		e := Entry{State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: sections, IDs: ids}
+		currentReceipt := evidence.Digest("")
+		if v.CurrentReceipt != nil {
+			currentReceipt = v.CurrentReceipt.ID
+		}
+		e := Entry{PinID: pin.ID, CurrentReceipt: currentReceipt, State: evidence.EvidenceState{Applicability: applicability}, Decision: pin.Decision, DecisionAt: last.At, MissingCurrentResult: missing, Name: pin.Expectation, Sections: sections, IDs: ids}
 		return append([]Entry{e}, historyRows...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err

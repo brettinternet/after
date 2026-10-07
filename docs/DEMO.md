@@ -66,9 +66,9 @@ Use the capture step's base/candidate IDs with `after inspect` or
 The no-Docker route has no observed receipt to pin as a finite example. In the
 TUI, `1`/`2`/`3` and Tab/Shift+Tab switch Overview, Changes, and Diff; the frame
 shows short snapshot IDs and sources. After an external edit, `c` captures in the
-background and `u` explicitly uses the new candidate while retaining the original
-base. `?` lists context-enabled keys and explains unavailable actions. `a` does
-not switch snapshots.
+background and `u` confirms use of the new candidate while retaining the original
+base. `p`, `u`, and eligible `a` actions name their exact IDs and record a reason;
+Esc cancels. `a` accepts a pin's current complete result, never a snapshot.
 
 ## Real offline payment loop
 

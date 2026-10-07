@@ -45,9 +45,11 @@ Each script prepares state, prints a short key guide, then opens `after review B
 after you press Enter. Set `AFTER_EXAMPLES_PREPARE_ONLY=1` to prepare without opening.
 Use `1`/`2`/`3` or Tab/Shift+Tab for Overview/Changes/Diff; the frame identifies
 the project and snapshot sources. After an external edit, `c` captures and `u`
-explicitly uses the new candidate with the original base. Contextual footer hints
-and grouped `?` help explain which actions are available. `a` does not switch
-snapshots.
+confirms use of the new candidate with the original base. `p`, `u`, and eligible
+`a` actions name exact target IDs and ask for a reason; Esc cancels. Duplicate pins
+with the same basis receipt and expectation are refused. `a` accepts a pin's current
+complete result, not a snapshot. Contextual footer hints and grouped `?` help explain
+which actions are available.
 
 | Script                                                     | Scenario                                                                           |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |

@@ -135,6 +135,10 @@ func TestResponsiveFramePTY(t *testing.T) {
 				if _, err := master.Write([]byte("u")); err != nil {
 					t.Fatal(err)
 				}
+				waitFor("Use this captured candidate?", "paths differ from candidate", "Pins may reopen")
+				if _, err := master.Write([]byte("\r")); err != nil {
+					t.Fatal(err)
+				}
 				waitFor("Snapshot selected", "base "+shortID(evidence.Digest(sel.Pair.Base)), "computed from captured sources — not Git's patch")
 				if _, err := master.Write([]byte("2")); err != nil {
 					t.Fatal(err)

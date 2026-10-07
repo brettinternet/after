@@ -96,6 +96,7 @@ type Model struct {
 	dividerRows                          map[int]bool
 	hex                                  bool
 	status                               string
+	prompt                               *mutationPrompt
 	theme                                terminal.Theme
 	now                                  func() time.Time
 	zone                                 *time.Location
@@ -167,7 +168,7 @@ func (m *Model) secondaryRow() bool {
 	if m.height <= 2 {
 		return false
 	}
-	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity"))
+	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || m.screen == "prompt" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity"))
 }
 func (m *Model) bodyRows() int {
 	_, jobLines := m.frameHeader()
@@ -301,6 +302,9 @@ func (m *Model) startJob(name, kind string, job Job) tea.Cmd {
 }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
+		if m.prompt != nil {
+			return m.updatePromptKey(key)
+		}
 		m.status = ""
 		if key.Paste {
 			return m, nil
@@ -913,6 +917,9 @@ func (m *Model) breadcrumb() string {
 	if m.screen == "plan" {
 		return m.planBreadcrumb()
 	}
+	if m.screen == "prompt" && m.prompt != nil {
+		return m.theme.Render(m.prompt.title, m.width, terminal.Strong, false)
+	}
 	if m.screen != "inspector" {
 		return ""
 	}
@@ -972,6 +979,12 @@ func (m *Model) statusLine() string {
 	if m.data == nil {
 		return "Loading stored records — nothing runs on open"
 	}
+	if m.screen == "prompt" {
+		if m.status != "" {
+			return m.status
+		}
+		return "Reason is recorded in pin history; no project execution"
+	}
 	if m.screen == "plan" {
 		return "Nothing has run. y runs this exact plan once · n denies"
 	}
@@ -992,7 +1005,7 @@ func (m *Model) statusLine() string {
 			return "Pin reopened: no result for this candidate yet — r previews a rerun"
 		}
 		if entry := m.selectedOverviewEntry(); entry != nil && entry.Decision != "" && entry.State.Applicability == evidence.Current && !entry.MissingCurrentResult {
-			return "Current result attached — accept it with after pin PIN --accept"
+			return "Current complete result attached — a accepts this pin"
 		}
 	}
 	if len(m.data.Entries) == 0 {
@@ -1028,6 +1041,8 @@ func (m *Model) View() string {
 		add(prefix + window(s, m.left, m.width-len(prefix)))
 	}
 	switch m.screen {
+	case "prompt":
+		body = append(body, m.promptLines()...)
 	case "help":
 		help := m.helpLines()
 		top := min(m.top, max(len(help)-1, 0))

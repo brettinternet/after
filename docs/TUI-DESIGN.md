@@ -272,12 +272,13 @@ result is also logged in Activity.
 | Run active                                       | `Running the approved plan · 1:12 · x cancels (the incomplete result is kept)` |
 | Capture pending                                  | `New capture 9c01d2e4 — u reviews it`                                          |
 | Selected pin reopened, no current result         | `Pin reopened: no result for this candidate yet — r previews a rerun`          |
-| Selected pin has a current complete result       | `Current result attached — compare it with the expectation; a accepts`         |
+| Selected pin has a current complete result       | `Current complete result attached — a accepts this pin`                        |
 | No evidence loaded                               | `Not checked — read the change, or c captures again after editing`             |
 | Otherwise                                        | blank                                                                          |
 
-Until AFTER-30 adds `a`, the accept rule says
-`Current result attached — accept it with after pin PIN --accept`.
+AFTER-30 exposes `a` only when the selected pin has a current complete receipt
+for this pair; its confirmation names the pin and receipt IDs, and acceptance still
+passes through the unchanged review engine.
 
 ## Detail
 

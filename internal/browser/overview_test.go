@@ -217,7 +217,7 @@ func TestNextLinePriority(t *testing.T) {
 		{"current pin", func(m *Model) {
 			m.data = &Data{Selection: Selection{Pair: currentPair}, Entries: []Entry{pin}}
 			m.selectFirstOverviewRow()
-		}, "Current result attached — accept it with after pin PIN --accept"},
+		}, "Current complete result attached — a accepts this pin"},
 		{"no evidence", func(m *Model) { m.data = &Data{Selection: Selection{Pair: currentPair}} }, "Not checked — read the change, or c captures again after editing"},
 		{"otherwise blank", func(m *Model) {
 			m.data = &Data{Selection: Selection{Pair: currentPair}, Entries: []Entry{{State: evidence.EvidenceState{Kind: evidence.Reported, Applicability: evidence.Current}}}}

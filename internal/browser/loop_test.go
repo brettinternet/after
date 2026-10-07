@@ -95,6 +95,11 @@ func TestLoopConsentAndSnapshotBarrier(t *testing.T) {
 		t.Fatal("a must not switch snapshots", m.status)
 	}
 	press(m, "u")
+	if m.prompt == nil || m.selected.Pair != before {
+		t.Fatal("u did not request explicit snapshot confirmation", m.status)
+	}
+	_, command := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	drain(m, command)
 	if m.selected.Pair == before || m.index != 0 || m.digest != "" {
 		t.Fatal("explicit selection failed", m.status)
 	}

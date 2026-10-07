@@ -136,6 +136,8 @@ func TestBrowserPTY(t *testing.T) {
 		t.Fatal("capture completion ID missing from the PTY")
 	}
 	send("u")
+	expect("Use this captured candidate?", "Pins may reopen; earlier results become history")
+	send("\r")
 	expect("Snapshot selected")
 	send("i")
 	expect("Imported report cards loaded without restart")

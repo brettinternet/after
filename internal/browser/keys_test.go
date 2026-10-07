@@ -63,7 +63,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	}
 	step(m, key("?"))
 	help := m.View()
-	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin, not a snapshot", "after pin PIN --accept", "s  Open Activity and record this session reference"} {
+	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin's current complete result (confirms)", "s  Open Activity and record this session reference"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("grouped help missing %q:\n%s", want, help)
 		}
