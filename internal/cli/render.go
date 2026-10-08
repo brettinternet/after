@@ -14,6 +14,7 @@ import (
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
+	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
 	"github.com/rivo/uniseg"
 )
@@ -562,7 +563,7 @@ func appendNextLines(state *invocation, kind string, raw []byte, original any, l
 	}
 	_ = json.Unmarshal(raw, &data)
 	if len(data.Next) == 0 {
-		data.Next = suggestedNext(kind, raw, original)
+		data.Next = suggestedNext(state, kind, raw, original)
 	}
 	lines = append(lines, textLine("Next", terminal.Strong))
 	if len(data.Next) == 0 {
@@ -581,7 +582,7 @@ func appendNextLines(state *invocation, kind string, raw []byte, original any, l
 	return lines
 }
 
-func suggestedNext(kind string, raw []byte, original any) []nextCommand {
+func suggestedNext(state *invocation, kind string, raw []byte, original any) []nextCommand {
 	switch kind {
 	case "capture":
 		var data struct {
@@ -589,7 +590,7 @@ func suggestedNext(kind string, raw []byte, original any) []nextCommand {
 		}
 		if json.Unmarshal(raw, &data) == nil && data.Candidate.ID != "" {
 			return []nextCommand{
-				next("after review "+string(data.Candidate.ID), "open this captured change"),
+				next("after review", "open or resume the saved review"),
 				next("after diff", "print this captured patch"),
 			}
 		}
@@ -611,11 +612,18 @@ func suggestedNext(kind string, raw []byte, original any) []nextCommand {
 	case "snapshot":
 		var pair snapshotView
 		if json.Unmarshal(raw, &pair) == nil && pair.Base != "" && pair.Candidate != "" {
-			return []nextCommand{next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this snapshot pair")}
+			return []nextCommand{next(reviewSuggestion(state.project, evidence.SnapshotPair{Base: pair.Base, Candidate: pair.Candidate}), "open or resume a review")}
 		}
 		var snapshot evidence.Snapshot
 		if json.Unmarshal(raw, &snapshot) == nil && snapshot.ID != "" {
-			return []nextCommand{next("after review "+string(snapshot.ID), "open the captured snapshot")}
+			command := "after review " + string(snapshot.ID)
+			if s, err := store.Open(state.project, false, nil); err == nil {
+				if pair, err := pairForCandidate(s, snapshot.ID); err == nil {
+					command = reviewSuggestion(state.project, pair)
+				}
+				s.Close()
+			}
+			return []nextCommand{next(command, "open or resume a review")}
 		}
 	case "inspection":
 		var report reportViewData

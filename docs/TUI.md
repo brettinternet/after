@@ -322,7 +322,7 @@ saved pair. Invalid state is reported and replaced at the next save. It is UI st
 never evidence. A resumed review restores its exact saved pair, mode and selected
 pin revisions, then captures in the background; a differing candidate waits as
 pending until `u`, without moving the selected pair. `c` uses the saved capture
-options. Different capture flags or `--new` start a new review.
+options. To start over on an unrelated change, use `after review --new` with any desired capture flags. It opens a fresh capture and names the replaced pair on stderr; only the saved UI session is replaced, never stored evidence or pins. Different capture flags also start a new review. `after status` names a saved review on another pair and offers both resume and start-over commands.
 
 Terminal rendering and the saved-review message use stderr. Stdout stays empty
 unless `--json` prints the versioned session JSON after terminal restoration.

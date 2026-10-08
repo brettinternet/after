@@ -425,6 +425,7 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 		if err != nil {
 			return err
 		}
+		state.project = cfg.Project
 		options, err := inspectionOptions(ctx)
 		if err != nil {
 			return err

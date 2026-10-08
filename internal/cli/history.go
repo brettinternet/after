@@ -344,6 +344,7 @@ func inspectNewestCommand(state *invocation, ctx *cli.Context, exporting bool) e
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	options, err := inspectionOptions(ctx)
 	if err != nil {
 		return err
@@ -643,6 +644,27 @@ func buildStatus(s *store.Store, history storedHistory) (statusView, error) {
 	return view, nil
 }
 
+// reviewSuggestion keeps older pairs directly addressable while offering the
+// ordinary launch/resume workflow for the newest capture or saved selection.
+func reviewSuggestion(project string, pair evidence.SnapshotPair) string {
+	explicit := "after review " + string(pair.Base) + " " + string(pair.Candidate)
+	if project == "" {
+		return explicit
+	}
+	if saved, found, _, err := readReviewSession(project); err == nil && found && saved.Pair == pair {
+		return "after review"
+	}
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		return explicit
+	}
+	defer s.Close()
+	if latest, err := newestCaptureForStore(s); err == nil && pair == (evidence.SnapshotPair{Base: latest.Base, Candidate: latest.Candidate}) {
+		return "after review"
+	}
+	return explicit
+}
+
 func statusNext(view statusView, history storedHistory) []nextCommand {
 	if view.Capture == nil {
 		return []nextCommand{next("after capture", "capture this checkout without running project code")}
@@ -655,26 +677,25 @@ func statusNext(view statusView, history storedHistory) []nextCommand {
 	}
 	for _, pin := range view.Pins {
 		if pin.Decision == evidence.Reopened || pin.Applicability != evidence.Current || pin.MissingCurrentResult {
-			commands := []nextCommand{next("after review "+string(view.Capture.Base)+" "+string(view.Capture.Candidate), "review the current capture and its evidence")}
+			commands := []nextCommand{next("after review", "open or resume the review")}
 			if pin.CanAccept {
 				commands = append(commands, next("after pin "+string(pin.ID)+" --accept", "accept this explicitly selected current result"))
 			}
 			return commands
 		}
 	}
-	pair := evidence.SnapshotPair{Base: view.Capture.Base, Candidate: view.Capture.Candidate}
 	if view.Receipt == nil && view.PriorRuns {
 		return []nextCommand{next("after run", "prepare the newest capture; execution still requires consent")}
 	}
 	if view.Receipt != nil && view.Comparison == nil {
 		return []nextCommand{
 			next("after compare "+string(view.Receipt.ID), "compare the stored run without executing project code"),
-			next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this capture"),
+			next("after review", "open or resume the review"),
 			next("after diff", "print this captured patch"),
 		}
 	}
 	commands := []nextCommand{
-		next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this capture"),
+		next("after review", "open or resume the review"),
 		next("after diff", "print this captured patch"),
 	}
 	if view.Comparison != nil {
