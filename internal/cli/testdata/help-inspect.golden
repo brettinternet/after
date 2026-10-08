@@ -1,8 +1,9 @@
-Inspect the newest capture, one stored record, or two stored snapshots.
+Inspect the newest capture, one stored record or plan, or two stored snapshots.
 
 Usage
   after inspect
   after inspect ID
+  after inspect PLAN
   after inspect BASE CANDIDATE
 
 Options

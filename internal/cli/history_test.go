@@ -248,8 +248,8 @@ func TestBareDefaultsAreStoredOnlyAndNameResolvedRecords(t *testing.T) {
 	var nextStatus struct {
 		Data statusView `json:"data"`
 	}
-	if code != ExitOK || stderr != "" || json.Unmarshal([]byte(statusAfterChange), &nextStatus) != nil || len(nextStatus.Data.Next) == 0 || nextStatus.Data.Next[0].Command != "after run "+string(second.Data.Base.ID)+" "+string(second.Data.Candidate.ID)+" --project "+shellQuote(project) {
-		t.Fatalf("no-run Next did not include the actual pair IDs: %d %s %q", code, statusAfterChange, stderr)
+	if code != ExitOK || stderr != "" || json.Unmarshal([]byte(statusAfterChange), &nextStatus) != nil || len(nextStatus.Data.Next) == 0 || nextStatus.Data.Next[0].Command != "after run --project "+shellQuote(project) {
+		t.Fatalf("no-run Next did not suggest the bare newest-capture run: %d %s %q", code, statusAfterChange, stderr)
 	}
 	before, err := store.Open(project, false, nil)
 	if err != nil {

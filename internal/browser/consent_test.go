@@ -97,7 +97,7 @@ func consentView(t *testing.T, raw []byte) *Model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	summary, summaryErr := consentSummary(raw)
+	summary, summaryErr := ConsentSummary(raw)
 	m := New(t.Context(), Selection{Project: "payment", Pair: preview.Snapshots}, Jobs{})
 	t.Cleanup(m.Close)
 	m.theme.Color = false
@@ -115,7 +115,7 @@ func TestConsentSummaryStrictDecodeDistinctValuesAndEscaping(t *testing.T) {
 	preview.Experiments[1][1].Observer.Mounts = "candidate mounts"
 	preview.Experiments[0][1].App.Policy = []string{"--network=none", "--read-only", "--cap-drop=ALL"}
 	raw := consentTestBytes(t, preview)
-	summary, err := consentSummary(raw)
+	summary, err := ConsentSummary(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestConsentDecoderRejectsUnknownNestedFieldsAndTrailingData(t *testing.T) {
 			if _, err := decodeConsentPreview(bad); err == nil {
 				t.Fatal("strict consent decoder accepted malformed preview")
 			}
-			if _, err := consentSummary(bad); err == nil {
+			if _, err := ConsentSummary(bad); err == nil {
 				t.Fatal("malformed preview produced an approval summary")
 			}
 		})
@@ -200,7 +200,7 @@ func TestConsentDecoderRejectsExperimentDimensions(t *testing.T) {
 			if _, err := decodeConsentPreview(raw); err == nil {
 				t.Fatal("accepted unsupported experiment dimensions")
 			}
-			if _, err := consentSummary(raw); err == nil {
+			if _, err := ConsentSummary(raw); err == nil {
 				t.Fatal("unsupported dimensions produced a misleading summary")
 			}
 		})
@@ -339,7 +339,7 @@ func TestConsentFallbackKeepsAndApprovesExactPreviewBytes(t *testing.T) {
 		t.Fatal("test did not add an unknown nested sandbox field")
 	}
 	digest := consentTestDigestOf(bad)
-	summary, summaryErr := consentSummary(bad)
+	summary, summaryErr := ConsentSummary(bad)
 	if summaryErr == nil {
 		t.Fatal("malformed preview unexpectedly decoded")
 	}

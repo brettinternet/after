@@ -103,7 +103,7 @@ func (p consentPreview) validate() error {
 	return nil
 }
 
-func consentSummary(raw []byte) ([]byte, error) {
+func ConsentSummary(raw []byte) ([]byte, error) {
 	preview, err := decodeConsentPreview(raw)
 	if err != nil {
 		return nil, err

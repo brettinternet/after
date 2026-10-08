@@ -1,7 +1,7 @@
 # Command-line design
 
 **Status: staged target design.** AFTER-27's shared readable Cards and AFTER-34
-to AFTER-39 are implemented; AFTER-40 onward remains future work. This is the
+to AFTER-40 are implemented; AFTER-41 onward remains future work. This is the
 design for backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in
 AFTER-24 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy
 future commands from this target into runtime help before they exist.
@@ -58,7 +58,7 @@ modified and one untracked file, then with typical arguments.
 | `after log`             | List the 20 newest captures, runs, reports, and pin events     | `-n N`                                                                                                 |
 | `after inspect`         | Summarize the newest capture                                   | `ID` (any record or plan), `BASE CANDIDATE`                                                            |
 | `after import`          | Read `go test -json` from a file, pipe, or stdin               | `[FILE]`, `-`, or omitted; optional `--producer TEXT`, `--snapshot ID`                                 |
-| `after run`             | Prepare a plan for the newest capture, then ask before running | `BASE CANDIDATE`, `--approve DIGEST`                                                                   |
+| `after run`             | Prepare a plan for the newest capture, then ask before running | `[BASE CANDIDATE]`, `--approve DIGEST`, `--plan-file FILE`, `--plan-out FILE`                          |
 | `after compare`         | Compare the newest run of the newest capture                   | `RECEIPT`                                                                                              |
 | `after pin`             | List pins                                                      | `[RECEIPT] --expectation TEXT`; `PIN`; `PIN --accept`, `PIN --attach RECEIPT`, `PIN --select SNAPSHOT` |
 | `after export`          | Print the newest comparison as JSON                            | `ID`                                                                                                   |
@@ -339,15 +339,18 @@ On a terminal:
 
 ```text
 $ after run
-Using the newest capture: base a750186b (commit 3f2a1c9) → candidate 784eb013 (working tree)
-Nothing has run. Plan 33d2a7af would run:
-  Runs          2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1
-  Build         /usr/local/go/bin/go build -trimpath -o /work/app ./app
-  Image         docker.io/library/golang@sha256:e0174e51…
-  Topology      app network=none; observer joins app network only; separate PID, IPC, files…
+Nothing has run. Plan size 18.2 KiB.
+Exact authorization digest:
+sha256:33d2a7af…
+Using the newest capture: base a750186b → candidate 784eb013
+Consent summary:
+  Snapshots: {"base":"sha256:a750186b…","candidate":"sha256:784eb013…"}
+  Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1
+  Build argv: ["/usr/local/go/bin/go","build","-trimpath","-o","/work/app","./app"]
+  Images: "docker.io/library/golang@sha256:e0174e51…"
+  Topology: "app network=none; observer joins app network only; separate PID…"
   …
-  Exact plan    after inspect 33d2a7af (18.2 KiB)
-Type yes to run exactly this plan once:
+Type yes to run exactly these plan bytes:
 ```
 
 Without a terminal:
@@ -355,17 +358,20 @@ Without a terminal:
 ```text
 $ after run
 Using the newest capture: base a750186b (commit 3f2a1c9) → candidate 784eb013 (working tree)
-Prepared plan 33d2a7af. Nothing has run. Approve exactly this plan with:
+Prepared and stored plan 33d2a7af · 18.2 KiB. Nothing has run.
+Approve exactly these bytes with:
   after run --approve sha256:33d2a7af…   (the full digest)
 ```
 
 - The summary rows are the [consent summary](TUI-DESIGN.md#consent), decoded from
-  the exact plan bytes by the same function. Typing `yes` remains the interactive
-  consent; this replaces printing the whole plan JSON.
-- Plans are stored privately in `.after/` (mode 0600, never overwritten).
-  `--approve DIGEST` finds the plan by its full digest, then reconstructs and
-  checks it exactly as `--plan-file` does today. `--plan-out` and `--plan-file`
-  keep working. The non-interactive preview still exits 3.
+  the exact plan bytes by the same strict function used by the TUI. The preview's
+  byte size is shown; a summary decode failure is visible but does not change the
+  digest that `yes` authorizes.
+- Plans are stored immutably in `.after/` (mode 0600, never overwritten).
+  `--approve DIGEST` finds a stored plan by its full digest, then reconstructs and
+  checks its bytes exactly as `--plan-file` does. `--plan-out` and `--plan-file`
+  keep working; `after inspect PLAN` shows the strict summary and indented,
+  sanitized plan. A non-interactive preview still exits 3.
 - During a run, stderr shows elapsed time on a terminal, with no percentage.
 - Missing Docker settings are named with the configuration lines to add. A detected
   Docker CLI on `PATH` and an existing socket file may be suggested, but AFTER never
@@ -489,8 +495,9 @@ Run after COMMAND --help for a command's options.
 | `--base`: a snapshot ID or a Git ref                      | `--base`: a Git ref only                                        |
 
 AFTER-38 made these grammar changes; AFTER-39 implements file/pipe import and
-optional producer claims. The `run` row remains AFTER-40. Removed forms fail with
-an error that shows the new form. `review`, `inspect`, and `run` accept snapshot pairs as
+optional producer claims. AFTER-40 implements bare newest-capture run, immutable
+stored plans and exact-digest approval. Removed forms fail with an error that
+shows the new form. `review`, `inspect`, and `run` accept snapshot pairs as
 positional `BASE CANDIDATE` IDs; `review` accepts trailing evidence IDs. Bare
 capture/resume selection and record-ID review remain later work.
 

@@ -103,11 +103,12 @@ Options
   -n N   number of newest events to show (default: 20; range: 1–10000)
 ` + global
 	case "inspect":
-		body = `Inspect the newest capture, one stored record, or two stored snapshots.
+		body = `Inspect the newest capture, one stored record or plan, or two stored snapshots.
 
 Usage
   after inspect
   after inspect ID
+  after inspect PLAN
   after inspect BASE CANDIDATE
 
 Options
@@ -154,17 +155,20 @@ Options
   --artifact-size N        stored artifact page bytes (default: 65536)
 ` + global
 	case "run":
-		body = fmt.Sprintf(`Prepare the frozen offline experiment; exact consent is required before it runs.
+		body = fmt.Sprintf(`Prepare the frozen offline experiment for the newest capture. Exact consent is
+required before it runs.
 
 Usage
+  after run
   after run BASE CANDIDATE
+  after run --approve FULL_DIGEST
   after run BASE CANDIDATE --plan-out FILE
   after run --plan-file FILE --approve FULL_DIGEST
 
 Options
   --plan-file FILE       reconstruct an exact saved execution preview
-  --plan-out FILE        save a private preview without overwriting a file
-  --approve DIGEST       approve only this full lowercase sha256 digest
+  --plan-out FILE        save a private preview file without overwriting it
+  --approve DIGEST       exact full sha256 digest; stored plan needs no file
   --docker-binary PATH   trusted Docker CLI path (default: not configured)
   --docker-host SOCKET   local Unix socket (default: not configured)
   --repetitions N        paired run repetitions (default: %d; range: 1–5)

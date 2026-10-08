@@ -14,7 +14,7 @@ import (
 	ucli "github.com/urfave/cli/v2"
 )
 
-var inspectKinds = []string{"snapshot", "receipt", "comparison", "report", "artifact"}
+var inspectKinds = []string{"snapshot", "receipt", "comparison", "report", "artifact", "plan"}
 var browserKinds = []string{"receipt", "comparison", "report", "pin"}
 
 // Check syntax before opening storage, including an absent store. Git refs for
@@ -189,6 +189,9 @@ func describeID(s *store.Store, entry store.Entry) (string, string, error) {
 	case "comparison":
 		v, err := store.Get[evidence.Comparison](s, entry.ID)
 		return "comparison", fmt.Sprintf("%s · receipt %s", v.Outcome, shortID(v.Receipt)), err
+	case "plan":
+		_, err := s.ReadPlan(entry.ID)
+		return "plan", "stored exact execution plan", err
 	case "pin":
 		v, err := store.Get[evidence.Pin](s, entry.ID)
 		return "pin", v.Expectation, err

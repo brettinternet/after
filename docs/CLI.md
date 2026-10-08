@@ -50,11 +50,11 @@ still requires an explicit pin revision ID. Pin history corruption or the 512-he
 16 MiB lookup limit is reported as unavailable rather than as a partial head list.
 
 Every readable result ends with a `Next` block containing at most three available,
-syntax-ready commands. Defaults do not suggest unimplemented `after diff` or bare
-`after run`; when running is the next step the suggestion includes the actual
-snapshot pair. Explicit `--project` and `--config` values are retained in suggestions
-and shell-quoted when needed. A safe suggestion can be run as written; it does not
-authorize execution.
+syntax-ready commands. `after run` without arguments prepares the newest capture;
+when status identifies a rerun as the next action, its suggestion is the bare
+`after run` command. Explicit `--project` and `--config` values are retained in
+suggestions and shell-quoted when needed. A safe suggestion can be run as written;
+it does not authorize execution.
 
 ## Grammar, help and diagnostics
 
@@ -94,8 +94,9 @@ full IDs. Capture's `--base`/`--target` are Git references, not stored IDs.
 Resolution searches only kinds valid for that argument: run and positional
 inspect/review pairs search snapshots; compare and pin creation search receipts;
 `pin --attach` searches receipts, and `pin PIN` plus pin decisions search pin
-revisions. Inspect/export search snapshots, receipts, comparisons, reports and
-artifacts. Trailing review IDs search comparisons, receipts, reports and pins.
+revisions. Inspect/export search snapshots, receipts, comparisons, reports,
+artifacts and stored execution plans. Trailing review IDs search comparisons,
+receipts, reports and pins.
 Missing prefixes exit 2 naming the searched kinds; ambiguity exits 2 with at most
 ten short IDs, kinds and sanitized one-line summaries. Use more characters to
 disambiguate. A full, syntactically valid `sha256:` digest that has no stored
@@ -153,17 +154,19 @@ reuse rules, broader-intent limits, historical revisions and rerun authorization
 
 ## Execution authorization
 
-The first run command prepares the payment-specific frozen plan; it does not execute it before authorization. In a non-TTY invocation, save the exact plan; readable output prints its authorization digest on its own untruncated line. Pass `--json` when a script must parse that digest:
+Bare `after run` prepares the payment-specific frozen plan for the newest stored capture; an explicit `BASE CANDIDATE` pair still works. Preparation does not execute project code. The readable preview names the resolved capture, displays consent rows decoded from the exact plan bytes and its byte size, stores the immutable plan in `.after/` with mode 0600, and prints its full authorization digest and exact command. Pass `--json` when a script must parse the digest or resolved IDs.
 
 ```sh
-./bin/after run BASE_ID CANDIDATE_ID --project "/work/payment" \
-  --plan-out "/work/payment/.after/approved-preview.json"
-# Review the plan and digest, then authorize only that exact plan:
+./bin/after run --project "/work/payment"
+# Review the readable preview, then authorize only those stored bytes:
+./bin/after run --approve sha256:<full-64-hex-digest> --project "/work/payment"
+# The explicit external-file flow remains available:
+./bin/after run BASE_ID CANDIDATE_ID --plan-out "/work/payment/.after/approved-preview.json"
 ./bin/after run --plan-file "/work/payment/.after/approved-preview.json" \
   --approve sha256:... --project "/work/payment"
 ```
 
-The preview-only invocation returns status `authorization_required` and exit 3. It never prompts on non-TTY stdin. With an interactive terminal, `run BASE_ID CANDIDATE_ID` prints the exact plan to stderr and requires typing `yes`; any other input denies execution. `interactive: false` disables this prompt but grants no authority. `--approve` is accepted only with `--plan-file` and must equal the exact digest. The plan file is private (0600), created without overwrite, and is reconstructed against current immutable snapshots before execution. Any changed or edited plan is rejected. Each plan has a new random request ID; re-preparing is not equivalent to approving an old preview.
+The non-TTY preview returns status `authorization_required` and exit 3; it never reads stdin for consent. A plan is stored immutably in `.after/` (0600, never overwritten), and `after inspect PLAN` shows the shared strict consent summary followed by the indented, sanitized plan; `--json` includes base64 of the exact stored bytes. On a terminal, AFTER shows the summary and size on stderr and requires typing `yes`; any other answer runs nothing. If strict summary decoding fails, that failure is shown while consent still binds the exact preview digest. `interactive: false` disables the prompt but grants no authority. `--approve` requires the full digest: `after run --approve DIGEST` loads the matching stored plan, and `--plan-file FILE --approve DIGEST` continues to work. `--plan-out FILE` still creates an additional private (0600) file without overwriting an existing one. Both flows reconstruct against current immutable snapshots and compare exact bytes before execution. Any changed or edited plan is rejected. Each plan has a new random request ID; re-preparing is not equivalent to approving an old preview.
 
 Only after exact approval may the runner contact the explicitly selected local Docker endpoint. Set both an absolute trusted CLI and a local Unix socket, for example:
 
@@ -174,11 +177,11 @@ AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
   --approve sha256:... --project "/work/payment"
 ```
 
-No Docker context, image pull, host execution, build, or project command is used by help, config display, capture, import, inspect, export, comparison, pin, review, or preview. Provision the pinned image separately as documented in [SANDBOX.md](SANDBOX.md). Missing endpoints or isolation produce an incomplete operational result; they never select a host fallback.
+No Docker context, image pull, host execution, build, or project command is used by help, config display, capture, import, inspect, export, comparison, pin, review, preview, or setup diagnostics. Provision the pinned image separately as documented in [SANDBOX.md](SANDBOX.md). Missing endpoints or isolation produce an actionable setup problem or incomplete operational result; they never select a host fallback. Approved runs show elapsed time on terminal stderr after one second, with no percentage.
 
 ## Configuration
 
-AFTER reads configuration only when a command needs it. The explicit `--config FILE` or `AFTER_CONFIG` path must exist; otherwise the optional discovered file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Relative config/project paths are resolved from the invocation working directory. The discovered file may be absent. Configuration loading parses data only; it never runs repository code. `after config` reports effective values and each winning source (`flag`, `env`, `file`, or `default`); project/config paths and Docker endpoint values are hidden.
+AFTER reads configuration only when a command needs it. The explicit `--config FILE` or `AFTER_CONFIG` path must exist; otherwise the optional discovered file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Relative config/project paths are resolved from the invocation working directory. The discovered file may be absent. Configuration loading parses data only; it never runs repository code. `after config` reports effective values and each winning source (`flag`, `env`, `file`, or `default`), hides project/config paths and Docker endpoint values, and lists Docker setup problems with their configuration fixes.
 
 Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/whitespace strings and YAML `null` are unset and allow a lower layer to win. Explicit booleans and integers are values: `false` is not a default, and zero is not silently discarded. `diff_bytes: 0` is supported and suppresses patch bytes while retaining the change inventory; `repetitions: 0` is invalid.
 
@@ -194,7 +197,7 @@ Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/wh
 | `docker_binary` | `AFTER_DOCKER_BINARY` | `--docker-binary` | string; unset              | must be an absolute trusted CLI path when set                          |
 | `docker_host`   | `AFTER_DOCKER_HOST`   | `--docker-host`   | string; unset              | must be a local `unix:///` socket when set                             |
 
-Docker binary and host must be configured together. There is deliberately no consent/authorization setting: permission is an interactive action or the specific `--approve` digest. Runtime values remain hidden in config output. YAML is limited to 64 KiB, one mapping document, regular non-symlink files, scalar values, and the listed keys. Duplicate/unknown keys, anchors/aliases, malformed documents, invalid types/ranges, and missing explicit files fail with a setting/source diagnostic.
+Docker binary and host must be configured together. There is deliberately no consent/authorization setting: permission is an interactive action or the specific `--approve` digest. Runtime values remain hidden in the configuration table; explicitly labeled Docker CLI/socket suggestions are candidates, not selected endpoints. Setup probes only inspect configuration and filesystem metadata—they never run Docker or contact an endpoint. YAML is limited to 64 KiB, one mapping document, regular non-symlink files, scalar values, and the listed keys. Duplicate/unknown keys, anchors/aliases, malformed documents, invalid types/ranges, and missing explicit files fail with a setting/source diagnostic.
 
 ## Output and exit status
 

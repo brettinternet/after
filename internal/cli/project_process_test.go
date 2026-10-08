@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -106,6 +107,13 @@ func TestProjectCommandProcessModes(t *testing.T) {
 	if err := json.Unmarshal([]byte(pinOutput), &pinned); err != nil {
 		t.Fatal(err)
 	}
+	previewCode, previewOutput, previewError, err := runCLIPipe(nested, home, false, []string{"run", baseID, candidateID, "--interactive=false", "--json"})
+	var storedPreview struct {
+		Data executionPreview `json:"data"`
+	}
+	if err != nil || previewCode != ExitDenied || previewError != "" || json.Unmarshal([]byte(previewOutput), &storedPreview) != nil || !validDigest(storedPreview.Data.Authorization) {
+		t.Fatalf("stored plan setup: exit=%d output=%q stderr=%q err=%v", previewCode, previewOutput, previewError, err)
+	}
 	commands := []struct {
 		name string
 		args []string
@@ -130,11 +138,14 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"compare", []string{"compare", string(receiptID)}, ExitOperational},
 		{"export", []string{"export", string(compared.Data.Comparison.ID)}, ExitOperational},
 		{"run", []string{"run", baseID, candidateID, "--interactive=false"}, ExitDenied},
+		{"run-bare-preview", []string{"run", "--interactive=false"}, ExitDenied},
+		{"inspect-plan", []string{"inspect", string(storedPreview.Data.Authorization)}, ExitOK},
 		{"pin", []string{"pin", string(receiptID), "--expectation", "finite synthetic review", "--scope", "human_intent", "--reason", "process-mode fixture"}, ExitOK},
 		{"pin-inspect", []string{"pin", string(pinned.Data.Pin.ID)}, ExitOK},
 		{"pin-select", []string{"pin", string(pinned.Data.Pin.ID), "--select", candidateID, "--mode", "original_base", "--reason", "prefix selection"}, ExitOK},
 		{"pin-attach", []string{"pin", string(pinned.Data.Pin.ID), "--attach", string(receiptID), "--reason", "prefix attachment"}, ExitOK},
 		{"run-short-approval", []string{"run", "--plan-file", "not-read", "--approve", "abcd"}, ExitInvalid},
+		{"run-stored-prefix", []string{"run", "--approve", "abcd"}, ExitInvalid},
 		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitOK},
 		{"config", []string{"config"}, ExitOK},
 		{"import-default-binding", []string{"import", report}, ExitOK},
@@ -182,7 +193,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 							t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
 						}
 					}
-					if strings.Contains(command.name, "status") || command.name == "log" || strings.Contains(command.name, "default") || command.name == "pin-list" {
+					if strings.Contains(command.name, "status") || command.name == "log" || strings.Contains(command.name, "default") || command.name == "pin-list" || command.name == "run-bare-preview" || command.name == "inspect-plan" {
 						t.Logf("80-column CLI terminal verification: command=%s mode=%s NO_COLOR=%t exit=%d excerpt=%q", command.name, mode, noColor, code, trimExcerpt(transcript))
 					}
 					if command.name == "capture" && noColor && mode == "pty" {
@@ -353,6 +364,78 @@ func runCLIPTY(dir, home string, noColor bool, args []string) (int, string, stri
 	}
 	code, err := processExitCode(waitErr)
 	return code, output.String(), "", err
+}
+
+func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answer string) (int, string, error) {
+	master, slave, err := pty.Open()
+	if err != nil {
+		return -1, "", err
+	}
+	defer master.Close()
+	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
+		slave.Close()
+		return -1, "", err
+	}
+	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = cliProcessEnv(home, noColor)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	if err := cmd.Start(); err != nil {
+		slave.Close()
+		return -1, "", err
+	}
+	_ = slave.Close()
+	chunks := make(chan []byte, 64)
+	go func() {
+		defer close(chunks)
+		buffer := make([]byte, 8192)
+		for {
+			n, err := master.Read(buffer)
+			if n > 0 {
+				chunks <- append([]byte(nil), buffer[:n]...)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	wait := make(chan error, 1)
+	go func() { wait <- cmd.Wait() }()
+	var output strings.Builder
+	var processErr error
+	sent := false
+	timer := time.NewTimer(45 * time.Second)
+	defer timer.Stop()
+	for chunks != nil || wait != nil {
+		select {
+		case chunk, ok := <-chunks:
+			if !ok {
+				chunks = nil
+				continue
+			}
+			output.Write(chunk)
+			if !sent && prompt != "" && strings.Contains(output.String(), prompt) {
+				if _, err := master.Write([]byte(answer)); err != nil {
+					_ = cmd.Process.Kill()
+					return -1, output.String(), err
+				}
+				sent = true
+			}
+		case processErr = <-wait:
+			wait = nil
+		case <-timer.C:
+			_ = cmd.Process.Kill()
+			if wait != nil {
+				<-wait
+			}
+			return -1, output.String(), fmt.Errorf("PTY command did not finish")
+		}
+	}
+	if prompt != "" && !sent {
+		return -1, output.String(), fmt.Errorf("PTY prompt %q was not displayed", prompt)
+	}
+	code, err := processExitCode(processErr)
+	return code, output.String(), err
 }
 
 func cliProcessEnv(home string, noColor bool) []string {

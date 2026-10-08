@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/brettinternet/after/internal/browser"
 	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/config"
@@ -23,6 +24,7 @@ import (
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
+	"github.com/brettinternet/after/internal/terminal"
 	ucli "github.com/urfave/cli/v2"
 )
 
@@ -114,7 +116,7 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "run", Usage: "preview, explicitly authorize, and compare the frozen offline payment experiment",
 			Before:    outputBefore(state),
-			ArgsUsage: "<base-snapshot-id> <candidate-snapshot-id> (or --plan-file FILE --approve DIGEST)",
+			ArgsUsage: "[<base-snapshot-id> <candidate-snapshot-id>] (or --approve DIGEST or --plan-file FILE)",
 			Flags: append(runFlags(),
 				&ucli.StringFlag{Name: "plan-file", Usage: "reconstruct an exact previously saved execution preview"},
 				&ucli.StringFlag{Name: "plan-out", Usage: "create a private file containing the exact preview for later approval"},
@@ -162,8 +164,14 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 		return err
 	}
 	cfg, err := configFlags(ctx)
+	var dockerConfigErr *config.Error
 	if err != nil {
-		return err
+		if !errors.As(err, &dockerConfigErr) || (dockerConfigErr.Setting != "docker_binary" && dockerConfigErr.Setting != "docker_host") {
+			return err
+		}
+		state.exit = ExitInvalid
+		problem := fmt.Sprintf("invalid configuration setting %s (%s): %s", dockerConfigErr.Setting, dockerConfigErr.Source, dockerConfigErr.Reason)
+		state.diagnostic = formatDiagnostic(problem, dockerConfigFix())
 	}
 	type setting struct {
 		Name   string `json:"name"`
@@ -193,9 +201,14 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 		{"docker_binary", dockerBinary, cfg.Sources["docker_binary"]},
 		{"docker_host", dockerHost, cfg.Sources["docker_host"]},
 	}
+	setup := dockerSetupStatus(cfg)
+	if dockerConfigErr != nil {
+		setup.Problems = append([]string{fmt.Sprintf("Invalid Docker configuration: %s.", dockerConfigErr.Reason)}, setup.Problems...)
+	}
 	return writeResult(state, "configuration", struct {
-		Settings []setting `json:"settings"`
-	}{settings})
+		Settings []setting   `json:"settings"`
+		Setup    dockerSetup `json:"docker_setup"`
+	}{settings, setup})
 }
 
 func captureCommand(state *invocation, ctx *ucli.Context) error {
@@ -477,6 +490,14 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	kind := "inspection"
 	if exporting {
 		kind = "export"
+	}
+	if raw, err := s.ReadPlan(id); err == nil {
+		if exporting {
+			return invalidWithFix("export requires a comparison ID", "try: after export COMPARISON_ID")
+		}
+		return writeResult(state, "plan", inspectPlan(id, raw))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return operational("stored execution plan is corrupt or unavailable")
 	}
 	if value, ok, err := optionalGet[evidence.Comparison](s, id); err != nil {
 		if !exporting && !state.jsonOutput && !state.forceJSON {
@@ -898,6 +919,64 @@ func resolveIDFromProject(project, value string, kinds ...string) (evidence.Dige
 	return resolveID(s, value, kinds...)
 }
 
+type planInspection struct {
+	ID           evidence.Digest `json:"id"`
+	SizeBytes    int             `json:"size_bytes"`
+	Consent      string          `json:"consent_summary,omitempty"`
+	ConsentError string          `json:"consent_summary_error,omitempty"`
+	Plan         json.RawMessage `json:"plan,omitempty"`
+	Base64       string          `json:"base64"`
+	raw          []byte          `json:"-"`
+}
+
+func formatPlanSize(size int) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	return fmt.Sprintf("%.1f KiB", float64(size)/1024)
+}
+
+func inspectPlan(id evidence.Digest, raw []byte) planInspection {
+	view := planInspection{ID: id, SizeBytes: len(raw), Base64: base64.StdEncoding.EncodeToString(raw), raw: append([]byte(nil), raw...)}
+	if json.Valid(raw) {
+		view.Plan = append(json.RawMessage(nil), raw...)
+	}
+	if summary, err := browser.ConsentSummary(raw); err != nil {
+		view.ConsentError = terminal.Sanitize(err.Error())
+	} else {
+		view.Consent = strings.TrimSuffix(string(summary), "\n")
+	}
+	return view
+}
+
+type executionPreview struct {
+	Authorization string          `json:"authorization_digest"`
+	Status        string          `json:"status"`
+	Plan          json.RawMessage `json:"plan"`
+	PlanBytes     int             `json:"plan_size_bytes"`
+	Consent       string          `json:"consent_summary,omitempty"`
+	ConsentError  string          `json:"consent_summary_error,omitempty"`
+	Using         *resolvedIDs    `json:"using,omitempty"`
+	DockerSetup   dockerSetup     `json:"docker_setup"`
+	Next          []nextCommand   `json:"next"`
+}
+
+func executionPreviewNext(status, digest string) []nextCommand {
+	if status == "authorization_required" || status == "operator_declined" {
+		return []nextCommand{
+			next("after run --approve "+digest, "authorize exactly this stored plan"),
+			next("after inspect "+digest, "inspect the exact stored plan"),
+			next("after config", "check Docker setup without contacting an endpoint"),
+		}
+	}
+	return []nextCommand{next("after inspect "+digest, "inspect the exact stored plan")}
+}
+
+func writeExecutionPreview(state *invocation, result executionPreview) error {
+	result.Next = executionPreviewNext(result.Status, result.Authorization)
+	return writeResult(state, "execution_preview", result)
+}
+
 func runCommand(state *invocation, ctx *ucli.Context) error {
 	cfg, err := configFlags(ctx)
 	if err != nil {
@@ -912,28 +991,29 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	if planPath != "" && planOut != "" {
 		return invalid("--plan-file cannot be combined with --plan-out")
 	}
-	var s *store.Store
-	if planPath != "" {
-		if ctx.Args().Len() != 0 {
-			return invalidWithFix("saved-plan execution does not accept snapshot arguments", "use after run --plan-file FILE --approve FULL_DIGEST")
-		}
-	} else if ctx.Args().Len() != 2 {
-		return invalidWithFix("run requires two snapshot IDs or --plan-file", "try: after run BASE CANDIDATE")
+	if planPath != "" && ctx.Args().Len() != 0 {
+		return invalidWithFix("saved-plan execution does not accept snapshot arguments", "use after run --plan-file FILE --approve FULL_DIGEST")
 	}
-	if approvalSet && planPath == "" {
-		return invalid("noninteractive approval requires --plan-file to reconstruct the exact saved preview")
+	if approvalSet && planPath == "" && ctx.Args().Len() != 0 {
+		return invalidWithFix("stored-plan approval does not accept snapshot arguments", "use after run --approve FULL_DIGEST")
+	}
+	if planPath == "" && !approvalSet && ctx.Args().Len() != 0 && ctx.Args().Len() != 2 {
+		return invalidWithFix("run requires no arguments or two snapshot IDs", "try: after run or after run BASE CANDIDATE")
 	}
 	if planOut != "" && ctx.IsSet("approve") {
 		return invalid("--plan-out is only valid when preparing a preview")
 	}
-	s, err = store.Open(cfg.Project, true, nil)
+	s, err := store.Open(cfg.Project, true, nil)
 	if err != nil {
 		return operational("cannot open private evidence store")
 	}
 	defer s.Close()
 	var plan *runner.Plan
-	if planPath != "" {
-		preview, err := readBounded(planPath, 1<<20)
+	var preview []byte
+	var using *resolvedIDs
+	switch {
+	case planPath != "":
+		preview, err = readBounded(planPath, store.MaxPlanBytes)
 		if err != nil {
 			return operational("cannot read saved execution plan")
 		}
@@ -941,61 +1021,94 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		if err != nil {
 			return invalid("saved execution plan is invalid or no longer matches stored snapshots")
 		}
-	} else {
-		base, err := resolveID(s, ctx.Args().Get(0), "snapshot")
-		if err != nil {
-			return err
+	case approvalSet:
+		preview, err = s.ReadPlan(evidence.Digest(ctx.String("approve")))
+		if errors.Is(err, os.ErrNotExist) {
+			return invalidWithFix("no stored execution plan matches that full digest", "prepare a plan with after run, then copy its full authorization digest")
 		}
-		candidate, err := resolveID(s, ctx.Args().Get(1), "snapshot")
 		if err != nil {
-			return err
+			return operational("stored execution plan is corrupt or unavailable")
 		}
-		pair := evidence.SnapshotPair{Base: base, Candidate: candidate}
+		plan, err = runner.PrepareFromPreview(s, preview)
+		if err != nil {
+			return invalid("stored execution plan no longer matches its captured inputs")
+		}
+	default:
+		var pair evidence.SnapshotPair
+		if ctx.Args().Len() == 0 {
+			captureRecord, captureErr := newestCaptureForStore(s)
+			if captureErr != nil {
+				return captureErr
+			}
+			pair = evidence.SnapshotPair{Base: captureRecord.Base, Candidate: captureRecord.Candidate}
+			using = &resolvedIDs{Capture: captureRecord.ID, Base: pair.Base, Candidate: pair.Candidate}
+		} else {
+			base, resolveErr := resolveID(s, ctx.Args().Get(0), "snapshot")
+			if resolveErr != nil {
+				return resolveErr
+			}
+			candidate, resolveErr := resolveID(s, ctx.Args().Get(1), "snapshot")
+			if resolveErr != nil {
+				return resolveErr
+			}
+			pair = evidence.SnapshotPair{Base: base, Candidate: candidate}
+		}
 		plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
 		if err != nil {
 			return operational("cannot prepare the bounded payment execution plan")
 		}
 	}
 	preview, digest := plan.Preview()
+	if len(preview) > store.MaxPlanBytes {
+		return operational("execution plan exceeds the private storage limit")
+	}
 	if planOut != "" {
 		if err := writePrivateNew(planOut, preview); err != nil {
 			return operational("cannot save execution preview without overwriting an existing file")
 		}
 	}
-	if approvalSet {
-		if ctx.String("approve") != digest {
-			state.exit = ExitDenied
-			return writeResult(state, "execution_preview", struct {
-				Authorization string          `json:"authorization_digest"`
-				Status        string          `json:"status"`
-				Plan          json.RawMessage `json:"plan"`
-			}{digest, "authorization_mismatch", preview})
-		}
-	} else if cfg.Interactive && state.tty {
-		if !prompt(state, digest, preview) {
-			state.exit = ExitDenied
-			return writeResult(state, "execution_preview", struct {
-				Authorization string          `json:"authorization_digest"`
-				Status        string          `json:"status"`
-				Plan          json.RawMessage `json:"plan"`
-			}{digest, "operator_declined", preview})
-		}
+	planID := evidence.Digest(digest)
+	if err := s.PutPlan(planID, preview); err != nil {
+		return operational("cannot store the immutable private execution plan")
+	}
+	consent, consentErr := browser.ConsentSummary(preview)
+	result := executionPreview{
+		Authorization: digest, Plan: json.RawMessage(preview), PlanBytes: len(preview), Using: using,
+		DockerSetup: dockerSetupStatus(cfg),
+	}
+	if consentErr != nil {
+		result.ConsentError = terminal.Sanitize(consentErr.Error())
 	} else {
+		result.Consent = strings.TrimSuffix(string(consent), "\n")
+	}
+	if approvalSet && ctx.String("approve") != digest {
 		state.exit = ExitDenied
-		return writeResult(state, "execution_preview", struct {
-			Authorization string          `json:"authorization_digest"`
-			Status        string          `json:"status"`
-			Plan          json.RawMessage `json:"plan"`
-		}{digest, "authorization_required", preview})
+		result.Status = "authorization_mismatch"
+		return writeExecutionPreview(state, result)
 	}
-	if cfg.DockerBinary == "" || cfg.DockerHost == "" {
-		return operational("execution requires explicit AFTER_DOCKER_BINARY and AFTER_DOCKER_HOST; no host fallback is supported")
+	if !approvalSet {
+		if cfg.Interactive && state.tty {
+			if !prompt(state, digest, consent, consentErr, len(preview), using) {
+				state.exit = ExitDenied
+				result.Status = "operator_declined"
+				return writeExecutionPreview(state, result)
+			}
+		} else {
+			state.exit = ExitDenied
+			result.Status = "authorization_required"
+			return writeExecutionPreview(state, result)
+		}
 	}
-	result, runErr := (runner.Executor{Docker: sandbox.Docker{Binary: cfg.DockerBinary, Host: cfg.DockerHost}}).Run(state.ctx, s, plan, digest)
-	if err := ensureReceipt(result.Receipt); err != nil {
+	if len(result.DockerSetup.Problems) > 0 {
+		return dockerSetupError(result.DockerSetup)
+	}
+	stopNotice := startElapsedNotice(state, "run", time.Second)
+	runResult, runErr := (runner.Executor{Docker: sandbox.Docker{Binary: cfg.DockerBinary, Host: cfg.DockerHost}}).Run(state.ctx, s, plan, digest)
+	stopNotice()
+	if err := ensureReceipt(runResult.Receipt); err != nil {
 		return operational("runner did not persist a usable receipt")
 	}
-	comparisonRecord, compareErr := compare.Run(s, result.Receipt.ID)
+	comparisonRecord, compareErr := compare.Run(s, runResult.Receipt.ID)
 	if compareErr != nil {
 		return operational("comparison could not be persisted")
 	}
@@ -1008,7 +1121,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		return operational("comparison details are invalid")
 	}
 	status := "completed"
-	if runErr != nil || result.Receipt.State.Execution != evidence.Completed {
+	if runErr != nil || runResult.Receipt.State.Execution != evidence.Completed {
 		status = "incomplete"
 	}
 	response := struct {
@@ -1019,7 +1132,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		Comparison    evidence.Comparison `json:"comparison"`
 		Details       compare.Report      `json:"details"`
 		Samples       []runner.Sample     `json:"samples"`
-	}{status, digest, preview, result.Receipt, comparisonRecord, details, result.Samples}
+	}{status, digest, preview, runResult.Receipt, comparisonRecord, details, runResult.Samples}
 	if runErr != nil {
 		state.exit = ExitOperational
 	} else {

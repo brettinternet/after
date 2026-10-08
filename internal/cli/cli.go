@@ -145,7 +145,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		}
 		var configErr *config.Error
 		if errors.As(err, &configErr) {
-			fmt.Fprintln(stderr, formatDiagnostic(fmt.Sprintf("invalid configuration setting %s (%s): %s", configErr.Setting, configErr.Source, configErr.Reason), "correct that setting and retry after config"))
+			fix := "correct that setting and retry after config"
+			if configErr.Setting == "docker_binary" || configErr.Setting == "docker_host" {
+				fix = dockerConfigFix()
+			}
+			fmt.Fprintln(stderr, formatDiagnostic(fmt.Sprintf("invalid configuration setting %s (%s): %s", configErr.Setting, configErr.Source, configErr.Reason), fix))
 			return ExitInvalid
 		}
 		fmt.Fprintln(stderr, "after: operation failed — check the local checkout and configuration, then retry")
@@ -273,7 +277,7 @@ func configFlags(ctx *ucli.Context) (config.Config, error) {
 	}
 	cfg, err := config.Load(config.Input{Flags: values})
 	if err != nil {
-		return config.Config{}, err
+		return cfg, err
 	}
 	if ctx.Command != nil && ctx.Command.Name == "config" {
 		return cfg, nil
@@ -404,8 +408,33 @@ func startElapsedNoticeWith(state *invocation, action string, delay time.Duratio
 	}
 }
 
-func prompt(state *invocation, digest string, preview []byte) bool {
-	if _, err := fmt.Fprintf(state.stderr, "Exact execution plan %s:\n%s\nType yes to authorize this plan: ", digest, preview); err != nil {
+func prompt(state *invocation, digest string, summary []byte, summaryErr error, planBytes int, using *resolvedIDs) bool {
+	if _, err := fmt.Fprintf(state.stderr, "Nothing has run. Plan size %s.\nExact authorization digest:\n%s\n", formatPlanSize(planBytes), digest); err != nil {
+		return false
+	}
+	if using != nil {
+		message := terminal.Line(usingCaptureLine(*using).text, max(1, state.columns))
+		if _, err := fmt.Fprintln(state.stderr, message); err != nil {
+			return false
+		}
+	}
+	if summaryErr != nil {
+		message := terminal.Line(summaryErr.Error(), max(1, state.columns-len("Consent summary unavailable: ")))
+		if _, err := fmt.Fprintf(state.stderr, "Consent summary unavailable: %s\n", message); err != nil {
+			return false
+		}
+	} else {
+		if _, err := io.WriteString(state.stderr, "Consent summary:\n"); err != nil {
+			return false
+		}
+		for _, line := range strings.Split(strings.TrimSuffix(string(summary), "\n"), "\n") {
+			message := terminal.Line(line, max(1, state.columns-2))
+			if _, err := fmt.Fprintf(state.stderr, "  %s\n", message); err != nil {
+				return false
+			}
+		}
+	}
+	if _, err := fmt.Fprint(state.stderr, "Type yes to run exactly these plan bytes: "); err != nil {
 		return false
 	}
 	reader := bufio.NewReaderSize(state.reader, 256)

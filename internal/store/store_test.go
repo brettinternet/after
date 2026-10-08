@@ -63,6 +63,45 @@ func roundTrip[T Record](t *testing.T, s *Store, r T) {
 	}
 }
 
+func TestImmutablePlanPublicationAndBounds(t *testing.T) {
+	s, project := openTest(t)
+	preview := []byte("{\"exact\": true}\n")
+	id := evidence.Digest(hash(preview))
+	if err := s.PutPlan(id, preview); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutPlan(id, preview); err != nil {
+		t.Fatalf("identical immutable publication: %v", err)
+	}
+	path := filepath.Join(project, ".after", "plan-"+string(id[7:]))
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("plan permissions: %v %v", info, err)
+	}
+	got, err := s.ReadPlan(id)
+	if err != nil || !bytes.Equal(got, preview) {
+		t.Fatalf("plan round trip: %q %v", got, err)
+	}
+	if _, err := s.List("plan"); err != nil {
+		t.Fatalf("plan listing: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReadPlan(id); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("modified stored plan was not detected: %v", err)
+	}
+	if err := s.PutPlan(id, preview); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("modified stored plan was replaced: %v", err)
+	}
+	if err := s.PutPlan(id, make([]byte, MaxPlanBytes+1)); err == nil {
+		t.Fatal("oversized plan was accepted")
+	}
+	if _, err := s.ReadPlan(evidence.Digest("sha256:" + strings.Repeat("f", 64))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing plan: %v", err)
+	}
+}
+
 func TestCaptureHistoryRejectsInvalidReferences(t *testing.T) {
 	for _, missing := range []bool{true, false} {
 		t.Run(fmt.Sprint("missing=", missing), func(t *testing.T) {

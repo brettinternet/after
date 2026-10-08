@@ -313,7 +313,7 @@ func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
 			if err != nil {
 				return prepared{generation: gen, pair: pair, err: err}
 			}
-			summary, summaryErr := consentSummary(raw)
+			summary, summaryErr := ConsentSummary(raw)
 			return prepared{generation: gen, pair: pair, raw: raw, digest: digest, summary: summary, summaryErr: summaryErr}
 		}), true
 	case keyApprove:

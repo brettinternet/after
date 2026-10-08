@@ -23,7 +23,7 @@ func (s *Store) List(kinds ...string) ([]Entry, error) {
 	allowed := map[string]bool{}
 	for _, kind := range kinds {
 		switch kind {
-		case "snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob", "artifact":
+		case "snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob", "artifact", "plan":
 			allowed[kind] = true
 		default:
 			return nil, errors.New("unknown store kind")
@@ -65,8 +65,11 @@ func (s *Store) List(kinds ...string) ([]Entry, error) {
 			return nil, ErrCorrupt
 		}
 		limit := int64(evidence.MaxRecordBytes)
-		if kind == "blob" {
+		switch kind {
+		case "blob":
 			limit = MaxBlobBytes
+		case "plan":
+			limit = MaxPlanBytes
 		}
 		if info.Size() > limit {
 			return nil, ErrLimit

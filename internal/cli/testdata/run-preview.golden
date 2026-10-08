@@ -1,10 +1,21 @@
-Nothing has run. Execution preview requires exact authorization.
+Nothing has run. This exact plan is stored privately.
   Status       authorization required
   Snapshots    aaaaaaaa → bbbbbbbb
-  Runs         2 sides × 2 cases × 2 repetitions · concurrency 1
-  Limits       180s · 65536 output bytes/container
+  Plan         dddddddd · 260 bytes
+Consent summary
+  Snapshots: base → candidate
+  Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1
+Docker setup
+  Docker execution is not configured; set docker_binary and docker_host as a pa…
+  Suggested config (not selected):
+    docker_binary: "/absolute/path/to/docker"
+    docker_host: "unix:///absolute/path/to/local/docker.sock"
 Authorization digest for this exact plan:
 sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 Next
-  after inspect sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    inspect the stored pair; nothing has run
+  after run --approve sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    authorize exactly this stored plan
+  after inspect sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    inspect the exact stored plan
+  after config
+    check Docker setup without contacting an endpoint

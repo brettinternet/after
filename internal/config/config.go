@@ -200,13 +200,13 @@ func Load(in Input) (Config, error) {
 		return Config{}, err
 	}
 	if cfg.DockerBinary != "" && !filepath.IsAbs(cfg.DockerBinary) {
-		return Config{}, invalid("docker_binary", cfg.Sources["docker_binary"], "must be an absolute path")
+		return cfg, invalid("docker_binary", cfg.Sources["docker_binary"], "must be an absolute path")
 	}
 	if cfg.DockerHost != "" && (!strings.HasPrefix(cfg.DockerHost, "unix:///") || strings.ContainsAny(cfg.DockerHost, "\x00\r\n")) {
-		return Config{}, invalid("docker_host", cfg.Sources["docker_host"], "must be an explicit local Unix socket")
+		return cfg, invalid("docker_host", cfg.Sources["docker_host"], "must be an explicit local Unix socket")
 	}
 	if (cfg.DockerBinary == "") != (cfg.DockerHost == "") {
-		return Config{}, invalid("docker_binary", cfg.Sources["docker_binary"], "binary and local socket must both be configured")
+		return cfg, invalid("docker_binary", cfg.Sources["docker_binary"], "binary and local socket must both be configured")
 	}
 	return cfg, nil
 }

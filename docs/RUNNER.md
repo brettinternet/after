@@ -17,6 +17,24 @@ permission. Changing the request, snapshots, repetitions, limits or frozen code
 requires new approval. Plan preparation writes frozen scenario/input records but
 executes nothing. No baseline reuse or candidate-owned suite execution occurs.
 
+The CLI resolves bare `after run` to the newest capture and shows consent rows
+from the same strict preview decoder used by the TUI, together with the preview's
+byte size. It stores exact preview bytes privately under the full SHA-256
+authorization digest (0600, immutable) before asking for `yes` or printing the
+non-TTY `after run --approve DIGEST` command. `--approve DIGEST` reconstructs the
+stored plan and checks its exact bytes and digest before execution;
+`--plan-file FILE --approve DIGEST` and `--plan-out FILE` remain supported. A
+consent-summary decode error is visible but does not change the bytes bound by
+consent. `after inspect PLAN` shows the same summary and the indented sanitized
+stored plan; JSON inspection retains its exact bytes as base64.
+
+`after config` and run previews report missing or invalid Docker settings with
+configuration lines to add. An optional Docker CLI-on-`PATH` or existing local
+socket suggestion is filesystem-only, is labeled as a candidate, and is never
+selected or contacted by setup diagnostics. The executor is entered only after
+exact consent and explicit Docker settings. An approved run that remains active
+for one second reports elapsed time on terminal stderr, without a percentage.
+
 The built-in experiment uses the [synthetic payment fixture](../internal/paymentfixture/README.md):
 epoch 1735689600, key `synthetic-key-a`, POST body
 `{"amount_cents":1200,"currency":"USD"}`, then the same request at 43200 or

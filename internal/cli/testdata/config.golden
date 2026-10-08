@@ -1,6 +1,11 @@
 Effective AFTER configuration
   repetitions  2 · default
   docker_host  not configured (value hidden) · default
+Docker setup
+  Docker execution is not configured; set docker_binary and docker_host as a pa…
+  Suggested config (not selected):
+    docker_binary: "/absolute/path/to/docker"
+    docker_host: "unix:///absolute/path/to/local/docker.sock"
 Next
   after --help
     see available commands

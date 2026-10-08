@@ -664,7 +664,7 @@ func statusNext(view statusView, history storedHistory) []nextCommand {
 	}
 	pair := evidence.SnapshotPair{Base: view.Capture.Base, Candidate: view.Capture.Candidate}
 	if view.Receipt == nil && view.PriorRuns {
-		return []nextCommand{next("after run "+string(pair.Base)+" "+string(pair.Candidate), "prepare this exact pair; execution still requires consent")}
+		return []nextCommand{next("after run", "prepare the newest capture; execution still requires consent")}
 	}
 	if view.Receipt != nil && view.Comparison == nil {
 		return []nextCommand{

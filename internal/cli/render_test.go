@@ -138,11 +138,15 @@ func readableGoldenCases() []struct {
 				Value  any    `json:"value"`
 				Source string `json:"source"`
 			} `json:"settings"`
+			Setup dockerSetup `json:"docker_setup"`
 		}{[]struct {
 			Name   string `json:"name"`
 			Value  any    `json:"value"`
 			Source string `json:"source"`
-		}{{"repetitions", float64(2), "default"}, {"docker_host", "not configured (value hidden)", "default"}}}},
+		}{{"repetitions", float64(2), "default"}, {"docker_host", "not configured (value hidden)", "default"}}, dockerSetup{
+			Problems:    []string{"Docker execution is not configured; set docker_binary and docker_host as a pair."},
+			Suggestions: []string{`docker_binary: "/absolute/path/to/docker"`, `docker_host: "unix:///absolute/path/to/local/docker.sock"`},
+		}}},
 		{"capture", "capture", struct {
 			Base      snapshotSummary  `json:"base_snapshot"`
 			Candidate snapshotSummary  `json:"candidate_snapshot"`
@@ -166,11 +170,15 @@ func readableGoldenCases() []struct {
 		}{comparison, receipt, &details}},
 		{"pin", "review", view},
 		{"review", "review", view},
-		{"run-preview", "execution_preview", struct {
-			Authorization string          `json:"authorization_digest"`
-			Status        string          `json:"status"`
-			Plan          json.RawMessage `json:"plan"`
-		}{string(idD), "authorization_required", plan}},
+		{"run-preview", "execution_preview", executionPreview{
+			Authorization: string(idD), Status: "authorization_required", Plan: plan, PlanBytes: len(plan),
+			Consent: "Snapshots: base → candidate\nRuns: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1",
+			DockerSetup: dockerSetup{
+				Problems:    []string{"Docker execution is not configured; set docker_binary and docker_host as a pair."},
+				Suggestions: []string{`docker_binary: "/absolute/path/to/docker"`, `docker_host: "unix:///absolute/path/to/local/docker.sock"`},
+			},
+			Next: executionPreviewNext("authorization_required", string(idD)),
+		}},
 		{"run", "run", struct {
 			Status        string              `json:"status"`
 			Authorization string              `json:"authorization_digest"`
@@ -471,19 +479,19 @@ func TestElapsedNoticeIsTTYStderrOnlyAndIndependentOfInputConsent(t *testing.T) 
 	var terminalError bytes.Buffer
 	state := &invocation{stderr: &terminalError, stderrTTY: true, tty: false}
 	noticed := make(chan struct{}, 1)
-	stop := startElapsedNoticeWith(state, "capture", time.Millisecond, noticed)
+	stop := startElapsedNoticeWith(state, "run", time.Millisecond, noticed)
 	select {
 	case <-noticed:
 	case <-time.After(time.Second):
 		t.Fatal("terminal elapsed notice did not fire")
 	}
 	stop()
-	if output := terminalError.String(); !strings.Contains(output, "capture still running") || strings.Contains(output, "%") {
+	if output := terminalError.String(); !strings.Contains(output, "run still running") || strings.Contains(output, "%") {
 		t.Fatalf("terminal elapsed notice is missing or percentage-like: %q", output)
 	}
 	var pipeError bytes.Buffer
 	pipe := &invocation{stderr: &pipeError, stderrTTY: false, tty: true}
-	stopPipe := startElapsedNotice(pipe, "import", time.Millisecond)
+	stopPipe := startElapsedNotice(pipe, "run", time.Millisecond)
 	stopPipe()
 	if pipeError.Len() != 0 {
 		t.Fatalf("pipe received a progress notice: %q", pipeError.String())

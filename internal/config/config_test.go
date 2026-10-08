@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,20 @@ func TestStrictYAMLFailures(t *testing.T) {
 				t.Fatalf("invalid YAML accepted or missing source: %v", err)
 			}
 		})
+	}
+}
+
+func TestInvalidDockerSettingReturnsEffectiveConfigurationForSetupDisplay(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := Load(Input{WorkingDir: dir, Env: environment(map[string]string{
+		"AFTER_DOCKER_BINARY": "relative/docker",
+	})})
+	var configErr *Error
+	if err == nil || !errors.As(err, &configErr) || configErr.Setting != "docker_binary" {
+		t.Fatalf("invalid Docker setting was not identified: %v", err)
+	}
+	if cfg.DockerBinary != "relative/docker" || cfg.Sources["docker_binary"] != "env" {
+		t.Fatalf("effective invalid value/source lost for setup reporting: %+v", cfg)
 	}
 }
 

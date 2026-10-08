@@ -14,7 +14,6 @@ import (
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
-	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/terminal"
 	"github.com/rivo/uniseg"
 )
@@ -268,6 +267,7 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 				Value  any    `json:"value"`
 				Source string `json:"source"`
 			} `json:"settings"`
+			Setup dockerSetup `json:"docker_setup"`
 		}
 		if err := json.Unmarshal(raw, &result); err != nil {
 			return nil, err
@@ -276,7 +276,7 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		for _, setting := range result.Settings {
 			lines = append(lines, readableRow(setting.Name, fmt.Sprintf("%v · %s", setting.Value, setting.Source)))
 		}
-		return lines, nil
+		return append(lines, dockerSetupReadableLines(state, result.Setup)...), nil
 	case "capture":
 		var result struct {
 			Base      snapshotSummary  `json:"base_snapshot"`
@@ -375,15 +375,16 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		return lines, nil
 	case "execution_preview":
-		var preview struct {
-			Authorization string          `json:"authorization_digest"`
-			Status        string          `json:"status"`
-			Plan          json.RawMessage `json:"plan"`
-		}
+		var preview executionPreview
 		if err := json.Unmarshal(raw, &preview); err != nil {
 			return nil, err
 		}
-		return previewLines(preview.Status, preview.Authorization, preview.Plan), nil
+		return previewLines(state, preview), nil
+	case "plan":
+		if view, ok := original.(planInspection); ok {
+			return planInspectionLines(state, view), nil
+		}
+		return nil, fmt.Errorf("stored execution plan is unavailable")
 	case "run":
 		var result struct {
 			Status        string              `json:"status"`
@@ -634,12 +635,26 @@ func suggestedNext(kind string, raw []byte, original any) []nextCommand {
 		return []nextCommand{next("after --help", "see available commands")}
 	case "execution_preview":
 		var data struct {
-			Plan struct {
-				Snapshots evidence.SnapshotPair `json:"snapshots"`
-			} `json:"plan"`
+			Authorization string `json:"authorization_digest"`
+			Status        string `json:"status"`
 		}
-		if json.Unmarshal(raw, &data) == nil && data.Plan.Snapshots.Base != "" {
-			return []nextCommand{next("after inspect "+string(data.Plan.Snapshots.Base)+" "+string(data.Plan.Snapshots.Candidate), "inspect the stored pair; nothing has run")}
+		if json.Unmarshal(raw, &data) == nil && validDigest(data.Authorization) {
+			if data.Status == "authorization_required" || data.Status == "operator_declined" {
+				return []nextCommand{
+					next("after run --approve "+data.Authorization, "authorize exactly this stored plan"),
+					next("after inspect "+data.Authorization, "inspect the exact stored plan"),
+					next("after config", "check Docker setup without contacting an endpoint"),
+				}
+			}
+			return []nextCommand{next("after inspect "+data.Authorization, "inspect the exact stored plan")}
+		}
+	case "plan":
+		var data planInspection
+		if json.Unmarshal(raw, &data) == nil && data.ID != "" {
+			return []nextCommand{
+				next("after run --approve "+string(data.ID), "authorize exactly this stored plan"),
+				next("after config", "check Docker setup without contacting an endpoint"),
+			}
 		}
 	case "run":
 		var data struct {
@@ -1055,27 +1070,63 @@ func reviewLines(state *invocation, view review.View) []readableLine {
 	return addIDs(lines, ids...)
 }
 
-func previewLines(status, authorization string, raw json.RawMessage) []readableLine {
+func previewLines(state *invocation, preview executionPreview) []readableLine {
 	var plan struct {
-		Snapshots   evidence.SnapshotPair `json:"snapshots"`
-		Repetitions int                   `json:"repetitions"`
-		Concurrency int                   `json:"concurrency"`
-		Limits      sandbox.Limits        `json:"limits"`
+		Snapshots evidence.SnapshotPair `json:"snapshots"`
 	}
-	_ = json.Unmarshal(raw, &plan)
-	statusText := strings.ReplaceAll(status, "_", " ")
-	lines := []readableLine{textLine("Nothing has run. Execution preview requires exact authorization.", terminal.Attention)}
+	_ = json.Unmarshal(preview.Plan, &plan)
+	statusText := strings.ReplaceAll(preview.Status, "_", " ")
+	lines := []readableLine{textLine("Nothing has run. This exact plan is stored privately.", terminal.Attention)}
+	if preview.Using != nil {
+		lines = append(lines, usingCaptureLine(*preview.Using))
+	}
 	if statusText != "" {
 		lines = append(lines, readableRow("Status", statusText))
 	}
 	lines = append(lines, readableRow("Snapshots", fmt.Sprintf("%s → %s", shortID(plan.Snapshots.Base), shortID(plan.Snapshots.Candidate))))
-	lines = append(lines, readableRow("Runs", fmt.Sprintf("2 sides × 2 cases × %d repetitions · concurrency %d", plan.Repetitions, plan.Concurrency)))
-	lines = append(lines, readableRow("Limits", fmt.Sprintf("%ds · %d output bytes/container", plan.Limits.Seconds, plan.Limits.OutputBytes)))
-	if authorization != "" {
+	lines = append(lines, readableRow("Plan", fmt.Sprintf("%s · %d bytes", shortID(evidence.Digest(preview.Authorization)), preview.PlanBytes)))
+	if preview.ConsentError != "" {
+		message := terminal.Line(preview.ConsentError, max(1, state.columns-30))
+		lines = append(lines, textLine("Consent summary unavailable: "+message, terminal.Attention))
+	} else if preview.Consent != "" {
+		lines = append(lines, textLine("Consent summary", terminal.Strong))
+		for _, line := range strings.Split(preview.Consent, "\n") {
+			lines = append(lines, textLine("  "+terminal.Line(line, max(1, state.columns-2)), terminal.Plain))
+		}
+	}
+	lines = append(lines, dockerSetupReadableLines(state, preview.DockerSetup)...)
+	if preview.Authorization != "" {
 		lines = append(lines, textLine("Authorization digest for this exact plan:", terminal.Plain))
-		lines = append(lines, fullLine(authorization))
+		lines = append(lines, fullLine(preview.Authorization))
 	}
 	return lines
+}
+
+func planInspectionLines(state *invocation, view planInspection) []readableLine {
+	lines := []readableLine{textLine(fmt.Sprintf("Execution plan %s · %s · exact stored bytes", shortID(view.ID), formatPlanSize(view.SizeBytes)), terminal.Strong)}
+	if view.ConsentError != "" {
+		message := terminal.Line(view.ConsentError, max(1, state.columns-30))
+		lines = append(lines, textLine("Consent summary unavailable: "+message, terminal.Attention))
+	} else {
+		lines = append(lines, textLine("Consent summary", terminal.Strong))
+		for _, line := range strings.Split(view.Consent, "\n") {
+			lines = append(lines, textLine("  "+terminal.Line(line, max(1, state.columns-2)), terminal.Plain))
+		}
+	}
+	lines = append(lines, textLine("Plan", terminal.Strong))
+	content := strings.Split(string(view.raw), "\n")
+	if len(content) > 1 && content[len(content)-1] == "" {
+		content = content[:len(content)-1]
+	}
+	for i, line := range content {
+		if state.stdoutTTY {
+			line = terminal.Line(line, max(1, state.columns-12))
+		} else {
+			line = terminal.Sanitize(line)
+		}
+		lines = append(lines, fullLine(fmt.Sprintf("  %4d │ %s", i+1, line)))
+	}
+	return addIDs(lines, view.ID)
 }
 
 func appendLimits(lines []readableLine, limits []string) []readableLine {

@@ -1,14 +1,17 @@
-Prepare the frozen offline experiment; exact consent is required before it runs.
+Prepare the frozen offline experiment for the newest capture. Exact consent is
+required before it runs.
 
 Usage
+  after run
   after run BASE CANDIDATE
+  after run --approve FULL_DIGEST
   after run BASE CANDIDATE --plan-out FILE
   after run --plan-file FILE --approve FULL_DIGEST
 
 Options
   --plan-file FILE       reconstruct an exact saved execution preview
-  --plan-out FILE        save a private preview without overwriting a file
-  --approve DIGEST       approve only this full lowercase sha256 digest
+  --plan-out FILE        save a private preview file without overwriting it
+  --approve DIGEST       exact full sha256 digest; stored plan needs no file
   --docker-binary PATH   trusted Docker CLI path (default: not configured)
   --docker-host SOCKET   local Unix socket (default: not configured)
   --repetitions N        paired run repetitions (default: 1; range: 1–5)

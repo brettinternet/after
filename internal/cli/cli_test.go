@@ -410,14 +410,25 @@ func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T
 	if code != ExitDenied || stderr != "" || !strings.Contains(output, "authorization_mismatch") {
 		t.Fatalf("wrong digest was not refused: %d %q %q", code, output, stderr)
 	}
-	if _, err := os.Stat(filepath.Join(project, ".after")); err != nil {
-		t.Fatal("preview unexpectedly removed or replaced store")
-	}
-	badPlan := filepath.Join(dir, "edited preview.json")
 	content, err := os.ReadFile(planPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	code, output, stderr = invoke([]string{"run", captureResult.Data.Base.ID, captureResult.Data.Candidate.ID, "--project", project, "--config", configFile, "--plan-out", planPath, "--json"}, false, "")
+	if code != ExitOperational || output != "" || !strings.Contains(stderr, "without overwriting") {
+		t.Fatalf("--plan-out overwrote an existing preview: %d %q %q", code, output, stderr)
+	}
+	if saved, err := os.ReadFile(planPath); err != nil || !bytes.Equal(saved, content) {
+		t.Fatalf("existing --plan-out bytes changed: %v", err)
+	}
+	code, output, stderr = invoke([]string{"run", "--plan-file", planPath, "--approve", previewResult.Data.Authorization, "--project", project, "--config", configFile, "--json"}, false, "")
+	if code != ExitOperational || output != "" || !strings.Contains(stderr, "docker_binary") || !strings.Contains(stderr, "docker_host:") {
+		t.Fatalf("exact explicit-file approval did not preserve the plan-file flow: %d %q %q", code, output, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".after")); err != nil {
+		t.Fatal("preview unexpectedly removed or replaced store")
+	}
+	badPlan := filepath.Join(dir, "edited preview.json")
 	content = bytes.Replace(content, []byte(`"build_argv"`), []byte(`"repository_command"`), 1)
 	if err := os.WriteFile(badPlan, content, 0600); err != nil {
 		t.Fatal(err)
@@ -425,6 +436,15 @@ func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T
 	code, output, stderr = invoke([]string{"run", "--plan-file", badPlan, "--project", project, "--config", configFile}, false, "")
 	if code != ExitInvalid || output != "" || stderr == "" {
 		t.Fatalf("modified plan was accepted: %d %q %q", code, output, stderr)
+	}
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := s.List("receipt")
+	s.Close()
+	if err != nil || len(receipts) != 0 {
+		t.Fatalf("refused approvals persisted a run receipt: %d %v", len(receipts), err)
 	}
 }
 
