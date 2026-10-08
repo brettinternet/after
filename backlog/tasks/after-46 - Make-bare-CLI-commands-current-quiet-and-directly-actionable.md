@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@pi'
 created_date: '2026-10-08 19:51'
-updated_date: '2026-10-08 20:57'
+updated_date: '2026-10-08 23:18'
 labels:
   - poc
   - cli
@@ -37,6 +37,13 @@ A bare-command UX audit (every command with no arguments in a fresh checkout wit
 - [x] #10 docs/CLI.md (and CLI-DESIGN.md where it changes) describe the new behavior; focused tests cover the critical behaviors
 <!-- AC:END -->
 
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [x] #1 Focused tests and relevant Task targets pass; record exact commands and outcomes in task notes.
+- [x] #2 Update affected docs/help and record limitations; independent verification for cross-cutting or trust-boundary changes.
+- [x] #3 Commit implementation and final task state using the repository delivery workflow; no credentials or private receipts committed.
+<!-- DOD:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
@@ -45,6 +52,8 @@ Oracle decision for AC #1 (staleness), consulted 2026-10-08: choose live, non-pe
 Progress 2026-10-08: implemented on branch after-46-cli-ux (.worktrees/after-46-cli-ux), commit f815772. Capture prerequisite: blobs now read via one cat-file --batch-check plus output-bounded cat-file --batch chunks (budget charged before payload reads); makeDiff hashes distinct payloads with one hash-object --stdin-paths. Measured bare after diff --stat on the 344-file AFTER repo: 1.34s (was 41s/34s capture). Added capture.ReadLive (live, unstored diff) and capture.Unchanged (content-hash freshness, no timestamps). Checks: go vet ./...; mise exec -- task test (go test -race ./..., docs and backlog checks) passes; task format:check passes; task check:staged passes. Regression caught and fixed before commit: buffering the stored patch exceeded TestDiffLargeCapturedPatchStreamsWithinMemoryBudget (81 MB > 64 MiB), so stored patches stream through bounded pages again. Manual bare-command walkthrough in a temp repo confirmed each AC. An independent reviewer pass on capture batching/freshness is in progress.
 
 Review 2026-10-08: independent reviewer found one defect: rawdiff.View.index returned at MaxHunks, so diff --stat dropped later files and attributed their lines to the last indexed file (reproduced: 100001-hunk a.txt plus z.txt gave 1 file, a.txt 200004; git gives 2 files, 200002 and 2). Fixed in e21a4b5: hunk bookkeeping stops at the cap but file sections stay indexed; live diff now reports completeness/index limits (omitting routine capture caveats). Extended TestBoundsLargePatchAndPartialIndex. Repro now matches git diff --stat and prints the hunk-cap limit. mise exec -- task test (go test -race ./..., docs, backlog) and task check:staged pass. Fast-forwarded main to e21a4b5.
+
+DoD backfilled 2026-10-08: the task was finalized without DoD items, failing scripts/check-backlog.mjs. Added only the standard items already evidenced above (go vet, task test, format:check and check:staged results; docs CLI.md/CLI-DESIGN.md/RAW-DIFF.md/CAPTURE.md and the independent review that found and fixed the diff --stat cap defect; commits f815772, e21a4b5, 8d2032b). No terminal/pipe/NO_COLOR item was added because no such output excerpts were recorded.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
