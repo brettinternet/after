@@ -85,8 +85,8 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "import", Usage: "import bounded stock go test -json as reported evidence",
 			Before:    outputBefore(state),
-			ArgsUsage: "<go-test-json-file>", Flags: append(globalFlags(),
-				&ucli.StringFlag{Name: "producer", Usage: "required caller-supplied producer/version provenance"},
+			ArgsUsage: "[FILE|-]", Flags: append(globalFlags(),
+				&ucli.StringFlag{Name: "producer", Usage: "optional caller-supplied producer/version claim"},
 				&ucli.StringFlag{Name: "captured-at", Usage: "optional caller-supplied RFC3339 capture time"},
 				&ucli.StringFlag{Name: "snapshot", Usage: "bind the report to a validated snapshot ID (not proof of applicability)"},
 				&ucli.IntFlag{Name: "offset", Usage: "first imported report card (default 0)"},
@@ -261,15 +261,21 @@ func captureOptionsFromFlags(ctx *ucli.Context, command string) (capture.Options
 }
 
 func importCommand(state *invocation, ctx *ucli.Context) error {
-	if err := requireArgs(ctx, 1); err != nil {
-		return err
+	if ctx.NArg() > 1 {
+		return invalidWithFix("import accepts one report input", "use after import FILE, after import -, or go test -json ./... | after import")
 	}
-	if !ctx.IsSet("producer") || strings.TrimSpace(ctx.String("producer")) == "" {
-		return invalidWithFix("import requires caller-supplied --producer provenance", "try: after import FILE --producer TEXT")
+	inputName := "-"
+	if ctx.NArg() == 1 {
+		inputName = ctx.Args().First()
+	} else if state.tty {
+		return invalidWithFix("missing Go test JSON input", "use after import FILE, after import -, or go test -json ./... | after import")
 	}
-	producer := ctx.String("producer")
-	if strings.TrimSpace(producer) != producer || len(producer) > 256 {
-		return invalid("invalid producer provenance")
+	producer := ""
+	if ctx.IsSet("producer") {
+		producer = ctx.String("producer")
+		if strings.TrimSpace(producer) != producer || producer == "" || len(producer) > 256 {
+			return invalid("invalid producer provenance")
+		}
 	}
 	var capturedAt *time.Time
 	if ctx.IsSet("captured-at") {
@@ -289,11 +295,18 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		return err
 	}
 	var snapshot evidence.Digest
-	file, err := openInput(ctx.Args().Get(0))
-	if err != nil {
-		return operational("cannot read Go test report file")
+	var input io.Reader
+	var inputFile *os.File
+	if inputName == "-" {
+		input = state.reader
+	} else {
+		inputFile, err = openInput(inputName)
+		if err != nil {
+			return operational("cannot read Go test report file")
+		}
+		defer inputFile.Close()
+		input = inputFile
 	}
-	defer file.Close()
 	s, err := store.Open(cfg.Project, true, nil)
 	if err != nil {
 		return operational("cannot open private evidence store")
@@ -307,9 +320,38 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	}
 	stopNotice := startElapsedNotice(state, "import", time.Second)
 	defer stopNotice()
-	report, err := gotestreport.Import(file, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, Snapshot: snapshot, ImportedAt: time.Now().UTC()})
+	importedAt := time.Now().UTC()
+	if state.now != nil {
+		importedAt = state.now().UTC()
+	}
+	report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, Snapshot: snapshot, ImportedAt: importedAt})
 	if err != nil {
 		return invalid("report is invalid or exceeds the 8 MiB input limit")
+	}
+	var binding *reportBindingView
+	if ctx.IsSet("snapshot") {
+		bound, err := store.Get[evidence.Snapshot](s, snapshot)
+		if err != nil {
+			return invalidWithFix("binding snapshot is unavailable", "use --snapshot ID from this private store")
+		}
+		binding = &reportBindingView{}
+		for _, excluded := range bound.Excluded {
+			if excluded.Reason == "untracked; not selected" {
+				binding.UntrackedExcluded++
+			}
+		}
+	} else {
+		captured, captureErr := capture.Capture(state.ctx, cfg.Project, s, capture.Options{Mode: evidence.WorkingTree})
+		if captureErr != nil {
+			return importBindingCaptureFailure(captureErr)
+		}
+		report.Metadata.Snapshot = captured.Candidate.ID
+		binding = &reportBindingView{Source: captured.Candidate.Source, CapturedNow: true}
+		for _, excluded := range captured.Candidate.Excluded {
+			if excluded.Reason == "untracked; not selected" {
+				binding.UntrackedExcluded++
+			}
+		}
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil || len(encoded) > store.MaxBlobBytes {
@@ -319,10 +361,24 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil || artifact.Completeness != evidence.Complete {
 		return operational("cannot persist complete imported report")
 	}
-	return writeResult(state, "import", reportView(artifact.Content, report, offset, limit))
+	view := reportView(artifact.Content, report, offset, limit)
+	view.Binding = binding
+	return writeResult(state, "import", view)
 }
 
-func reportView(id evidence.Digest, report gotestreport.Report, offset, limit int) any {
+func importBindingCaptureFailure(err error) error {
+	captured := captureFailure(err)
+	var commandErr *exitError
+	if !errors.As(captured, &commandErr) {
+		return captured
+	}
+	problem := strings.TrimPrefix(commandErr.diagnostic, "after: ")
+	problem = strings.TrimPrefix(problem, "capture failed: ")
+	reason, fix, _ := strings.Cut(problem, " — ")
+	return &exitError{code: ExitOperational, diagnostic: formatDiagnostic("capture failed: "+reason, fix+", or bind an existing candidate with --snapshot ID")}
+}
+
+func reportView(id evidence.Digest, report gotestreport.Report, offset, limit int) reportViewData {
 	end := min(len(report.Cards), offset+limit)
 	cards := []gotestreport.Card{}
 	if offset < len(report.Cards) {
@@ -332,7 +388,12 @@ func reportView(id evidence.Digest, report gotestreport.Report, offset, limit in
 	for _, card := range report.Cards {
 		counts[card.State.Report]++
 	}
-	return reportViewData{id, report.SchemaVersion, report.Dialect, report.Metadata, report.OriginalDigest, report.Completeness, counts, cards, offset, len(report.Cards), end < len(report.Cards), report.Diagnostics, report.SuppressedDiagnostics}
+	return reportViewData{
+		ID: id, SchemaVersion: report.SchemaVersion, Dialect: report.Dialect, Metadata: report.Metadata,
+		OriginalDigest: report.OriginalDigest, Completeness: report.Completeness, ReportedOutcomes: counts,
+		Cards: cards, CardOffset: offset, CardTotal: len(report.Cards), CardsMore: end < len(report.Cards),
+		Diagnostics: report.Diagnostics, SuppressedDiagnostics: report.SuppressedDiagnostics,
+	}
 }
 
 func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error {

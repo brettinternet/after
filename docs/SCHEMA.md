@@ -64,6 +64,12 @@ cannot be absolute, traverse upwards, contain NUL/backslash/colon or repeat acro
 inventory lists. Only regular Git modes `100644` and `100755` are captured here;
 symlinks and other entries must be inventoried as unsupported.
 
+Imported Go test report metadata may omit `producer`. When present, it is an
+unverified caller-supplied claim; absence means no producer claim, not an
+inferred producer. Existing reports with a producer remain valid. A report's
+optional `snapshot` is likewise only a caller binding and does not prove test
+applicability.
+
 Environment bindings contain environment, toolchain and dependency digests plus
 explicit argv. These are actual execution identities when a runner exists, not
 permission to execute. Runner receipts, including failed/cancelled runs, require

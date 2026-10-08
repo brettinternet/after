@@ -10,6 +10,7 @@ See [packaging, the repeatable demo and recovery](DEMO.md) for native distributi
 ```sh
 ./bin/after capture --project "/work/payment" --include-untracked "fixtures/new case.json"
 ./bin/after inspect BASE_ID CANDIDATE_ID --project "/work/payment"
+go test -json ./... | ./bin/after import --project "/work/payment"
 ./bin/after import "go test output.jsonl" --producer "go1.27.1 on linux/amd64" --snapshot CANDIDATE_ID --project "/work/payment"
 ./bin/after inspect REPORT_ARTIFACT_ID --project "/work/payment"
 ./bin/after compare RECEIPT_ID --project "/work/payment"
@@ -74,7 +75,7 @@ match within two edits. Removed forms such as `inspect CANDIDATE --base BASE` an
 `review PIN --accept` exit 2 with the replacement syntax. Diagnostics sanitize
 input and give a corrective action; missing arguments include a runnable example.
 
-Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import requires caller-supplied `--producer` provenance and accepts optional `--captured-at RFC3339`; these claims are retained but not authenticated. `--snapshot` is an optional validated content digest, not proof the report ran on that capture. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
+Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import accepts `FILE`, `-`, or omitted input when stdin is piped; omitted terminal input exits 2 without reading and shows the file and pipe forms. `--producer` is optional: when omitted, no producer claim is stored. A supplied producer and `--captured-at RFC3339` are caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using the `after capture` policy, writes a capture event, and binds the report to its candidate snapshot. Untracked files stay excluded; readable output warns that tests may have used excluded files. A binding is a caller claim, not proof the report's tests ran on that capture; if the default capture fails, import reports the capture reason and suggests `--snapshot ID`. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
 
 Each successful capture also writes an immutable capture event with its time, mode,
 snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
@@ -126,7 +127,7 @@ Stored artifacts (including observer response/effect channels referenced by rece
 
 ## Review launch and resume
 
-`after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. A capture that finds no changed or unknown paths reports that nothing is open.
+`after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. A capture that finds no changed or unknown paths reports that nothing is open. `--import-file FILE [--producer TEXT]` configures the TUI's explicit `i` action to import that file into the selected review; producer provenance is optional, and omission makes no producer claim.
 
 A private, atomic `.after/session.json` stores the active snapshot pair, comparison mode, original baseline, selected pin revision IDs and capture flags; it contains no source bytes and is not evidence. A legacy original-base session safely infers its baseline from the saved pair. A later bare `after review` opens that exact pair and mode immediately and captures in the background. A differing capture stays pending until `u`; the TUI offers original-base (default) or last-inspected comparison and requires a reason. `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`.
 
@@ -204,7 +205,7 @@ Use `--json` on a command whose result a script consumes:
 ```sh
 ./bin/after capture --project /work/payment --json
 ./bin/after inspect BASE_ID CANDIDATE_ID --project /work/payment --json
-./bin/after import report.jsonl --producer go1.27.1 --project /work/payment --json
+./bin/after import report.jsonl --project /work/payment --json
 ./bin/after run BASE_ID CANDIDATE_ID --project /work/payment --json
 ./bin/after export COMPARISON_ID --project /work/payment # JSON is always emitted
 ```

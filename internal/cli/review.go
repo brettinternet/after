@@ -215,10 +215,10 @@ func reviewCommand(state *invocation) *ucli.Command {
 		&ucli.StringFlag{Name: "target", Usage: "other side of a --base capture (default: HEAD)"},
 		&ucli.StringSliceFlag{Name: "include-untracked", Usage: "select an exact non-ignored untracked file (repeatable)"},
 		&ucli.StringFlag{Name: "import-file", Usage: "file to import only after the explicit TUI import action"},
-		&ucli.StringFlag{Name: "producer", Usage: "required caller provenance for the explicit TUI import action"},
+		&ucli.StringFlag{Name: "producer", Usage: "optional caller producer claim for the explicit TUI import action"},
 	), Action: func(ctx *ucli.Context) error {
-		if ctx.IsSet("import-file") != ctx.IsSet("producer") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
-			return invalidWithFix("TUI import requires a file and bounded caller provenance", "use after review [BASE CANDIDATE] --import-file FILE --producer TEXT")
+		if (ctx.IsSet("producer") && !ctx.IsSet("import-file")) || (ctx.IsSet("import-file") && strings.TrimSpace(ctx.String("import-file")) == "") || (ctx.IsSet("producer") && (strings.TrimSpace(ctx.String("producer")) != ctx.String("producer") || strings.TrimSpace(ctx.String("producer")) == "" || len(ctx.String("producer")) > 256)) {
+			return invalidWithFix("TUI import requires a file and any producer claim must be bounded", "use after review [BASE CANDIDATE] --import-file FILE [--producer TEXT]")
 		}
 		options, err := captureOptionsFromFlags(ctx, "review")
 		if err != nil {

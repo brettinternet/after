@@ -75,6 +75,9 @@ func readableGoldenCases() []struct {
 	report := gotestreport.Report{SchemaVersion: 1, Dialect: gotestreport.Dialect, Metadata: gotestreport.Metadata{Producer: "go1.27.1 · linux/amd64", Snapshot: idB, ImportedAt: time.Date(2026, time.January, 2, 10, 31, 0, 0, time.UTC)}, Cards: []gotestreport.Card{{Package: "example.invalid/cart", Test: "TestRetry", Scope: "test", Attempt: 1, State: evidence.EvidenceState{Producer: evidence.Importer, Kind: evidence.Reported, Applicability: evidence.Unknown, Execution: evidence.NotRun, Comparison: evidence.NotCompared, Report: evidence.ReportFail}}}, Completeness: evidence.Complete}
 	counts := map[evidence.ReportOutcome]int{evidence.ReportPass: 2, evidence.ReportFail: 1, evidence.ReportSkip: 0}
 	reportView := reportViewData{ID: idC, SchemaVersion: 1, Dialect: gotestreport.Dialect, Metadata: report.Metadata, Completeness: evidence.Complete, ReportedOutcomes: counts, Cards: report.Cards, CardTotal: 1}
+	defaultBindingView := reportView
+	defaultBindingView.Metadata.Producer = ""
+	defaultBindingView.Binding = &reportBindingView{Source: evidence.WorkingTree, CapturedNow: true, UntrackedExcluded: 1}
 	captureHistory := snapshotCaptureHistory{Records: []store.CaptureSummary{{ID: idC, CapturedAt: time.Date(2026, time.January, 2, 8, 30, 0, 0, time.UTC), Mode: evidence.WorkingTree, Base: idA, Candidate: idB, Index: idE, SelectedUntracked: 1}}}
 	pair := snapshotView{Base: idA, Candidate: idB, BaseRecord: baseSnapshot, CandidateRecord: snapshot, BaseCaptureHistory: captureHistory, CandidateCaptureHistory: captureHistory, Inventory: []inventoryItem{{Path: "internal/cli/main.go", Change: "modified", PotentialOracle: true, Limits: []string{}}}, InventoryTotal: 1, Diff: struct {
 		Content   evidence.Digest `json:"content"`
@@ -146,6 +149,7 @@ func readableGoldenCases() []struct {
 			Index     *snapshotSummary `json:"index_snapshot,omitempty"`
 		}{snapshotSummary{ID: idA, Source: evidence.Commit, Completeness: evidence.Complete, Files: 3}, snapshotSummary{ID: idB, Source: evidence.WorkingTree, Completeness: evidence.Complete, Files: 4, Excluded: 1}, nil}},
 		{"import", "import", reportView},
+		{"import-default-binding", "import", defaultBindingView},
 		{"inspect-pair", "snapshot", pair},
 		{"inspect-snapshot", "snapshot", snapshotInspection{Snapshot: snapshot, CaptureHistory: captureHistory}},
 		{"inspect-receipt", "receipt", receipt},

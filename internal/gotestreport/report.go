@@ -28,7 +28,7 @@ const (
 // Metadata is caller-supplied, not authenticated. A snapshot digest binds a
 // report to the caller's choice; it does not prove the tests ran on that source.
 type Metadata struct {
-	Producer   string          `json:"producer"`
+	Producer   string          `json:"producer,omitempty"`
 	Snapshot   evidence.Digest `json:"snapshot,omitempty"`
 	CapturedAt *time.Time      `json:"captured_at,omitempty"`
 	ImportedAt time.Time       `json:"imported_at"`
@@ -92,7 +92,7 @@ func validDigest(d evidence.Digest) bool {
 // Callers own reader cancellation/deadlines. Report strings remain untrusted.
 func Import(src io.Reader, meta Metadata) (Report, error) {
 	var result Report
-	if src == nil || len(meta.Producer) > 256 || strings.TrimSpace(meta.Producer) == "" || meta.ImportedAt.IsZero() || (meta.CapturedAt != nil && meta.CapturedAt.IsZero()) || (meta.Snapshot != "" && !validDigest(meta.Snapshot)) {
+	if src == nil || len(meta.Producer) > 256 || (meta.Producer != "" && strings.TrimSpace(meta.Producer) != meta.Producer) || meta.ImportedAt.IsZero() || (meta.CapturedAt != nil && meta.CapturedAt.IsZero()) || (meta.Snapshot != "" && !validDigest(meta.Snapshot)) {
 		return result, errors.New("invalid report metadata")
 	}
 	raw, err := io.ReadAll(io.LimitReader(src, MaxBytes+1))

@@ -57,7 +57,7 @@ func TestBrowserPTY(t *testing.T) {
 	}
 	defer master.Close()
 	defer slave.Close()
-	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 100}); err != nil {
+	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
 		t.Fatal(err)
 	}
 	before, err := term.GetState(int(slave.Fd()))
@@ -112,7 +112,7 @@ func TestBrowserPTY(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
-		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--producer", "PTY Go report", "--json"}, &stdout, slave, slave, true)
+		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--json"}, &stdout, slave, slave, true)
 	}()
 	expect("[REPORTED]")
 	if !strings.Contains(transcript.String(), "1 Overview") {
@@ -196,13 +196,13 @@ func TestBrowserPTY(t *testing.T) {
 			continue
 		}
 		var importedReport gotestreport.Report
-		if json.Unmarshal(raw, &importedReport) == nil && importedReport.Metadata.Producer == "PTY Go report" && string(importedReport.Metadata.Snapshot) == result.Data.Pair.Candidate {
+		if json.Unmarshal(raw, &importedReport) == nil && importedReport.Metadata.Producer == "" && string(importedReport.Metadata.Snapshot) == result.Data.Pair.Candidate {
 			boundToSelected = true
 		}
 	}
 	records.Close()
 	if !boundToSelected {
-		t.Fatal("live i import was not bound to the candidate selected before keypress")
+		t.Fatal("live i import without a producer claim was not bound to the candidate selected before keypress")
 	}
 	slave.Close()
 	for chunk := range chunks {

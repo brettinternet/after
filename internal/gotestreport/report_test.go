@@ -156,7 +156,7 @@ type brokenReader struct{}
 
 func (brokenReader) Read([]byte) (int, error) { return 0, fmt.Errorf("secret reader error") }
 func TestMetadataAndReadErrors(t *testing.T) {
-	for _, mutate := range []func(*Metadata){func(m *Metadata) { m.Producer = "" }, func(m *Metadata) { m.ImportedAt = time.Time{} }, func(m *Metadata) { m.Snapshot = "../../file" }, func(m *Metadata) { m.CapturedAt = &time.Time{} }} {
+	for _, mutate := range []func(*Metadata){func(m *Metadata) { m.Producer = " " }, func(m *Metadata) { m.ImportedAt = time.Time{} }, func(m *Metadata) { m.Snapshot = "../../file" }, func(m *Metadata) { m.CapturedAt = &time.Time{} }} {
 		m := metadata()
 		mutate(&m)
 		if _, err := Import(strings.NewReader(""), m); err == nil {
@@ -172,6 +172,15 @@ func TestMetadataAndReadErrors(t *testing.T) {
 	r, err := Import(strings.NewReader(""), m)
 	if err != nil || r.Metadata != m {
 		t.Fatal("lost supplied provenance")
+	}
+	m.Producer = ""
+	r, err = Import(strings.NewReader(""), m)
+	if err != nil || r.Metadata.Producer != "" {
+		t.Fatalf("omitted producer was rejected or invented: %+v %v", r.Metadata, err)
+	}
+	encoded, err := json.Marshal(r.Metadata)
+	if err != nil || bytes.Contains(encoded, []byte(`"producer"`)) {
+		t.Fatalf("omitted producer was serialized as a claim: %s %v", encoded, err)
 	}
 }
 func TestImportOnlyHostileData(t *testing.T) {

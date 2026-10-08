@@ -72,12 +72,14 @@ Options
 		body = `Import stock go test -json as reported evidence; AFTER does not run tests.
 
 Usage
-  after import FILE --producer TEXT [--snapshot ID]
+  go test -json ./... | after import
+  after import FILE [--producer TEXT] [--snapshot ID]
+  after import - [--producer TEXT] [--snapshot ID]
 
 Options
-  --producer TEXT   caller-supplied producer and version provenance (required)
+  --producer TEXT   optional caller-supplied producer claim
   --captured-at RFC3339   optional caller-supplied capture time
-  --snapshot ID     bind the report to a stored snapshot
+  --snapshot ID     bind to a snapshot (not proof of test source)
   --offset N        first report card (default: 0)
   --limit N         report cards to return (default: 128; range: 1–256)
 ` + global
@@ -203,7 +205,7 @@ Usage
   after review --new [capture options]
   after review ID...
   after review BASE CANDIDATE [EVIDENCE ...]
-  after review [BASE CANDIDATE] --import-file FILE --producer TEXT
+  after review [BASE CANDIDATE] --import-file FILE [--producer TEXT]
 
 Options
   --new                    capture and replace the saved review
@@ -212,7 +214,7 @@ Options
   --target REF             other side of --base capture (default: HEAD)
   --include-untracked PATH select an exact non-ignored file (repeatable)
   --import-file FILE       file read only after the explicit TUI import action
-  --producer TEXT          caller provenance required with --import-file
+  --producer TEXT          optional caller producer claim for --import-file
 ` + global
 	case "config":
 		body = `Show effective configuration and setting sources without exposing secrets.
@@ -252,7 +254,7 @@ Everyday
 
 Evidence
   after run                     prepare a consented offline payment run
-  after import                  read a go test -json report file
+  after import                  read a go test -json file or pipe
   after compare                 compare the newest stored run
   after pin                     list pin heads or create an expectation
   after export                  export the newest comparison as JSON
@@ -273,7 +275,7 @@ func helpNames() []string {
 func commandExample(name string) string {
 	examples := map[string]string{
 		"capture": "after capture",
-		"import":  "after import FILE --producer TEXT",
+		"import":  "after import FILE",
 		"inspect": "after inspect",
 		"compare": "after compare",
 		"export":  "after export",
@@ -291,7 +293,7 @@ func commandExample(name string) string {
 
 func missingArgument(name string, count int) string {
 	missing := map[string]string{
-		"import":  "a Go test JSON file",
+		"import":  "a Go test JSON input",
 		"inspect": "a record ID or BASE CANDIDATE snapshot pair",
 		"compare": "a receipt ID",
 		"export":  "a record ID",

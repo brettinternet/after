@@ -11,7 +11,7 @@ Everyday
 
 Evidence
   after run                     prepare a consented offline payment run
-  after import                  read a go test -json report file
+  after import                  read a go test -json file or pipe
   after compare                 compare the newest stored run
   after pin                     list pin heads or create an expectation
   after export                  export the newest comparison as JSON

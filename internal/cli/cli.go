@@ -198,6 +198,10 @@ func normalizeArgs(args []string) []string {
 			positionals = append(positionals, args[i:]...)
 			break
 		}
+		if token == "-" {
+			positionals = append(positionals, token)
+			continue
+		}
 		name, _, hasValue := strings.Cut(token, "=")
 		if valueFlags[name] || boolFlags[name] {
 			flags = append(flags, token)

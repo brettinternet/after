@@ -70,7 +70,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		t.Fatalf("capture IDs are invalid: %s", output)
 	}
 	receiptID, artifactID := seedCLIProcessRecords(t, project, baseID, candidateID)
-	importedCode, importedOutput, importedError, err := runCLIPipe(nested, home, true, []string{"import", report, "--producer", "fixture", "--json"})
+	importedCode, importedOutput, importedError, err := runCLIPipe(nested, home, true, []string{"import", report, "--producer", "fixture", "--snapshot", candidateID, "--json"})
 	if err != nil || importedCode != ExitOK || importedError != "" {
 		t.Fatalf("JSON import setup: exit=%d output=%q stderr=%q err=%v", importedCode, importedOutput, importedError, err)
 	}
@@ -137,6 +137,7 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"run-short-approval", []string{"run", "--plan-file", "not-read", "--approve", "abcd"}, ExitInvalid},
 		{"inspect-no-match", []string{"inspect", strings.Repeat("0", 64)}, ExitOK},
 		{"config", []string{"config"}, ExitOK},
+		{"import-default-binding", []string{"import", report}, ExitOK},
 	}
 	for _, command := range commands {
 		// Exercise every ID argument/flag with uppercase optional-scheme prefixes
@@ -161,6 +162,18 @@ func TestProjectCommandProcessModes(t *testing.T) {
 						t.Fatalf("exit=%d want=%d stdout=%q stderr=%q err=%v", code, command.code, stdout, stderr, err)
 					}
 					transcript := stdout + stderr
+					if command.name == "import-default-binding" {
+						for _, want := range []string{"not stated", "--producer TEXT", "caller claim", "AFTER did not run or observe", "tests may have used"} {
+							if !strings.Contains(transcript, want) {
+								t.Errorf("default import omitted %q in %s output: %q", want, mode, transcript)
+							}
+						}
+						if mode == "pty" {
+							t.Logf("80-column PTY default import (NO_COLOR=%t):\n%s", noColor, strings.TrimSpace(transcript))
+						} else {
+							t.Logf("pipe default import (NO_COLOR=%t):\n%s", noColor, strings.TrimSpace(transcript))
+						}
+					}
 					if strings.Contains(transcript, outsideRepositoryDiagnostic) || strings.Contains(transcript, "cannot open private evidence store") {
 						t.Fatalf("command did not use the checkout store: %q", transcript)
 					}
@@ -192,9 +205,11 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		}
 	}
 	for _, noColor := range []bool{false, true} {
-		code, stdout, stderr, err := runCLIPipe(nested, home, noColor, []string{"review", baseID, candidateID})
-		if err != nil || code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "after: review requires a terminal") || strings.ContainsAny(stderr, "\x1b\a") {
-			t.Errorf("review without a terminal (NO_COLOR=%v): exit=%d stdout=%q stderr=%q err=%v", noColor, code, stdout, stderr, err)
+		for _, args := range [][]string{{"review", baseID, candidateID}, {"review", "--import-file", report}} {
+			code, stdout, stderr, err := runCLIPipe(nested, home, noColor, args)
+			if err != nil || code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "after: review requires a terminal") || strings.ContainsAny(stderr, "\x1b\a") || strings.Contains(stderr, "producer") {
+				t.Errorf("review without a terminal (NO_COLOR=%v, args=%v): exit=%d stdout=%q stderr=%q err=%v", noColor, args, code, stdout, stderr, err)
+			}
 		}
 	}
 

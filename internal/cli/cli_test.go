@@ -267,8 +267,8 @@ func TestCaptureImportInspectExportAndSafeFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := invoke([]string{"import", reportPath, "--project", project, "--config", configFile}, false, "")
-	if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "--producer") {
-		t.Fatalf("import without provenance was accepted: %d %q %q", code, stdout, stderr)
+	if code != ExitOK || stderr != "" || !strings.Contains(stdout, "Producer     not stated") || !strings.Contains(stdout, "--producer TEXT") {
+		t.Fatalf("import without a producer claim failed or omitted its hint: %d %q %q", code, stdout, stderr)
 	}
 	code, stdout, stderr = invoke([]string{"import", reportPath, "--producer", "go1.27.1", "--captured-at", "not-a-time"}, false, "")
 	if code != ExitInvalid || stdout != "" || !strings.Contains(stderr, "RFC3339") {

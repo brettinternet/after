@@ -144,7 +144,7 @@ func noIDMatch(value string, kinds ...string) error {
 		case "comparison":
 			fix = "use after compare RECEIPT to create a comparison"
 		case "report":
-			fix = "use after import FILE --producer TEXT to import a report"
+			fix = "use after import FILE [--producer TEXT] to import a report"
 		}
 	}
 	return &exitError{code: ExitInvalid, diagnostic: formatDiagnostic(fmt.Sprintf("no %s matches %s", strings.Join(kinds, " or "), prefix), fix)}
@@ -199,7 +199,11 @@ func describeID(s *store.Store, entry store.Entry) (string, string, error) {
 		}
 		var report gotestreport.Report
 		if strictJSON(raw, &report) == nil && validImportedReport(report) {
-			return "report", "reported · " + report.Metadata.Producer, nil
+			producer := report.Metadata.Producer
+			if producer == "" {
+				producer = "producer not stated"
+			}
+			return "report", "reported · " + producer, nil
 		}
 		return "artifact", fmt.Sprintf("%d bytes · no producer established", len(raw)), nil
 	default:

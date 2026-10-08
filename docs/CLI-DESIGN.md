@@ -1,11 +1,10 @@
 # Command-line design
 
 **Status: staged target design.** AFTER-27's shared readable Cards and AFTER-34
-to AFTER-38 are implemented; the remaining command redesign tasks are still
-future work. This is the design for
-backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in AFTER-24
-(milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy future
-commands from this target into runtime help before they exist.
+to AFTER-39 are implemented; AFTER-40 onward remains future work. This is the
+design for backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in
+AFTER-24 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy
+future commands from this target into runtime help before they exist.
 The CLI shares vocabulary, badges, styles, and formatting with the
 [review TUI design](TUI-DESIGN.md). The product invariants in
 [AGENTS.md](../AGENTS.md) and [IMPLEMENTATION.md](IMPLEMENTATION.md) still apply.
@@ -58,7 +57,7 @@ modified and one untracked file, then with typical arguments.
 | `after diff`            | Print the newest capture's patch                               | `BASE CANDIDATE`, `--stat`, `--raw`                                                                    |
 | `after log`             | List the 20 newest captures, runs, reports, and pin events     | `-n N`                                                                                                 |
 | `after inspect`         | Summarize the newest capture                                   | `ID` (any record or plan), `BASE CANDIDATE`                                                            |
-| `after import`          | Read `go test -json` from a pipe                               | `FILE`, `--producer TEXT`, `--snapshot ID`                                                             |
+| `after import`          | Read `go test -json` from a file, pipe, or stdin               | `[FILE]`, `-`, or omitted; optional `--producer TEXT`, `--snapshot ID`                                 |
 | `after run`             | Prepare a plan for the newest capture, then ask before running | `BASE CANDIDATE`, `--approve DIGEST`                                                                   |
 | `after compare`         | Compare the newest run of the newest capture                   | `RECEIPT`                                                                                              |
 | `after pin`             | List pins                                                      | `[RECEIPT] --expectation TEXT`; `PIN`; `PIN --accept`, `PIN --attach RECEIPT`, `PIN --select SNAPSHOT` |
@@ -310,9 +309,15 @@ Next  after review                  compare the reopened pin with its current re
 
 ```text
 $ go test -json ./... | after import
-Imported report 5d1c9e02 · 2 pass · bound to candidate 784eb013 (working tree, captured now)
-  Producer   not stated — add --producer TEXT to record where the tests ran
-  Status     reported by go test; AFTER did not run or observe these tests
+Imported report 5d1c9e02 · 2 pass · 0 fail · 0 skip
+  Producer     not stated
+               add --producer TEXT to record a caller claim
+  Imported     19:50:58
+  Binding      784eb013 · caller claim
+               not proof of where tests ran
+  Capture      working tree captured at import
+  Untracked    1 path excluded; tests may have used them
+Reported in go test JSON; AFTER did not run or observe these tests
 
 Next  after review   see the report beside the change
 ```
@@ -483,9 +488,9 @@ Run after COMMAND --help for a command's options.
 | `review --tui … --import-file FILE --producer TEXT`       | `review … --import-file FILE [--producer TEXT]`                 |
 | `--base`: a snapshot ID or a Git ref                      | `--base`: a Git ref only                                        |
 
-AFTER-38 makes these changes, except the `import` row and the optional `--producer`
-(AFTER-39), and the `run` row (AFTER-40). Removed forms fail with an error that
-shows the new form. `review`, `inspect`, and `run` accept snapshot pairs as
+AFTER-38 made these grammar changes; AFTER-39 implements file/pipe import and
+optional producer claims. The `run` row remains AFTER-40. Removed forms fail with
+an error that shows the new form. `review`, `inspect`, and `run` accept snapshot pairs as
 positional `BASE CANDIDATE` IDs; `review` accepts trailing evidence IDs. Bare
 capture/resume selection and record-ID review remain later work.
 

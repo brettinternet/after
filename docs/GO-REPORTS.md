@@ -2,7 +2,7 @@
 
 `internal/gotestreport.Import(io.Reader, Metadata)` imports stock `go test -json`
 bytes without opening a project, running Go, fetching URLs, or following paths.
-The [headless CLI](CLI.md) exposes import and inspection. Report cards remain data
+The [headless CLI](CLI.md) exposes file, stdin-pipe, and `-` import plus inspection. Its default binding captures the working tree with the normal capture policy and records a capture event; that binding is not proof the report ran on the captured candidate. Report cards remain data
 for later inspection, not runner receipts.
 
 ## Tested compatibility
@@ -36,12 +36,14 @@ Benchmarks and fuzz exploration are not reconstructed into scenarios.
 
 ## Evidence and provenance
 
-Each report retains the exact original byte count and SHA-256, caller-supplied
-producer, import time, optional capture time, and optional explicit snapshot
-SHA-256 binding. The importer validates digest syntax, not snapshot existence or
-producer honesty. The caller must resolve a supplied snapshot through the local
-store when integrating the command. With or without that binding, applicability
-is **unknown**. Event timestamps are retained as reported first/last event times,
+Each report retains the exact original byte count and SHA-256, optional
+caller-supplied producer claim, import time, optional caller-supplied capture
+time, and optional snapshot SHA-256 binding. An omitted producer is absent from
+the JSON metadata; AFTER never invents one. The importer validates digest syntax,
+not snapshot existence or producer honesty. The caller must resolve a supplied
+snapshot through the local store when integrating the command. With or without
+that binding, applicability is **unknown**. Event timestamps are retained as
+reported first/last event times,
 not trusted capture or AFTER execution times. Missing timestamps stay absent.
 
 Each card has a package/test/build scope and attempt number. Identical test names

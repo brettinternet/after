@@ -9,7 +9,7 @@ Usage
   after review --new [capture options]
   after review ID...
   after review BASE CANDIDATE [EVIDENCE ...]
-  after review [BASE CANDIDATE] --import-file FILE --producer TEXT
+  after review [BASE CANDIDATE] --import-file FILE [--producer TEXT]
 
 Options
   --new                    capture and replace the saved review
@@ -18,7 +18,7 @@ Options
   --target REF             other side of --base capture (default: HEAD)
   --include-untracked PATH select an exact non-ignored file (repeatable)
   --import-file FILE       file read only after the explicit TUI import action
-  --producer TEXT          caller provenance required with --import-file
+  --producer TEXT          optional caller producer claim for --import-file
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

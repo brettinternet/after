@@ -34,6 +34,12 @@ type inspectionCardReference struct {
 	ID evidence.Digest `json:"id"`
 }
 
+type reportBindingView struct {
+	Source            evidence.SourceMode
+	CapturedNow       bool
+	UntrackedExcluded int
+}
+
 type reportViewData struct {
 	ID                    evidence.Digest                `json:"id"`
 	SchemaVersion         int                            `json:"schema_version"`
@@ -48,6 +54,7 @@ type reportViewData struct {
 	CardsMore             bool                           `json:"cards_more"`
 	Diagnostics           []gotestreport.Diagnostic      `json:"diagnostics"`
 	SuppressedDiagnostics int                            `json:"suppressed_diagnostics"`
+	Binding               *reportBindingView             `json:"-"`
 }
 
 type readableLine struct {
@@ -294,6 +301,9 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		var report reportViewData
 		if err := json.Unmarshal(raw, &report); err == nil && report.ID != "" && report.Cards != nil {
+			if imported, ok := original.(reportViewData); ok {
+				report.Binding = imported.Binding
+			}
 			if kind == "inspection" {
 				if lines, ok := cardInspectionLines(state, report.ID); ok {
 					return lines, nil
@@ -672,12 +682,30 @@ func reportLines(state *invocation, report reportViewData) []readableLine {
 	lines := []readableLine{textLine(fmt.Sprintf("Imported report %s · %d pass · %d fail · %d skip", shortID(report.ID), passes, failures, skips), terminal.Reported)}
 	producer := report.Metadata.Producer
 	if producer == "" {
-		producer = "not stated"
+		lines = append(lines, readableRow("Producer", "not stated"))
+		lines = append(lines, textLine("             add --producer TEXT to record a caller claim", terminal.Muted))
+	} else {
+		lines = append(lines, readableRow("Producer", producer+" · caller claim, unverified"))
 	}
-	lines = append(lines, readableRow("Producer", producer))
 	lines = append(lines, readableRow("Imported", state.formatTime(report.Metadata.ImportedAt)))
-	lines = append(lines, readableRow("Binding", shortID(report.Metadata.Snapshot)))
-	lines = append(lines, textLine("Reported by go test; AFTER did not run or observe these tests", terminal.Muted))
+	if report.Metadata.Snapshot == "" {
+		lines = append(lines, readableRow("Binding", "not supplied"))
+	} else {
+		lines = append(lines, readableRow("Binding", shortID(report.Metadata.Snapshot)+" · caller claim"))
+		lines = append(lines, textLine("             not proof of where tests ran", terminal.Muted))
+	}
+	if report.Metadata.CapturedAt != nil {
+		lines = append(lines, readableRow("Test time", state.formatTime(*report.Metadata.CapturedAt)+" · caller-supplied"))
+	}
+	if report.Binding != nil && report.Binding.CapturedNow {
+		source := strings.ReplaceAll(string(report.Binding.Source), "_", " ")
+		lines = append(lines, readableRow("Capture", source+" captured at import"))
+	}
+	if report.Binding != nil && report.Binding.UntrackedExcluded > 0 {
+		count := report.Binding.UntrackedExcluded
+		lines = append(lines, readableRow("Untracked", fmt.Sprintf("%d %s excluded; tests may have used them", count, plural(count, "path"))))
+	}
+	lines = append(lines, textLine("Reported in go test JSON; AFTER did not run or observe these tests", terminal.Muted))
 	for _, card := range report.Cards {
 		title := card.Test
 		if title == "" {
