@@ -19,6 +19,7 @@ Evidence
 
 Setup
   after config                  show settings and their sources
+  after completion              print a shell completion script
   after version                 print the AFTER version
 
 Global options: --project DIR, --config FILE, --json

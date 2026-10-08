@@ -108,6 +108,47 @@ match within two edits. Removed forms such as `inspect CANDIDATE --base BASE` an
 `review PIN --accept` exit 2 with the replacement syntax. Diagnostics sanitize
 input and give a corrective action; missing arguments include a runnable example.
 
+## Shell completion
+
+`after completion [bash|zsh|fish]` prints a completion script for the selected shell;
+without an argument, AFTER uses the shell name in `$SHELL`. An unsupported name exits
+2 and lists the supported shells. Scripts complete commands, command flags, `--scope`
+and `--mode` values, and stored-ID arguments. ID candidates are the 50 newest
+records valid at that position, newest first, inserted as short IDs with sanitized
+one-line descriptions where the shell supports descriptions. Bash Readline displays
+candidate words but has no description API; Zsh and Fish show the descriptions. For
+legacy snapshots, plans, and generic artifacts without a persisted event time,
+candidates follow timestamped records in stable short-ID order; no file mtime is used.
+
+Install Bash completion in `~/.bashrc`:
+
+```sh
+eval "$(after completion bash)"
+```
+
+Install Zsh completion in a completion directory and add it to `fpath` before
+running `compinit` (for example, in `~/.zshrc`):
+
+```sh
+mkdir -p ~/.zfunc
+after completion zsh > ~/.zfunc/_after
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+Install Fish completion in its completions directory:
+
+```sh
+mkdir -p ~/.config/fish/completions
+after completion fish > ~/.config/fish/completions/after.fish
+```
+
+The completion lookup opens `.after/` read-only and returns no ID candidates when
+there is no store. It never creates storage and never captures, imports, or runs
+project code. The shell adapters pass words as arguments rather than evaluating
+record descriptions; control characters and line breaks in descriptions are
+sanitized before they cross the shell completion interface.
+
 Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import accepts `FILE`, `-`, or omitted input when stdin is piped; omitted terminal input exits 2 without reading and shows the file and pipe forms. `--producer` is optional: when omitted, no producer claim is stored. A supplied producer and `--captured-at RFC3339` are caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using the `after capture` policy, writes a capture event, and binds the report to its candidate snapshot. Untracked files stay excluded; readable output warns that tests may have used excluded files. A binding is a caller claim, not proof the report's tests ran on that capture; if the default capture fails, import reports the capture reason and suggests `--snapshot ID`. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
 
 Each successful capture also writes an immutable capture event with its time, mode,

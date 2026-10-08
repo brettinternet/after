@@ -135,6 +135,7 @@ func commands(state *invocation) []*ucli.Command {
 			Before: outputBefore(state),
 			Flags:  globalFlags(), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return configCommand(state, ctx) },
 		},
+		completionCommand(state),
 		{
 			Name: "version", Usage: "print the AFTER version",
 			Action: func(ctx *ucli.Context) error {

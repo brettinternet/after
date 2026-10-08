@@ -17,7 +17,7 @@ func formatDiagnostic(problem, fix string) string {
 
 func unknownCommandDiagnostic(input string) string {
 	input = safeDiagnosticInput(input)
-	if suggestion, ok := closestMatch(input, []string{"capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "version", "help"}); ok {
+	if suggestion, ok := closestMatch(input, []string{"capture", "import", "inspect", "compare", "export", "run", "pin", "review", "config", "completion", "version", "help"}); ok {
 		return formatDiagnostic(fmt.Sprintf("unknown command %q", input), "did you mean "+suggestion+"?")
 	}
 	return formatDiagnostic(fmt.Sprintf("unknown command %q", input), "run after --help to list available commands")

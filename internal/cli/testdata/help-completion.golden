@@ -1,0 +1,16 @@
+Print a shell completion script. With no shell argument, use $SHELL.
+
+Usage
+  after completion
+  after completion bash
+  after completion zsh
+  after completion fish
+
+Options
+  No command-specific options.
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

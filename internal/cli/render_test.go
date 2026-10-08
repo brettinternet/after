@@ -208,12 +208,12 @@ func TestReadableCommandEnumeration(t *testing.T) {
 	for _, command := range commands(state) {
 		got[command.Name] = true
 	}
-	want := map[string]bool{"capture": true, "diff": true, "import": true, "inspect": true, "compare": true, "export": true, "run": true, "pin": true, "review": true, "status": true, "log": true, "config": true, "version": true}
+	want := map[string]bool{"capture": true, "diff": true, "import": true, "inspect": true, "compare": true, "export": true, "run": true, "pin": true, "review": true, "status": true, "log": true, "config": true, "version": true, "completion": true}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("command coverage changed: got %v want %v", got, want)
 	}
 	for _, command := range commands(state) {
-		if command.Name == "version" {
+		if command.Name == "version" || command.Name == "completion" {
 			continue
 		}
 		if command.Before == nil {
@@ -333,8 +333,8 @@ func TestHelpMatchesAvailableFlagsAndConfigurationDefaults(t *testing.T) {
 			}
 		}
 	}
-	if text := topLevelHelp(); strings.Count(text, "Global options:") != 1 || !strings.Contains(text, "after status") || !strings.Contains(text, "after log") || !strings.Contains(text, "after diff") || strings.Contains(text, "after completion") {
-		t.Fatalf("top-level help omits current commands, advertises unavailable commands, or repeats globals: %q", text)
+	if text := topLevelHelp(); strings.Count(text, "Global options:") != 1 || !strings.Contains(text, "after status") || !strings.Contains(text, "after log") || !strings.Contains(text, "after diff") || !strings.Contains(text, "after completion") {
+		t.Fatalf("top-level help omits current commands or repeats globals: %q", text)
 	}
 }
 

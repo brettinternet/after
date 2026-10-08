@@ -77,6 +77,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 			state.columns = width
 		}
 	}
+	if len(args) > 0 && args[0] == "__complete" {
+		return runCompletionBackend(args[1:], stdout)
+	}
 	if name, requested, helpErr := helpRequest(args); requested {
 		if helpErr != nil {
 			fmt.Fprintln(stderr, helpErr.Error())
@@ -163,7 +166,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 
 func knownCommand(value string) bool {
 	switch value {
-	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "diff", "config", "version", "help":
+	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "diff", "config", "completion", "version", "help":
 		return true
 	default:
 		return false

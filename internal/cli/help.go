@@ -242,6 +242,18 @@ Usage
 Options
   No command-specific options.
 ` + global
+	case "completion":
+		body = `Print a shell completion script. With no shell argument, use $SHELL.
+
+Usage
+  after completion
+  after completion bash
+  after completion zsh
+  after completion fish
+
+Options
+  No command-specific options.
+` + global
 	case "version":
 		body = `Print the AFTER version.
 
@@ -279,6 +291,7 @@ Evidence
 
 Setup
   after config                  show settings and their sources
+  after completion              print a shell completion script
   after version                 print the AFTER version
 
 Global options: --project DIR, --config FILE, --json
@@ -287,22 +300,23 @@ Run after COMMAND --help for that command's options.
 }
 
 func helpNames() []string {
-	return []string{"", "capture", "diff", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version"}
+	return []string{"", "capture", "diff", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "completion", "version"}
 }
 
 func commandExample(name string) string {
 	examples := map[string]string{
-		"capture": "after capture",
-		"diff":    "after diff",
-		"import":  "after import FILE",
-		"inspect": "after inspect",
-		"compare": "after compare",
-		"export":  "after export",
-		"run":     "after run BASE CANDIDATE",
-		"pin":     "after pin RECEIPT --expectation TEXT",
-		"review":  "after review",
-		"config":  "after config",
-		"version": "after version",
+		"capture":    "after capture",
+		"diff":       "after diff",
+		"import":     "after import FILE",
+		"inspect":    "after inspect",
+		"compare":    "after compare",
+		"export":     "after export",
+		"run":        "after run BASE CANDIDATE",
+		"pin":        "after pin RECEIPT --expectation TEXT",
+		"review":     "after review",
+		"config":     "after config",
+		"completion": "after completion bash",
+		"version":    "after version",
 	}
 	if example, ok := examples[name]; ok {
 		return example
