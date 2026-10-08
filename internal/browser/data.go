@@ -404,7 +404,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 				artifacts, _ := artifactsSection(s, r.Artifacts, &sec)
 				row.Sections = append([]Section{card, {Name: "Receipt Card", Parts: receiptSummary.Parts, Wrap: true}, caseWitnessesSection(s, r, comparison, report, sec), artifacts, receiptRecord}, row.Sections[3:]...)
 				row.Receipt = r.ID
-				row.Expectation = fmt.Sprintf("At %ds, expect %s provider request(s) for the frozen two same-key requests; finite example only", sec, countText(observationCounts(observations["candidate"])))
+				row.Expectation = pinExpectation(sec, observations["candidate"])
 				rows = append(rows, row)
 			}
 		}

@@ -457,6 +457,31 @@ func listPinHeads(state *invocation, project string) error {
 		pins = append(pins, view)
 	}
 	nexts := []nextCommand{}
+	history, err := readHistory(s)
+	if err != nil {
+		return err
+	}
+	if capture, ok := newestCapture(history.captures); ok {
+		if receipt, ok := newestReceipt(history.receipts, evidence.SnapshotPair{Base: capture.Base, Candidate: capture.Candidate}); ok {
+			suggestions, err := browser.PinSuggestions(s, receipt)
+			if err != nil {
+				return operational("pin suggestions are unavailable: case artifacts are missing or invalid")
+			}
+			for _, suggestion := range suggestions {
+				pinned := false
+				for _, pin := range pins {
+					if pin.Pin.BasisReceipt == receipt.ID && pin.Pin.Expectation == suggestion {
+						pinned = true
+						break
+					}
+				}
+				if !pinned {
+					nexts = append(nexts, next("after pin "+string(receipt.ID), "pin an expectation from the newest run"))
+					break
+				}
+			}
+		}
+	}
 	if len(pins) > 0 {
 		nexts = append(nexts, next("after status", "show the current capture and review state"))
 	} else {

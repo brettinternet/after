@@ -191,11 +191,14 @@ Options
 `, defaults.Repetitions, defaults.RunSeconds, defaults.OutputBytes, defaults.Interactive) + global
 	case "pin":
 		body = fmt.Sprintf(`Create or inspect a pin, or record one explicit decision. Pin actions never
-execute project code.
+execute project code. Without --expectation, a receipt prompts on a terminal:
+choose a numbered suggestion or type text; an empty line or EOF cancels.
+Without a terminal, supply --expectation TEXT.
 
 Usage
   after pin
   after pin [RECEIPT] --expectation TEXT [--scope SCOPE] [--reason TEXT]
+  after pin RECEIPT              ask for an expectation on a terminal
   after pin PIN
   after pin PIN --accept [--reason TEXT]
   after pin PIN --attach RECEIPT [--reason TEXT]

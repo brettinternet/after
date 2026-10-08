@@ -77,6 +77,8 @@ comparison IDs. If a required record is missing, the diagnostic names the missin
 record and the command that creates it.
 
 Bare `after pin` lists computed pin heads, including forks, without choosing one.
+Its Next block offers `after pin RECEIPT` when the newest capture's newest run
+has a suggested observation not yet pinned.
 `after pin --expectation TEXT` may omit the receipt to use the newest run of the
 newest capture pair; this resolves a receipt, never a pin revision. Every decision
 still requires an explicit pin revision ID. Pin history corruption or the 512-head /
@@ -95,7 +97,7 @@ Snapshot pairs use `BASE CANDIDATE` in `inspect`, `review`, and `run`. `--base`
 is only a Git ref on `capture`; `--target` is optional and defaults to `HEAD`.
 Pin inspection and mutations all use `pin`: `pin PIN`, `pin PIN --accept`,
 `pin PIN --attach RECEIPT`, and `pin PIN --select SNAPSHOT [--mode MODE]`.
-Creation uses `pin RECEIPT --expectation TEXT`; scope defaults to
+Creation uses `pin RECEIPT --expectation TEXT` (or the terminal prompt below); scope defaults to
 `finite_example`, and reason is optional.
 
 `after --help` and `after help` list only commands available in this build. Run
@@ -167,7 +169,8 @@ full IDs. Capture's `--base`/`--target` are Git references, not stored IDs.
 
 Resolution searches only kinds valid for that argument: run and positional
 inspect/review pairs search snapshots; compare and pin creation search receipts;
-`pin --attach` searches receipts, and `pin PIN` plus pin decisions search pin
+`pin --attach` searches receipts; a bare ID after `pin` searches receipts and pins,
+while explicit pin decisions search pin
 revisions. Inspect/export search snapshots, receipts, comparisons, reports,
 artifacts and stored execution plans. Trailing review IDs search comparisons,
 receipts, reports and pins.
@@ -212,7 +215,18 @@ Evidence discovery loads pin heads (including forks), the selected pair's newest
 
 `pin RECEIPT_ID --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`
 creates an immutable pin revision; `--scope` defaults to `finite_example`, and a
-receipt that cannot support it suggests `--scope human_intent`. `pin PIN_ID` opens a
+receipt that cannot support it suggests `--scope human_intent`.
+
+On a terminal, `after pin RECEIPT_ID` without `--expectation` prints the scope,
+basis receipt and full snapshot pair on stderr, followed by the TUI's numbered
+finite-case expectations. Enter a number to choose one, or type expectation text
+verbatim (maximum 4096 bytes). An empty line or EOF creates nothing. A receipt
+without suggestions asks for text only. The scope and history reason use the
+same defaults as `--expectation`; `--scope` and `--reason` still override them.
+Without a terminal, it exits 2 without reading stdin and gives a runnable
+`--expectation` example. JSON output remains on stdout; the prompt uses stderr.
+
+`pin PIN_ID` opens a
 revision read-only using the TUI's shared Card renderer, followed by full IDs. Its
 readable view names the selected `original base` or `last inspected` pair from the
 latest immutable pin history event.

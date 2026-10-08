@@ -39,11 +39,46 @@ func pinCommand(state *invocation) *ucli.Command {
 		if actions > 0 && ctx.NArg() == 0 {
 			return invalidWithFix("missing pin revision ID", "try: after pin PIN --accept")
 		}
+		if !create && actions == 0 {
+			cfg, err := configFlags(ctx)
+			if err != nil {
+				return err
+			}
+			state.project = cfg.Project
+			if ctx.NArg() == 0 {
+				if ctx.IsSet("scope") || ctx.IsSet("mode") || ctx.IsSet("reason") {
+					return invalidWithFix("pin options require an expectation or decision", "use after pin RECEIPT --expectation TEXT")
+				}
+				return listPinHeads(state, cfg.Project)
+			}
+			s, err := store.Open(cfg.Project, false, nil)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return noIDMatch(ctx.Args().First(), "pin")
+				}
+				return operational("cannot open private evidence store for reading")
+			}
+			defer s.Close()
+			id, err := resolveID(s, ctx.Args().First(), "pin", "receipt")
+			if err != nil {
+				return err
+			}
+			if _, err := store.Get[evidence.Receipt](s, id); errors.Is(err, os.ErrNotExist) {
+				if ctx.IsSet("scope") || ctx.IsSet("mode") || ctx.IsSet("reason") {
+					return invalidWithFix("pin options require an expectation or decision", "use after pin PIN to inspect a pin, or add --expectation TEXT to create one")
+				}
+				return writeReview(state, s, id)
+			} else if err != nil {
+				return operational("receipt is corrupt or unavailable")
+			}
+			s.Close()
+			create = true
+		}
 		if create {
 			if actions > 0 || ctx.IsSet("mode") {
 				return invalidWithFix("pin creation cannot be combined with a pin decision", "use after pin RECEIPT --expectation TEXT")
 			}
-			if strings.TrimSpace(ctx.String("expectation")) == "" || len(ctx.String("expectation")) > 4096 {
+			if ctx.IsSet("expectation") && (strings.TrimSpace(ctx.String("expectation")) == "" || len(ctx.String("expectation")) > 4096) {
 				return invalidWithFix("expectation must contain 1 to 4096 bytes", "use after pin RECEIPT --expectation TEXT")
 			}
 			scope := evidence.PinScope(ctx.String("scope"))
@@ -79,8 +114,16 @@ func pinCommand(state *invocation) *ucli.Command {
 					return err
 				}
 			}
+			expectation := ctx.String("expectation")
+			if !ctx.IsSet("expectation") {
+				var cancelled bool
+				expectation, cancelled, err = promptPin(state, s, receiptID, scope, cfg.Interactive)
+				if err != nil || cancelled {
+					return err
+				}
+			}
 			reason := reasonOrDefault(ctx, "Pinned from the command line")
-			p, err := review.Create(s, receiptID, ctx.String("expectation"), scope, reason)
+			p, err := review.Create(s, receiptID, expectation, scope, reason)
 			if err != nil {
 				if strings.Contains(err.Error(), "finite example requires a complete observed result") {
 					return invalidWithFix("finite_example requires a complete observed result", "use --scope human_intent or pin a complete observed receipt")
@@ -89,32 +132,7 @@ func pinCommand(state *invocation) *ucli.Command {
 			}
 			return writeReviewUsing(state, s, p.ID, using)
 		}
-		if actions == 0 {
-			if ctx.IsSet("scope") || ctx.IsSet("mode") || ctx.IsSet("reason") {
-				return invalidWithFix("pin options require an expectation or decision", "use after pin PIN to inspect a pin, or add --expectation TEXT to create one")
-			}
-			cfg, err := configFlags(ctx)
-			if err != nil {
-				return err
-			}
-			state.project = cfg.Project
-			if ctx.NArg() == 0 {
-				return listPinHeads(state, cfg.Project)
-			}
-			s, err := store.Open(cfg.Project, false, nil)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					return noIDMatch(ctx.Args().First(), "pin")
-				}
-				return operational("cannot open private evidence store for reading")
-			}
-			defer s.Close()
-			id, err := resolveID(s, ctx.Args().First(), "pin")
-			if err != nil {
-				return err
-			}
-			return writeReview(state, s, id)
-		}
+
 		if ctx.IsSet("scope") || ctx.IsSet("expectation") {
 			return invalidWithFix("pin decisions cannot change the expectation or scope", "use after pin PIN --accept, --attach RECEIPT, or --select SNAPSHOT")
 		}
