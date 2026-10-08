@@ -107,7 +107,8 @@ set_config() {
 require_docker() {
 	if [[ ${AFTER_DOCKER_BINARY:-} != /* || ${AFTER_DOCKER_HOST:-} != unix:///* ]]; then
 		cat >&2 <<-'EOF'
-			This example executes code in AFTER's offline Docker sandbox. Set both:
+			This example executes code in AFTER's offline Docker sandbox. Set both
+			(after config prints an export line for a detected Docker CLI and socket):
 			  export AFTER_DOCKER_BINARY="$(command -v docker)"
 			  export AFTER_DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 			and provision the pinned image once (see docs/SANDBOX.md).

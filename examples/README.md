@@ -18,15 +18,18 @@ explicitly run their synthetic Go tests on the host; AFTER only imports the outp
 Readable output is the default. The scripts use `--json` only for results they
 parse, and `after diff` streams the complete terminal-safe patch rather than a
 paged inspection result. Use `after diff --raw > exact.patch` for exact bytes.
-`after status`, `after inspect`, `after diff`, and `after log` work without IDs;
-explicit stored IDs also accept unique short prefixes. See [CLI.md](../docs/CLI.md)
+Bare `after diff` prints the checkout's current change without storing it;
+`after diff --stored` prints the newest capture's patch. `after status`,
+`after inspect`, and `after log` summarize stored records without IDs, and status
+and inspect say when the checkout has changed since the capture. Explicit stored
+IDs also accept unique short prefixes. See [CLI.md](../docs/CLI.md)
 for the full grammar and Bash/Zsh/Fish completion installation.
 
 ## CLI
 
 | Script                                                   | Scenario                                                                    | Shows                                                                           |
 | -------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [01-working-tree](cli/01-working-tree.sh)                | Raise a rate limit, forget the docs, leave a scratch file                   | Readable `status`/`inspect`/`log`, streamed `diff`, explicit untracked capture  |
+| [01-working-tree](cli/01-working-tree.sh)                | Raise a rate limit, forget the docs, leave a scratch file                   | Stale-capture `status`, live vs `--stored` `diff`, `inspect`, untracked opt-in  |
 | [02-staged-and-branches](cli/02-staged-and-branches.sh)  | Commit a fix but not a debug edit; review a feature branch after main moved | `--staged`, clean-tree guidance, `--base main --target feature`                 |
 | [03-moved-oracle](cli/03-moved-oracle.sh)                | Discount changes and its test is edited to agree; the suite stays green     | Stdin `import` with automatic binding, moved oracle, failing frozen tests       |
 | [04-config](cli/04-config.sh)                            | Team YAML defaults overridden by environment and flags                      | `config` provenance, fail-fast validation, no consent setting                   |
@@ -76,7 +79,9 @@ which actions are available.
 ## 🐳 Docker examples
 
 These execute the captured code, so they need the offline sandbox. Provision the
-pinned image once ([SANDBOX.md](../docs/SANDBOX.md)), then set both variables:
+pinned image once ([SANDBOX.md](../docs/SANDBOX.md)), then set both variables.
+`after config` prints a ready `export` line when it finds one Docker CLI and one
+socket, or set them yourself:
 
 ```sh
 export AFTER_DOCKER_BINARY="$(command -v docker)"

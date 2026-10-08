@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Review uncommitted work: capture HEAD versus the working tree, list every
-# changed path (including ones AFTER cannot diff) and read the raw patch.
+# changed path (including ones AFTER cannot diff), read the current patch, and
+# see status notice when the checkout moves past the stored capture.
 source "$(dirname "$0")/../lib.sh"
 
 section "A small service with a rate limit"
@@ -33,9 +34,19 @@ after 0 log -n 3
 section "Inventory: every path stays visible, even untracked ones that were excluded"
 inventory "$BASE" "$CANDIDATE"
 
-section "Stream the captured patch (not the live checkout)"
+section "The current change, like git diff HEAD (read live; nothing stored)"
+after 0 diff --stat
 after 0 diff
 note "Use after diff --raw > exact.patch for exact bytes; --raw refuses terminal output."
+
+section "Keep editing: status says the stored capture is out of date"
+perl -pi -e 's/1200/1500/' limits/limits.go
+after 0 status
+note "Status compares file contents, not timestamps, and stores nothing."
+
+section "The stored capture's patch still says 1200"
+after 0 diff --stored
+note "Bare after diff now shows 600 -> 1500; after review captures the current change."
 
 section "Opt in to an untracked file by exact path"
 capture=$(after 0 capture --json --include-untracked notes.txt)
