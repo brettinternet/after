@@ -6,8 +6,6 @@ See what your code does differently, not just how it reads differently.
 
 A change shortens a payment idempotency window from 24 hours to 5 minutes. The diff is one line, every HTTP response is identical, and the tests pass. AFTER runs both versions in an offline sandbox and counts what the fake payment provider actually received: a retry after 12 hours now charges the customer twice. Pin "one charge per retry" as your expectation, and AFTER reopens the pin when later evidence changes.
 
-**Status:** proof of concept. It runs one frozen payment experiment, not arbitrary applications, and has not been tested with human reviewers.
-
 ## Try it
 
 Commands assume the tools are on `PATH`, through mise shell activation or another
