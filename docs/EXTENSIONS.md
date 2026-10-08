@@ -45,7 +45,7 @@ Plugins may move state only in the conservative direction: add a limitation, vet
 Go's [`plugin`](https://pkg.go.dev/plugin) package requires cgo and an exact toolchain and dependency match, does not support Windows, and cannot unload. It is unsuitable for community distribution. Integrations must run outside the host process, which suits the trust model. Each tier matches one level of authority:
 
 1. **Data.** Scenario definitions, comparison rules, image digests and build/start argv. Most language variety is which image and which commands: configuration shown in the consent preview, not code. A definition must come from outside the compared pair; one inside the repository that differs between base and candidate is a changed oracle.
-2. **WASM** through [wazero](https://wazero.io) (pure Go, no cgo) for importers, fact providers and rule functions. A module gets no clock, filesystem or network unless granted and runs under memory and time limits. Authors can use any language that compiles to WASM. Import and inspection still execute nothing with host authority.
+2. **Sandboxed code** for importers, fact providers and rule functions: either WASM through [wazero](https://wazero.io) (pure Go, no cgo) or an embedded hermetic interpreter such as [Starlark](https://github.com/google/starlark-go). Plugins get no clock, filesystem or network unless granted and run under memory and time limits. WASM accepts any language that compiles to it; Starlark needs no build step. A bake-off chooses one (see [next decisions](#next-decisions)). Import and inspection still execute nothing with host authority.
 3. **Containers** for drivers and observers, through the existing [sandbox](SANDBOX.md) and exact-plan consent. The trusted observer stays outside the app's PID, filesystem and scratch namespaces.
 4. **`after-<name>` executables**, discovered git-style, for workflows, exporters and integrations. Any language, full user permissions, no API approval. They read `--json` output and write only through `after import`, so they cannot forge labels.
 
@@ -83,10 +83,20 @@ The POC contract rules out a plugin framework without a demonstrated requirement
 1. **AFTER-48: native JUnit XML import.** pytest, Vitest, jest-junit, Maven Surefire, Gradle, cargo-nextest, PHPUnit and go-junit-report emit it, so one importer covers reported results for most ecosystems.
 2. **AFTER-49: declarative `http-service` scenarios.** The payment experiment becomes one definition; a second service in another language proves the runner is not Go-specific.
 3. **AFTER-50: declarative `command` scenarios.** Exit status, stdout and stderr cover CLIs, generators and library harnesses.
-4. Extract the plugin interface from those cases, then port the Go importer and payment runner to it as first-party plugins. If the built-ins cannot be expressed, the interface is insufficient.
-5. Open distribution last.
 
-These are operator-selected follow-up tasks, not POC queue items.
+These are operator-selected follow-up tasks, not POC queue items. Each records its extension seams in task notes: what needed code rather than data, and what differed from the existing instance.
+
+## Next decisions
+
+After AFTER-48–50, decide in order. Stop at any step whose answer is "not needed."
+
+1. **Write the contract as versioned data schemas.** Cover importer output (cards), scenario definitions, observation artifacts and rules, independent of how plugins load or run. Built-ins conform internally first. The schemas are the plugin API; the runtime is a detail.
+2. **Decide whether code plugins are needed.** Count real integration requests that declarative definitions, JUnit import and `after-<name>` commands cannot express, from the AFTER-18 study and use on real repositories. If there are almost none, stop here.
+3. **Run one bake-off.** Implement the same importer, such as Vitest JSON, in Starlark and as WASM through [Extism](https://extism.org), whose PDKs let authors write TypeScript. Compare authoring steps, debugging, sandbox guarantees, speed on an 8 MiB report and binary size. Ship one runtime, not both.
+4. **Port the built-ins.** Move the Go test importer and payment runner onto the chosen interface as first-party plugins. If they cannot be expressed, the interface is insufficient.
+5. **Open distribution** on the `gh extension install` model, with the digest lockfile described above.
+
+Revisit the host language only if most requests are for custom TUI views. That is where a TypeScript host clearly wins; AFTER should answer it with structured cards that the core renders, not plugin-drawn UI.
 
 ## Open problems
 

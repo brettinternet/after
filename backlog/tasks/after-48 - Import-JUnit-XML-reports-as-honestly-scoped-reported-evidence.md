@@ -37,4 +37,5 @@ Stock `go test -json` is the only importer, so reported evidence exists only for
 - [ ] #1 Focused tests and relevant Task targets pass; record exact commands and outcomes in task notes.
 - [ ] #2 Update affected docs/help and record limitations; independent verification for trust-boundary changes.
 - [ ] #3 Commit implementation and final task state using the repository delivery workflow; no credentials, real project reports or private receipts committed.
+- [ ] #4 Record extension seams in task notes: what needed code rather than data, and what differed from the existing instance; these feed the schema step in docs/EXTENSIONS.md.
 <!-- DOD:END -->

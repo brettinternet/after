@@ -4,6 +4,7 @@ title: Run declarative command scenarios that compare exit status and output str
 status: To Do
 assignee: []
 created_date: '2026-10-08 23:14'
+updated_date: '2026-10-08 23:21'
 labels:
   - follow-up
   - extensibility
@@ -39,4 +40,5 @@ CLIs, code generators and library test harnesses are observable at the process b
 - [ ] #1 Focused checks and the opt-in Docker proofs pass; record exact commands, actual results or objective external blockers in task notes.
 - [ ] #2 Update RUNNER, COMPARISON, IMPLEMENTATION and EXTENSIONS docs with the new scope and limits; independent verification for the execution boundary.
 - [ ] #3 Commit implementation and final task state using the repository delivery workflow; keep private artifacts out of Git.
+- [ ] #4 Record extension seams in task notes: what needed code rather than data, and what differed from the existing instance; these feed the schema step in docs/EXTENSIONS.md.
 <!-- DOD:END -->
