@@ -33,7 +33,7 @@ type discoveredReport struct {
 // discoverEvidence finds matching immutable records, orders pins needing review
 // first and then newest pair/candidate evidence, and reports the exact number
 // omitted by the TUI's 32-record bound.
-func discoverEvidence(s *store.Store, pair evidence.SnapshotPair) ([]evidence.Digest, int, error) {
+func discoverEvidence(s *store.Store, pair evidence.SnapshotPair, preferredPins []evidence.Digest) ([]evidence.Digest, int, error) {
 	pins, err := review.Heads(s)
 	if err != nil {
 		return nil, 0, err
@@ -148,8 +148,23 @@ func discoverEvidence(s *store.Store, pair evidence.SnapshotPair) ([]evidence.Di
 	for _, report := range reports {
 		appendID(report.id)
 	}
-	omitted := max(len(all)-MaxEvidence, 0)
-	return all[:min(len(all), MaxEvidence)], omitted, nil
+	ordered := make([]evidence.Digest, 0, len(all)+len(preferredPins))
+	seen = make(map[evidence.Digest]bool)
+	for _, id := range preferredPins {
+		appendOrdered := id != "" && !seen[id]
+		if appendOrdered {
+			seen[id] = true
+			ordered = append(ordered, id)
+		}
+	}
+	for _, id := range all {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ordered = append(ordered, id)
+		}
+	}
+	omitted := max(len(ordered)-MaxEvidence, 0)
+	return ordered[:min(len(ordered), MaxEvidence)], omitted, nil
 }
 
 func validDiscoveredReport(report gotestreport.Report) bool {

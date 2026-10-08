@@ -60,7 +60,7 @@ func TestDiscoveryKeepsForksPrioritizesReviewAndBoundsResults(t *testing.T) {
 	}
 	reportArtifact := viewArtifact(t, s, report, "report")
 
-	found, omitted, err := discoverEvidence(s, selection.Pair)
+	found, omitted, err := discoverEvidence(s, selection.Pair, nil)
 	if err != nil || omitted != 0 {
 		t.Fatalf("initial discovery: %v omitted=%d err=%v", found, omitted, err)
 	}
@@ -75,6 +75,10 @@ func TestDiscoveryKeepsForksPrioritizesReviewAndBoundsResults(t *testing.T) {
 	}
 	if foundSet[originalPin.ID] {
 		t.Fatal("discovery loaded an ancestor instead of its fork heads")
+	}
+	preferred, _, err := discoverEvidence(s, selection.Pair, []evidence.Digest{secondFork.ID})
+	if err != nil || len(preferred) == 0 || preferred[0] != secondFork.ID {
+		t.Fatalf("saved pin revision was not restored before discovered heads: %v %v", preferred, err)
 	}
 	firstThree := make(map[evidence.Digest]bool)
 	for _, id := range found[:3] {
@@ -97,7 +101,7 @@ func TestDiscoveryKeepsForksPrioritizesReviewAndBoundsResults(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	bounded, omitted, err := discoverEvidence(s, selection.Pair)
+	bounded, omitted, err := discoverEvidence(s, selection.Pair, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

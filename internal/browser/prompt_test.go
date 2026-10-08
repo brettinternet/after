@@ -184,6 +184,106 @@ func TestSnapshotUsePromptRetainsBaseAndHistoryReason(t *testing.T) {
 	}
 }
 
+func TestSnapshotUsePromptSelectsFollowUpsAndSwitchesBackForEveryPin(t *testing.T) {
+	s, selection := completePromptFixture(t)
+	receipt := comparisonReceipt(t, s, selection)
+	first, err := review.Create(s, receipt.ID, "first finite expectation", evidence.FiniteExample, "first pin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := review.Create(s, receipt.ID, "second finite expectation", evidence.FiniteExample, "second pin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection.Evidence = []evidence.Digest{first.ID, second.ID}
+	model, actions := promptModel(t, s, selection)
+	setRetention := func(seconds int) evidence.SnapshotPair {
+		t.Helper()
+		content := fmt.Sprintf("package main\nconst retentionSeconds = %d\n", seconds)
+		if err := os.WriteFile(filepath.Join(selection.Project, "app/config.go"), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		pair, err := actions.Capture(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		model.pending = &pair
+		return pair
+	}
+	selectPending := func(mode evidence.ReviewMode, reason string) evidence.SnapshotPair {
+		t.Helper()
+		step(model, key("u"))
+		if model.prompt == nil || model.prompt.mode != evidence.OriginalBase {
+			t.Fatal("use-capture prompt did not default to original base")
+		}
+		if mode == evidence.FollowUp {
+			originalReason := model.prompt.reason
+			step(model, tea.KeyMsg{Type: tea.KeyRight})
+			if model.prompt.mode != evidence.FollowUp || model.prompt.pair.Base != model.selected.Pair.Candidate || model.prompt.reason != originalReason {
+				t.Fatal("last-inspected choice changed the reason or selected the wrong pair")
+			}
+			step(model, tea.KeyMsg{Type: tea.KeyLeft})
+			if model.prompt.mode != evidence.OriginalBase || model.prompt.pair.Base != selection.Pair.Base || model.prompt.reason != originalReason {
+				t.Fatal("switching back to original base lost the retained reason or baseline")
+			}
+			step(model, tea.KeyMsg{Type: tea.KeyRight})
+		}
+		step(model, tea.KeyMsg{Type: tea.KeyCtrlU})
+		step(model, key(reason))
+		want := model.prompt.pair
+		step(model, tea.KeyMsg{Type: tea.KeyEnter})
+		drain(model, nil)
+		if model.prompt != nil || model.selected.Pair != want || model.selected.Mode != mode {
+			t.Fatalf("confirmed comparison mismatch: selected=%+v want=%+v mode=%s", model.selected, want, mode)
+		}
+		return want
+	}
+
+	firstCapture := setRetention(60)
+	firstPair := selectPending(evidence.FollowUp, "inspect first follow-up")
+	if firstPair != (evidence.SnapshotPair{Base: selection.Pair.Candidate, Candidate: firstCapture.Candidate}) || model.selected.Baseline != selection.Pair.Base {
+		t.Fatalf("first follow-up lost the original baseline: %+v baseline=%s", firstPair, model.selected.Baseline)
+	}
+	selectedIDs := append([]evidence.Digest(nil), model.selected.Evidence...)
+	if len(selectedIDs) != 2 || len(model.selected.PinRevisions) != 2 {
+		t.Fatalf("not all selected pins retained revision IDs: %+v %+v", selectedIDs, model.selected.PinRevisions)
+	}
+	for _, id := range selectedIDs {
+		pin, err := store.Get[evidence.Pin](actionsStore(t, actions), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last := pin.History[len(pin.History)-1]
+		if last.Review.Mode != evidence.FollowUp || last.Review.PriorCandidate != selection.Pair.Candidate || last.Review.Target.Snapshots != firstPair || last.Reason != "inspect first follow-up" {
+			t.Fatalf("selected pin did not record the exact follow-up: %+v", last)
+		}
+	}
+	if _, err := store.Get[evidence.Receipt](actionsStore(t, actions), receipt.ID); err != nil {
+		t.Fatalf("earlier receipt was not retained as history: %v", err)
+	}
+
+	secondCapture := setRetention(90)
+	secondPair := selectPending(evidence.FollowUp, "inspect second follow-up")
+	if secondPair != (evidence.SnapshotPair{Base: firstCapture.Candidate, Candidate: secondCapture.Candidate}) {
+		t.Fatalf("repeated follow-up did not start at the last inspected candidate: %+v", secondPair)
+	}
+	thirdCapture := setRetention(120)
+	originalPair := selectPending(evidence.OriginalBase, "return to original baseline")
+	if originalPair != (evidence.SnapshotPair{Base: selection.Pair.Base, Candidate: thirdCapture.Candidate}) || model.selected.Baseline != selection.Pair.Base {
+		t.Fatalf("switching back did not retain the original baseline: %+v baseline=%s", originalPair, model.selected.Baseline)
+	}
+	for _, id := range model.selected.PinRevisions {
+		pin, err := store.Get[evidence.Pin](actionsStore(t, actions), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last := pin.History[len(pin.History)-1]
+		if last.Review.Mode != evidence.OriginalBase || last.Review.Target.Snapshots != originalPair || last.Reason != "return to original baseline" {
+			t.Fatalf("pin did not record switching back to original base: %+v", last)
+		}
+	}
+}
+
 func TestAcceptPinPromptEngineAndCancellation(t *testing.T) {
 	s, selection := completePromptFixture(t)
 	receipt := comparisonReceipt(t, s, selection)

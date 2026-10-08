@@ -108,7 +108,7 @@ var keyMap = []keyBinding{
 	{keys: []string{"d"}, hint: "d Changes", label: "Open the complete change inventory", group: "Views", action: keyChanges, contexts: topKeyContexts, priority: 4, disabled: needsData},
 	{keys: []string{"c"}, hint: "c capture", label: "Capture the working tree in the background", group: "Review", action: keyCapture, contexts: browseKeyContexts, priority: 8, disabled: canCapture},
 	{keys: []string{"i"}, hint: "i import", label: "Import the configured report", group: "Review", action: keyImport, contexts: browseKeyContexts, priority: 9, disabled: canImport},
-	{keys: []string{"u"}, hint: "u use capture", label: "Use the pending capture with the original base", group: "Review", action: keyUseCapture, contexts: browseKeyContexts, priority: 6, disabled: canUseCapture},
+	{keys: []string{"u"}, hint: "u use capture", label: "Choose original-base or last-inspected comparison (confirms)", group: "Review", action: keyUseCapture, contexts: browseKeyContexts, priority: 6, disabled: canUseCapture},
 	{keys: []string{"p"}, hint: "p pin", label: "Pin the selected measured count (confirms)", group: "Review", action: keyPin, contexts: []keyContext{contextOverview}, priority: 8, disabled: canPin},
 	{keys: []string{"a"}, hint: "a accept pin", label: "Accept a pin's current complete result (confirms)", group: "Review", action: keyAcceptPin, contexts: allKeyContexts, priority: 2, disabled: canAcceptPin},
 	{keys: []string{"r"}, hint: "r rerun", label: "Prepare an exact rerun preview; nothing runs", group: "Review", action: keyPreview, contexts: browseKeyContexts, priority: 8, disabled: canPreview},
@@ -435,6 +435,9 @@ func canCancel(m *Model) string {
 
 func (m *Model) keyHints() string {
 	if m.screen == "prompt" {
+		if m.prompt != nil && m.prompt.action == keyUseCapture {
+			return "←/→ mode · Enter confirm · Esc cancel · Ctrl-U clear · Ctrl-C quit"
+		}
 		return "Enter confirm · Esc cancel · Ctrl-U clear · Ctrl-C quit"
 	}
 	if m.searchEditing {

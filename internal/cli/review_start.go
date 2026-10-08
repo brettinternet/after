@@ -31,7 +31,7 @@ func startOrResumeReview(state *invocation, ctx *ucli.Context, requested capture
 	}
 	optionsWereSet := ctx.IsSet("staged") || ctx.IsSet("base") || ctx.IsSet("target") || ctx.IsSet("include-untracked")
 	if found && !ctx.Bool("new") && (!optionsWereSet || reflect.DeepEqual(browser.NewReviewSession(saved.Pair, requested).Capture, saved.Capture)) {
-		selection := browser.Selection{Project: cfg.Project, Pair: saved.Pair, Discover: true}
+		selection := browser.Selection{Project: cfg.Project, Pair: saved.Pair, Mode: saved.Mode, Baseline: saved.Baseline, PinRevisions: append([]evidence.Digest(nil), saved.PinRevisions...), Discover: true}
 		return runBrowser(state, ctx, cfg, selection, saved, true, true)
 	}
 
@@ -154,9 +154,14 @@ func openExplicitReviewID(state *invocation, ctx *ucli.Context, rawID string) er
 		pin, err = store.Get[evidence.Pin](s, id)
 		if err == nil {
 			selection.Pair = pin.BasisSnapshots
+			selection.Baseline = pin.BasisSnapshots.Base
+			selection.Mode = evidence.OriginalBase
 			if len(pin.History) > 0 && pin.History[len(pin.History)-1].Review != nil {
-				selection.Pair = pin.History[len(pin.History)-1].Review.Target.Snapshots
+				last := pin.History[len(pin.History)-1].Review
+				selection.Pair = last.Target.Snapshots
+				selection.Mode = last.Mode
 			}
+			selection.PinRevisions = []evidence.Digest{id}
 			selection.Evidence = []evidence.Digest{id}
 		}
 	case "report":
@@ -174,6 +179,11 @@ func openExplicitReviewID(state *invocation, ctx *ucli.Context, rawID string) er
 		return invalidWithFix("review record is unavailable", "inspect the stored ID or open a complete stored snapshot pair")
 	}
 	session := browser.NewReviewSession(selection.Pair, capture.Options{Mode: evidence.WorkingTree})
+	session.Mode = selection.Mode
+	if selection.Baseline != "" {
+		session.Baseline = selection.Baseline
+	}
+	session.PinRevisions = append([]evidence.Digest(nil), selection.PinRevisions...)
 	return runBrowser(state, ctx, cfg, selection, session, false, false)
 }
 

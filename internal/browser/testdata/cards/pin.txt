@@ -1,13 +1,13 @@
-AFTER · 002 · base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (working tree)
+AFTER · 002 · original base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (working tree)
 Overview › Preserve the finite provider-request count                                                         [REOPENED]
-Section 1/5 | 289 stored bytes | text | pan 0
+Section 1/5 | 287 stored bytes | text | pan 0
 data | Card
 ── Expectation · 85 B ──
  2 │ Preserve the finite provider-request count (your words; AFTER does not evaluate them)
 ── Scope · 40 B ──
  4 │ finite_example · basis receipt e32608d9
-── Reviewing · 37 B ──
- 6 │ 2d13fdbf → 8e9eef34 (original_base)
+── Reviewing · 35 B ──
+ 6 │ original base 2d13fdbf → 8e9eef34
 ── Reopened · 70 B ──
  8 │ incomplete or excluded whole-project footprint; cannot establish reuse
 ── Current · 57 B ──

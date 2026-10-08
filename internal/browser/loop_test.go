@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/rawdiff"
+	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
@@ -122,6 +125,75 @@ func TestLoopConsentAndSnapshotBarrier(t *testing.T) {
 	}
 	if len(m.selected.Evidence) != 0 {
 		t.Fatal("late receipt attached")
+	}
+}
+
+func TestFollowUpPreviewAndComputedDiffUseActivePair(t *testing.T) {
+	s, selection := setup(t, false)
+	if err := os.WriteFile(filepath.Join(selection.Project, "app/config.go"), []byte("package main\nconst retentionSeconds = 60\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := capture.Capture(t.Context(), selection.Project, s, capture.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair := evidence.SnapshotPair{Base: selection.Pair.Candidate, Candidate: captured.Candidate.ID}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	actions := &Actions{Project: selection.Project, Repetitions: 1, Limits: sandbox.Limits{Seconds: 10, OutputBytes: 4096}}
+	followUp := Selection{Project: selection.Project, Pair: pair, Mode: evidence.FollowUp, Baseline: selection.Pair.Base}
+	model := New(t.Context(), followUp, Jobs{Actions: actions})
+	defer model.Close()
+	drain(model, model.Init())
+	if model.selected.Pair != pair || model.data.Diff == nil || model.data.Diff.Origin != rawdiff.ComputedOrigin {
+		t.Fatalf("follow-up pair was not used for its computed diff: %+v %+v", model.selected.Pair, model.data.Diff)
+	}
+	press(model, "r")
+	if model.screen != "plan" || model.planPair != pair {
+		t.Fatalf("rerun preview was not bound to the active follow-up pair: %+v", model.planPair)
+	}
+	for _, id := range []evidence.Digest{pair.Base, pair.Candidate} {
+		if !strings.Contains(string(model.preview), string(id)) {
+			t.Fatalf("exact plan omitted active pair ID %s", id)
+		}
+	}
+	press(model, "n")
+	if model.running || len(model.preview) != 0 || model.digest != "" {
+		t.Fatal("denying the follow-up plan retained consent or authorized execution")
+	}
+}
+
+func TestFollowUpLateResultCannotAttachToDifferentPair(t *testing.T) {
+	s, selection := setup(t, false)
+	receipt := comparisonReceipt(t, s, selection)
+	pin, err := review.Create(s, receipt.ID, "finite expectation", evidence.FiniteExample, "initial pin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparison := viewComparison(t, s, selection, false, evidence.Complete)
+	if err := os.WriteFile(filepath.Join(selection.Project, "app/config.go"), []byte("package main\nconst retentionSeconds = 60\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := capture.Capture(t.Context(), selection.Project, s, capture.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	followUp := evidence.SnapshotPair{Base: selection.Pair.Candidate, Candidate: captured.Candidate.ID}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	actions := &Actions{Project: selection.Project}
+	_, err = actions.Attach(Selection{Project: selection.Project, Pair: followUp, Mode: evidence.FollowUp, Baseline: selection.Pair.Base, Evidence: []evidence.Digest{pin.ID}}, comparison)
+	if err == nil || !strings.Contains(err.Error(), "late result retained for originating snapshots only") {
+		t.Fatalf("late original-base result attached to follow-up: %v", err)
+	}
+	stored, err := store.Get[evidence.Pin](actionsStore(t, actions), pin.ID)
+	if err != nil || len(stored.History) != 1 {
+		t.Fatalf("late result changed the pin history: %+v %v", stored, err)
+	}
+	if _, err := store.Get[evidence.Comparison](actionsStore(t, actions), comparison); err != nil {
+		t.Fatalf("late result was not retained as history: %v", err)
 	}
 }
 

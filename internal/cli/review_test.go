@@ -137,6 +137,19 @@ func TestPinDefaultsScopeModeAndVerbatimHistory(t *testing.T) {
 	if _, err := store.Get[evidence.Pin](evidenceStore, envelope.Data.Pin.ID); err != nil {
 		t.Fatalf("pin was not persisted: %v", err)
 	}
+	lastInspectedCandidate := captured.Data.Candidate.ID
+	code, out, diagnostic = invoke([]string{"pin", string(envelope.Data.Pin.ID), "--select", string(lastInspectedCandidate), "--mode", "last_inspected", "--reason", "reviewed follow-up", "--project", project, "--json"}, false, "")
+	if code != ExitOK || diagnostic != "" || json.Unmarshal([]byte(out), &envelope) != nil {
+		t.Fatalf("last-inspected pin selection: %d %q %q", code, out, diagnostic)
+	}
+	followUpEvent := envelope.Data.Pin.History[len(envelope.Data.Pin.History)-1]
+	if followUpEvent.Review.Mode != evidence.FollowUp || followUpEvent.Review.PriorCandidate != lastInspectedCandidate || followUpEvent.Review.Target.Snapshots != (evidence.SnapshotPair{Base: lastInspectedCandidate, Candidate: lastInspectedCandidate}) {
+		t.Fatalf("last-inspected pair or mode was not retained: %+v", followUpEvent.Review)
+	}
+	code, out, diagnostic = invoke([]string{"pin", string(envelope.Data.Pin.ID), "--project", project}, false, "")
+	if code != ExitOK || diagnostic != "" || !strings.Contains(out, "Reviewing") || !strings.Contains(out, "last inspected "+shortID(lastInspectedCandidate)) {
+		t.Fatalf("readable pin output omitted its last-inspected selection: %d %q %q", code, out, diagnostic)
+	}
 }
 
 func TestCommandLineDiagnosticsAndSuggestions(t *testing.T) {

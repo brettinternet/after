@@ -145,19 +145,24 @@ func (a *Actions) ChangedPathCount(before, after evidence.Digest) (int, error) {
 	}
 	return len(view.Inventory()), nil
 }
-func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair, reason string) (Selection, error) {
+func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair, mode evidence.ReviewMode, reason string) (Selection, error) {
 	s, err := a.Store()
 	if err != nil {
 		return sel, err
+	}
+	if mode != evidence.OriginalBase && mode != evidence.FollowUp {
+		return sel, errors.New("unsupported comparison mode")
 	}
 	target := evidence.ReviewBasis{Snapshots: pair}
 	p, err := runner.Prepare(s, pair, a.Repetitions, a.Limits)
 	if err == nil {
 		target = p.ReviewBasis()
 	}
-	next := sel
-	next.Pair = pair
-	next.Evidence = append([]evidence.Digest(nil), sel.Evidence...)
+	type selectedPin struct {
+		index int
+		id    evidence.Digest
+	}
+	pins := []selectedPin{}
 	for i, id := range sel.Evidence {
 		old, err := store.Get[evidence.Pin](s, id)
 		if errors.Is(err, store.ErrCorrupt) {
@@ -166,14 +171,30 @@ func (a *Actions) Select(sel Selection, pair evidence.SnapshotPair, reason strin
 		if err != nil {
 			continue
 		}
-		if old.BasisSnapshots.Base != pair.Base {
-			return sel, errors.New("snapshot acceptance retains the original base")
+		last := old.History[len(old.History)-1].Review
+		if mode == evidence.OriginalBase && pair.Base != old.BasisSnapshots.Base {
+			return sel, errors.New("original-base selection must retain the pin's original base")
 		}
-		pin, err := review.Select(s, id, target, evidence.OriginalBase, reason)
+		if mode == evidence.FollowUp && pair.Base != last.Target.Snapshots.Candidate {
+			return sel, errors.New("last-inspected selection must start at the pin's current candidate")
+		}
+		pins = append(pins, selectedPin{index: i, id: id})
+	}
+	next := sel
+	next.Pair = pair
+	next.Mode = mode
+	if next.Baseline == "" {
+		next.Baseline = sel.Pair.Base
+	}
+	next.Evidence = append([]evidence.Digest(nil), sel.Evidence...)
+	next.PinRevisions = make([]evidence.Digest, 0, len(pins))
+	for _, selected := range pins {
+		pin, err := review.Select(s, selected.id, target, mode, reason)
 		if err != nil {
 			return sel, err
 		}
-		next.Evidence[i] = pin.ID
+		next.Evidence[selected.index] = pin.ID
+		next.PinRevisions = append(next.PinRevisions, pin.ID)
 	}
 	return next, nil
 }
@@ -230,6 +251,7 @@ func (a *Actions) Attach(sel Selection, comparison evidence.Digest) (Selection, 
 	}
 	next := sel
 	next.Evidence = append([]evidence.Digest(nil), sel.Evidence...)
+	next.PinRevisions = make([]evidence.Digest, 0, len(sel.Evidence))
 	for i, id := range sel.Evidence {
 		if _, err := store.Get[evidence.Pin](s, id); errors.Is(err, store.ErrCorrupt) {
 			return sel, err
@@ -241,6 +263,7 @@ func (a *Actions) Attach(sel Selection, comparison evidence.Digest) (Selection, 
 			return sel, fmt.Errorf("result retained at %s: %w", comparison, err)
 		}
 		next.Evidence[i] = pin.ID
+		next.PinRevisions = append(next.PinRevisions, pin.ID)
 	}
 	next.Evidence = append(next.Evidence, comparison)
 	return next, nil

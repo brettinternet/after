@@ -1,7 +1,7 @@
 # Captured evidence review loop
 
 `after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
-The responsive frame, contextual key map, review session, Activity view,
+The responsive frame, original-base/last-inspected comparison selector, contextual key map, review session, Activity view,
 grouped Overview, evidence Cards, Changes/Diff viewers and search are implemented
 as specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
@@ -19,8 +19,9 @@ Opening an explicit snapshot, record ID or pair does not read or change the save
 
 ## Frame, keys and evidence
 
-The frame header shows the sanitized project directory name, short base and
-candidate snapshot IDs, and source words from the stored snapshot records:
+The frame header shows the sanitized project directory name, active comparison
+mode and short snapshot IDs: `original base <id>` or `last inspected <id>` on the
+left, then `candidate <id>`. Source words come from the stored snapshot records:
 `commit <short hash>`, `working tree`, `staged`, or `merge base <short hash>`.
 A ready capture is shown as `new capture <id> · u`; active capture, import and run
 work show elapsed time, updated once per second, and no percentage. The Overview,
@@ -41,30 +42,30 @@ Hints show only enabled actions and are clipped at the terminal width; help also
 shows disabled actions with their reason. Color is optional: `NO_COLOR` (any
 non-empty value) or `TERM=dumb` disables styling. The actions are:
 
-| Key                                                | Action                                                                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                                 |
-| `1`–`4`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                             |
-| Enter                                              | Inspect the selected record or inventory entry; expand/collapse Overview groups             |
-| `d` / `2`                                          | Open Changes: the complete unclassified inventory                                           |
-| `3`                                                | Open the captured raw Diff                                                                  |
-| `]` / `[`                                          | Next / previous indexed file in Diff                                                        |
-| `}` / `{`                                          | Next / previous indexed hunk in Diff                                                        |
-| `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically            |
-| `/`, `n`/`N`                                       | Search the current list/document; next/previous match with wraparound                       |
-| Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                          |
-| Esc                                                | Clear search first; otherwise return from a detail, preview, or overlay                     |
-| `?`                                                | Open grouped help with contextual disabled reasons                                          |
-| `c`                                                | Capture again with this review's saved flags (or HEAD versus working tree for explicit IDs) |
-| `i`                                                | Import the file configured at launch, if any                                                |
-| `u`                                                | Confirm use of a pending capture, retaining the original base and recording a reason        |
-| `p`                                                | Confirm a finite pin of the selected measured count; duplicate basis/expectation is refused |
-| `r`                                                | Prepare the exact frozen offline execution plan without executing                           |
-| `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                        |
-| `a`                                                | Confirm acceptance of a pin only when its current complete result matches this pair         |
-| `s` / `4`                                          | Open Activity and inspect the saved review, pair and loaded evidence                        |
-| `x`                                                | Request cancellation of an active owned job                                                 |
-| `q` / Ctrl-C                                       | During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits now   |
+| Key                                                | Action                                                                                             |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Up/down or `j`/`k`, PgUp/PgDn, Home/End or `g`/`G` | Select a row or scroll the focused document                                                        |
+| `1`–`4`, Tab/Shift+Tab                             | Switch top-level views; cycle detail sections within a document                                    |
+| Enter                                              | Inspect the selected record or inventory entry; expand/collapse Overview groups                    |
+| `d` / `2`                                          | Open Changes: the complete unclassified inventory                                                  |
+| `3`                                                | Open the captured raw Diff                                                                         |
+| `]` / `[`                                          | Next / previous indexed file in Diff                                                               |
+| `}` / `{`                                          | Next / previous indexed hunk in Diff                                                               |
+| `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically                   |
+| `/`, `n`/`N`                                       | Search the current list/document; next/previous match with wraparound                              |
+| Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                                 |
+| Esc                                                | Clear search first; otherwise return from a detail, preview, or overlay                            |
+| `?`                                                | Open grouped help with contextual disabled reasons                                                 |
+| `c`                                                | Capture again with this review's saved flags (or HEAD versus working tree for explicit IDs)        |
+| `i`                                                | Import the file configured at launch, if any                                                       |
+| `u`                                                | Choose original-base (default) or last-inspected pair for a pending capture; confirm with a reason |
+| `p`                                                | Confirm a finite pin of the selected measured count; duplicate basis/expectation is refused        |
+| `r`                                                | Prepare the exact frozen offline execution plan without executing                                  |
+| `y` / `n`                                          | In the preview only: approve this plan once / deny without execution                               |
+| `a`                                                | Confirm acceptance of a pin only when its current complete result matches this pair                |
+| `s` / `4`                                          | Open Activity and inspect the saved review, pair and loaded evidence                               |
+| `x`                                                | Request cancellation of an active owned job                                                        |
+| `q` / Ctrl-C                                       | During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits now          |
 
 `s` opens Activity and records the session references without adding evidence
 rows. Activity records capture/import/run lifecycle, plan decisions, selection
@@ -79,12 +80,18 @@ Activity nor the evidence list.
 `p`, `u`, and `a` open confirmations naming their exact receipt, pin, base, and
 candidate IDs. Their one-line reason is prefilled, editable, capped at 4,096 bytes,
 and recorded in pin history. Ctrl-U clears the default; bracketed paste is sanitized
-data and cannot trigger actions; Esc cancels. Empty reasons are refused.
+data and cannot trigger actions; Esc cancels. Empty reasons are refused. In the `u`
+prompt, `←`/`→` chooses `original base <id> → candidate <new-id>` (the default) or
+`last inspected <current-candidate-id> → candidate <new-id>`; both complete pairs
+remain visible. Changing the choice preserves the editable reason.
 
 `p` refuses an existing pin with the same basis receipt and expectation, showing
 its ID instead of adding another revision. `u` counts paths differing from the
-candidate under review, keeps the original base, and warns that pins may reopen
-while earlier results become history. `a` is hinted only for a pin with a current
+candidate under review and warns that pins may reopen while earlier results become
+history. Original-base mode compares the original baseline with the new capture;
+last-inspected mode compares the current candidate with the new capture. Each
+selected pin records that exact mode and pair through `review.Select`; changing the
+mode at a later `u` can switch back to the retained original baseline. `a` is hinted only for a pin with a current
 complete receipt on the selected pair; the review engine independently enforces
 that requirement and any rejection remains visible. An accepted row shows
 `[ACCEPTED]`.
@@ -271,13 +278,17 @@ counts. Imported, incomplete, historical or unstable candidate counts cannot bec
 this finite-count pin.
 
 Edit the checkout externally, then press `c`. `u` confirms the full new candidate
-ID, reports how many paths differ from the candidate under review, and keeps the
-original base. The confirmation explains that pins may reopen and earlier results
-become history. Pin revisions reopen conservatively on whole-project basis changes;
+ID, reports how many paths differ from the candidate under review, and offers two
+explicit pairs: original baseline → new candidate (default), or current candidate →
+new candidate (`last inspected`). The selected pair is confirmed with a required,
+editable reason. Pin revisions reopen conservatively on whole-project basis changes;
 the inspector gives the exact reason and **missing current evidence** state.
 Prior observations, including the control, remain inspectable under their original
 snapshot IDs. Their values are history, not predictions for the new candidate.
-The original base stays selected even if HEAD has moved. When the selected pair
+The original baseline is retained separately from the active pair, so a later `u`
+can switch back even after one or more follow-ups. Follow-up rerun previews,
+execution receipts, attachments and computed diffs use only the active pair; prior
+receipts stay inspectable at their original IDs as history. When the selected pair
 has no shared captured patch, the computed display is based on those stored
 sources, not a patch from another pair or a new observation.
 
@@ -303,13 +314,15 @@ its incomplete receipt. Success adds the real comparison without accepting behav
 Late results stay at their originating pair and cannot replace the selected result.
 
 Pins are immutable revisions, shared with the [headless review API](REVIEW.md).
-Use `s` for full references. `.after/session.json` stores only the selected pair,
-original-base mode, and safe capture flags; it is atomically replaced with mode
-0600 after a pending capture is selected and again on quit. Invalid state is
-reported and replaced at the next save. It is UI state, never evidence. A resumed
-review opens its saved pair first and captures in the background; a differing
-candidate waits as pending until `u`, without moving the selected pair. `c` uses
-the saved capture options. Different capture flags or `--new` start a new review.
+Use `s` for full references. `.after/session.json` stores the active pair, mode,
+original baseline, selected pin revision IDs and safe capture flags; it is
+atomically replaced with mode 0600 after a selection change and again on quit.
+Older original-base sessions without a separate baseline safely infer it from the
+saved pair. Invalid state is reported and replaced at the next save. It is UI state,
+never evidence. A resumed review restores its exact saved pair, mode and selected
+pin revisions, then captures in the background; a differing candidate waits as
+pending until `u`, without moving the selected pair. `c` uses the saved capture
+options. Different capture flags or `--new` start a new review.
 
 Terminal rendering and the saved-review message use stderr. Stdout stays empty
 unless `--json` prints the versioned session JSON after terminal restoration.
@@ -338,8 +351,9 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
 - `mise exec -- task tui:proof` with explicit `AFTER_DOCKER_BINARY` and
   `AFTER_DOCKER_HOST`: real offline payment execution and PTY-driven inspect,
   raw diff, confirmed/reasoned one-request pin, duplicate refusal, restart, retention
-  edit, confirmed capture selection, reopening, denial, authorized one-versus-two
-  witness and unchanged control, confirmed pin acceptance, cancellation, and reopened
+  edit, original-base and last-inspected capture selection, reopening, denial,
+  authorized one-versus-two witness and unchanged control, confirmed pin acceptance,
+  cancellation, follow-up preview/rerun/attachment and computed diff, and reopened
   history after restart. Mutation prompts are exercised at 80×24 and 120×40, with
   and without `NO_COLOR`. No fabricated observations or accounts.
 - `mise exec -- task cli:proof` with the separately provisioned Docker settings:

@@ -1,4 +1,4 @@
-AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (working tree)
+AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (working tree)
 Overview › 12h same-key retry                                                                                [DIFFERENT]
 Section 2/8 | 606 stored bytes | text | pan 0
 data | Receipt Card

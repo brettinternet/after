@@ -22,6 +22,8 @@ type ReviewSession struct {
 	SchemaVersion int                   `json:"schema_version"`
 	Pair          evidence.SnapshotPair `json:"pair"`
 	Mode          evidence.ReviewMode   `json:"mode"`
+	Baseline      evidence.Digest       `json:"baseline,omitempty"`
+	PinRevisions  []evidence.Digest     `json:"pin_revisions,omitempty"`
 	Capture       CaptureFlags          `json:"capture"`
 }
 
@@ -42,7 +44,7 @@ func NewReviewSession(pair evidence.SnapshotPair, options capture.Options) Revie
 	case evidence.MergeBase:
 		flags.Base, flags.Target = options.Base, options.Target
 	}
-	return ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: pair, Mode: evidence.OriginalBase, Capture: flags}
+	return ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: pair, Mode: evidence.OriginalBase, Baseline: pair.Base, Capture: flags}
 }
 
 func (s ReviewSession) CaptureOptions() capture.Options {
@@ -60,8 +62,25 @@ func (s ReviewSession) CaptureOptions() capture.Options {
 }
 
 func (s ReviewSession) Validate() error {
-	if s.SchemaVersion != ReviewSessionVersion || !validSessionDigest(s.Pair.Base) || !validSessionDigest(s.Pair.Candidate) || s.Mode != evidence.OriginalBase {
-		return errors.New("invalid version, snapshot IDs, or comparison mode")
+	baseline := s.Baseline
+	if baseline == "" && s.Mode == evidence.OriginalBase {
+		baseline = s.Pair.Base
+	}
+	if s.SchemaVersion != ReviewSessionVersion || !validSessionDigest(s.Pair.Base) || !validSessionDigest(s.Pair.Candidate) || !oneOfReviewMode(s.Mode) || !validSessionDigest(baseline) {
+		return errors.New("invalid version, snapshot IDs, baseline, or comparison mode")
+	}
+	if s.Mode == evidence.OriginalBase && s.Pair.Base != baseline {
+		return errors.New("original-base session pair does not use its baseline")
+	}
+	if len(s.PinRevisions) > MaxEvidence {
+		return errors.New("too many selected pin revisions")
+	}
+	seenPins := map[evidence.Digest]bool{}
+	for _, id := range s.PinRevisions {
+		if !validSessionDigest(id) || seenPins[id] {
+			return errors.New("invalid or duplicate selected pin revision")
+		}
+		seenPins[id] = true
 	}
 	if (s.Capture.Staged && (s.Capture.Base != "" || s.Capture.Target != "")) || ((s.Capture.Base == "") != (s.Capture.Target == "")) {
 		return errors.New("invalid capture flag combination")
@@ -88,6 +107,9 @@ func (s ReviewSession) Validate() error {
 }
 
 func MarshalReviewSession(session ReviewSession) ([]byte, error) {
+	if session.Baseline == "" && session.Mode == evidence.OriginalBase {
+		session.Baseline = session.Pair.Base
+	}
 	if err := session.Validate(); err != nil {
 		return nil, err
 	}
@@ -107,10 +129,25 @@ func DecodeReviewSession(raw []byte) (ReviewSession, error) {
 	if decoder.Decode(new(any)) != io.EOF {
 		return ReviewSession{}, errors.New("review session must contain one JSON value")
 	}
+	if session.Baseline == "" && session.Mode == evidence.OriginalBase {
+		// Older version-1 sessions stored only the original-base pair.
+		session.Baseline = session.Pair.Base
+	}
 	if err := session.Validate(); err != nil {
 		return ReviewSession{}, err
 	}
 	return session, nil
+}
+
+func oneOfReviewMode(mode evidence.ReviewMode) bool {
+	return mode == evidence.OriginalBase || mode == evidence.FollowUp
+}
+
+func reviewModeLabel(mode evidence.ReviewMode) string {
+	if mode == evidence.FollowUp {
+		return "last inspected"
+	}
+	return "original base"
 }
 
 func validSessionDigest(value evidence.Digest) bool {

@@ -113,7 +113,15 @@ func New(ctx context.Context, selected Selection, jobs Jobs) *Model {
 	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	selected.Evidence = append(selected.Evidence[:0:0], selected.Evidence...)
-	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, session: ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: selected.Pair, Mode: "original_base"}, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples"}
+	selected.PinRevisions = append([]evidence.Digest(nil), selected.PinRevisions...)
+	if selected.Mode != evidence.FollowUp {
+		selected.Mode = evidence.OriginalBase
+	}
+	if selected.Baseline == "" {
+		selected.Baseline = selected.Pair.Base
+	}
+	session := ReviewSession{SchemaVersion: ReviewSessionVersion, Pair: selected.Pair, Mode: selected.Mode, Baseline: selected.Baseline, PinRevisions: append([]evidence.Digest(nil), selected.PinRevisions...)}
+	return &Model{theme: terminal.DefaultTheme(), now: time.Now, zone: time.Local, selected: selected, session: session, jobs: jobs, ctx: ctx, parent: parent, cancel: cancel, width: 80, height: 24, screen: "examples"}
 }
 
 // spawn starts ownership before returning a Bubble Tea command, so even a quit
@@ -161,14 +169,22 @@ func (m *Model) Init() tea.Cmd {
 // SetReviewSession supplies the validated persisted state and its writer. The
 // callback is invoked only when the selected snapshot pair changes.
 func (m *Model) SetReviewSession(session ReviewSession, persist func(ReviewSession) error) {
+	if session.Baseline == "" && session.Mode == evidence.OriginalBase {
+		session.Baseline = session.Pair.Base
+	}
 	m.session = session
 	m.session.Capture.IncludeUntracked = append([]string(nil), session.Capture.IncludeUntracked...)
+	m.session.PinRevisions = append([]evidence.Digest(nil), session.PinRevisions...)
+	m.selected.Mode = session.Mode
+	m.selected.Baseline = session.Baseline
+	m.selected.PinRevisions = append([]evidence.Digest(nil), session.PinRevisions...)
 	m.persistSession = persist
 }
 
 func (m *Model) ReviewSession() ReviewSession {
 	session := m.session
 	session.Capture.IncludeUntracked = append([]string(nil), m.session.Capture.IncludeUntracked...)
+	session.PinRevisions = append([]evidence.Digest(nil), m.session.PinRevisions...)
 	return session
 }
 func (m *Model) secondaryRow() bool {
@@ -816,8 +832,9 @@ func padStyledLine(raw string, width int) string {
 
 func (m *Model) headerText() string {
 	baseID, candidateID := shortID(m.selected.Pair.Base), shortID(m.selected.Pair.Candidate)
+	mode := reviewModeLabel(m.selected.Mode)
 	if m.width < 60 {
-		return fmt.Sprintf("AFTER · %s → %s", baseID, candidateID)
+		return fmt.Sprintf("AFTER · %s %s → %s", mode, baseID, candidateID)
 	}
 	project := filepath.Base(filepath.Clean(m.selected.Project))
 	if project == "." || project == string(filepath.Separator) || project == "" {
@@ -828,7 +845,7 @@ func (m *Model) headerText() string {
 		baseSource = snapshotSource(m.data.BaseSnapshot)
 		candidateSource = snapshotSource(m.data.CandidateSnapshot)
 	}
-	return fmt.Sprintf("AFTER · %s · base %s (%s) → candidate %s (%s)", project, baseID, baseSource, candidateID, candidateSource)
+	return fmt.Sprintf("AFTER · %s · %s %s (%s) → candidate %s (%s)", project, mode, baseID, baseSource, candidateID, candidateSource)
 }
 
 func (m *Model) frameHeader() (string, []string) {

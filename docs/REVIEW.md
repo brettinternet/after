@@ -86,6 +86,16 @@ explicit receipt attachment and review, rather than silently resurrecting an old
 accepted decision. Late/mismatched receipts are rejected for attachment and
 remain separately inspectable in storage.
 
+The TUI's `u` confirmation offers `original base <id> → candidate <new-id>` as its
+default and `last inspected <current-candidate-id> → candidate <new-id>`. Left/right
+selects the pair; both IDs remain visible with the required editable reason. Every
+selected pin is advanced through `review.Select` with the chosen mode, preserving
+older receipts and the original baseline. The TUI header and the `after pin PIN`
+readable inspection name the active mode and exact selected pair. Follow-up rerun
+previews, receipts, attachments and computed source diffs are bound to that pair;
+a late result for another pair remains stored but is not attached. A subsequent
+`u` can choose original-base again.
+
 ## Applicability and limits
 
 The view derives applicability; receipt flags and human decisions cannot override

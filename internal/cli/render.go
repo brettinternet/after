@@ -1000,6 +1000,14 @@ func reviewLines(state *invocation, view review.View) []readableLine {
 	lines = append(lines, readableRow("Scope", strings.ReplaceAll(string(pin.Scope), "_", " ")))
 	lines = append(lines, readableRow("Basis", fmt.Sprintf("%s → %s · receipt %s", shortID(pin.BasisSnapshots.Base), shortID(pin.BasisSnapshots.Candidate), shortID(pin.BasisReceipt))))
 	lines = append(lines, readableRow("Review", view.Reason))
+	last := pin.History[len(pin.History)-1].Review
+	if last != nil {
+		mode := "original base"
+		if last.Mode == evidence.FollowUp {
+			mode = "last inspected"
+		}
+		lines = append(lines, readableRow("Reviewing", fmt.Sprintf("%s %s → %s", mode, shortID(last.Target.Snapshots.Base), shortID(last.Target.Snapshots.Candidate))))
+	}
 	if view.CurrentReceipt != nil {
 		lines = append(lines, readableRow("Current result", fmt.Sprintf("%s · %s / %s", shortID(view.CurrentReceipt.ID), view.CurrentReceipt.State.Execution, view.CurrentReceipt.State.Comparison)))
 	} else if view.MissingCurrentResult {

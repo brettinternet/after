@@ -39,6 +39,9 @@ const (
 type Selection struct {
 	Project          string
 	Pair             evidence.SnapshotPair
+	Mode             evidence.ReviewMode
+	Baseline         evidence.Digest
+	PinRevisions     []evidence.Digest
 	Evidence         []evidence.Digest
 	Discover         bool
 	OmittedEvidence  int
@@ -161,7 +164,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 		return nil, err
 	}
 	if selected.Discover {
-		selected.Evidence, selected.OmittedEvidence, err = discoverEvidence(s, selected.Pair)
+		selected.Evidence, selected.OmittedEvidence, err = discoverEvidence(s, selected.Pair, selected.PinRevisions)
 		if err != nil {
 			selected.Evidence = nil
 			selected.OmittedEvidence = 0

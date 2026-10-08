@@ -22,6 +22,8 @@ type mutationPrompt struct {
 	reason      string
 	selection   Selection
 	pair        evidence.SnapshotPair
+	baseline    evidence.Digest
+	mode        evidence.ReviewMode
 	entry       Entry
 	changed     int
 }
@@ -47,7 +49,12 @@ func (m *Model) startUseCapturePrompt() tea.Cmd {
 	}
 	selection := m.selected
 	selection.Evidence = append([]evidence.Digest(nil), m.selected.Evidence...)
-	pair := evidence.SnapshotPair{Base: selection.Pair.Base, Candidate: m.pending.Candidate}
+	baseline := selection.Baseline
+	if baseline == "" {
+		baseline = selection.Pair.Base
+	}
+	selection.Baseline = baseline
+	pair := evidence.SnapshotPair{Base: baseline, Candidate: m.pending.Candidate}
 	m.actionBusy = true
 	m.status = "Counting paths that differ from the candidate under review"
 	return m.spawn(func() tea.Msg {
@@ -70,17 +77,16 @@ func (m *Model) prepareUsePrompt(msg usePromptReady) {
 		action:    keyUseCapture,
 		selection: msg.selection,
 		pair:      msg.pair,
+		baseline:  msg.selection.Baseline,
+		mode:      evidence.OriginalBase,
 		changed:   msg.changed,
 		title:     "Use this captured candidate?",
 		description: []string{
-			"Use the new candidate; the original base is kept.",
-			"Exact target IDs:",
-			"original base " + string(msg.pair.Base),
-			"new candidate " + string(msg.pair.Candidate),
 			fmt.Sprintf("%d paths differ from candidate %s under review.", msg.changed, msg.selection.Pair.Candidate),
 			"Pins may reopen; earlier results become history.",
+			"Choose what before means, then confirm with a non-empty reason.",
 		},
-		reason: "Use this captured snapshot; keep the original base and retain earlier results as history",
+		reason: "Use this captured candidate for the selected comparison; earlier results remain history",
 	})
 }
 
@@ -147,6 +153,20 @@ func removeLastReasonRune(reason string) string {
 	return reason[:len(reason)-size]
 }
 
+func replacePinRevision(ids []evidence.Digest, old, next evidence.Digest) []evidence.Digest {
+	updated := append([]evidence.Digest(nil), ids...)
+	for index, id := range updated {
+		if id == old {
+			updated[index] = next
+			return updated
+		}
+	}
+	if !containsDigest(updated, next) && len(updated) < MaxEvidence {
+		updated = append(updated, next)
+	}
+	return updated
+}
+
 func (m *Model) updatePromptKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	prompt := m.prompt
 	if prompt == nil {
@@ -158,6 +178,17 @@ func (m *Model) updatePromptKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch key.String() {
+	case "left", "right":
+		if prompt.action == keyUseCapture {
+			if key.String() == "left" {
+				prompt.mode = evidence.OriginalBase
+				prompt.pair.Base = prompt.baseline
+			} else {
+				prompt.mode = evidence.FollowUp
+				prompt.pair.Base = prompt.selection.Pair.Candidate
+			}
+			return m, nil
+		}
 	case "esc":
 		m.screen = prompt.returnTo
 		m.prompt = nil
@@ -209,15 +240,23 @@ func (m *Model) confirmMutation(prompt mutationPrompt) tea.Cmd {
 				return selection, err
 			}
 			selection.Evidence = append(selection.Evidence, id)
+			selection.PinRevisions = append(append([]evidence.Digest(nil), selection.PinRevisions...), id)
 			return selection, nil
 		}, "Pinned selected finite provider-request expectation")
 	case keyUseCapture:
 		selection := prompt.selection
 		selection.Evidence = append([]evidence.Digest(nil), prompt.selection.Evidence...)
+		selection.PinRevisions = append([]evidence.Digest(nil), prompt.selection.PinRevisions...)
+		selection.Baseline = prompt.baseline
+		selection.Mode = prompt.mode
 		m.invalidatePlan()
+		status := "Snapshot selected; prior evidence remains history"
+		if prompt.mode == evidence.FollowUp {
+			status = "Follow-up selected; prior evidence remains history"
+		}
 		return m.changeWith(func() (Selection, error) {
-			return a.Select(selection, prompt.pair, reason)
-		}, "Snapshot selected; prior evidence remains history", true)
+			return a.Select(selection, prompt.pair, prompt.mode, reason)
+		}, status, true)
 	case keyAcceptPin:
 		selection := m.selected
 		selection.Evidence = append([]evidence.Digest(nil), m.selected.Evidence...)
@@ -241,6 +280,7 @@ func (m *Model) confirmMutation(prompt mutationPrompt) tea.Cmd {
 				return selection, err
 			}
 			selection.Evidence[index] = id
+			selection.PinRevisions = replacePinRevision(selection.PinRevisions, prompt.entry.PinID, id)
 			return selection, nil
 		}, "Pin accepted for this current complete result")
 	default:
@@ -256,6 +296,18 @@ func (m *Model) promptLines() []string {
 	lines := []string{}
 	for _, paragraph := range m.prompt.description {
 		lines = append(lines, terminal.Wrap(paragraph, m.width)...)
+	}
+	if m.prompt.action == keyUseCapture {
+		lines = append(lines, terminal.Wrap("Before means (←/→ choose):", m.width)...)
+		original := fmt.Sprintf("original base %s → candidate %s", m.prompt.baseline, m.prompt.pair.Candidate)
+		followUp := fmt.Sprintf("last inspected %s → candidate %s", m.prompt.selection.Pair.Candidate, m.prompt.pair.Candidate)
+		if m.prompt.mode == evidence.OriginalBase {
+			lines = append(lines, terminal.Wrap("> "+original, m.width)...)
+			lines = append(lines, terminal.Wrap("  "+followUp, m.width)...)
+		} else {
+			lines = append(lines, terminal.Wrap("  "+original, m.width)...)
+			lines = append(lines, terminal.Wrap("> "+followUp, m.width)...)
+		}
 	}
 	lines = append(lines, "")
 	lines = append(lines, terminal.Wrap("Reason · stored in pin history", m.width)...)

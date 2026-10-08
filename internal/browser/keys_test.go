@@ -63,7 +63,7 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 	}
 	step(m, key("?"))
 	help := m.View()
-	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Use the pending capture", "[unavailable: no new capture is waiting]", "a  Accept a pin's current complete result (confirms)", "s  Open Activity and record this session reference"} {
+	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Choose original-base or last-inspected comparison (confirms)", "[unavailable: no new capture is waiting]", "a  Accept a pin's current complete result (confirms)", "s  Open Activity and record this session reference"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("grouped help missing %q:\n%s", want, help)
 		}
@@ -142,7 +142,7 @@ func TestFrameTabsHeaderAndSmallTerminalRules(t *testing.T) {
 	m.selected.Project = sel.Project
 	view := m.View()
 	lines := strings.Split(view, "\n")
-	if !strings.Contains(lines[0], shortID(sel.Pair.Base)+" → "+shortID(sel.Pair.Candidate)) || strings.Contains(lines[0], "project") || strings.Contains(lines[0], "working tree") {
+	if !strings.Contains(lines[0], "original base "+shortID(sel.Pair.Base)) || strings.Contains(lines[0], "project") || strings.Contains(lines[0], "working tree") {
 		t.Fatalf("compact header retained project/source: %q", lines[0])
 	}
 	if !strings.Contains(lines[1], "[1 Ov]") {

@@ -58,6 +58,18 @@ func errorText(err error) string {
 	return err.Error()
 }
 
+func sameDigests(left, right []evidence.Digest) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func nextRunClockTick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return runClockTick{} })
 }
@@ -113,10 +125,10 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 				kind, summary = "capture cancelled", "capture cancelled; the selected pair is unchanged"
 			}
 			m.recordActivity(kind, summary, []evidence.Digest{m.selected.Pair.Candidate}, msg.err.Error())
-		} else if msg.pair == m.selected.Pair {
+		} else if msg.pair.Candidate == m.selected.Pair.Candidate {
 			m.pending = nil
 			m.status = "No new capture; the selected pair is unchanged"
-			m.recordActivity("capture finished", "no change; the selected pair is unchanged", []evidence.Digest{msg.pair.Base, msg.pair.Candidate}, "")
+			m.recordActivity("capture finished", "no new candidate; the selected pair is unchanged", []evidence.Digest{msg.pair.Base, msg.pair.Candidate}, "")
 		} else {
 			m.pending = &msg.pair
 			m.status = "New capture " + shortID(msg.pair.Candidate) + " is ready; u reviews it"
@@ -154,7 +166,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		previousSelection := m.selected
-		previousPair := m.selected.Pair
+		previousSession := m.session
 		persistFailed := false
 		if msg.clearPending {
 			m.pending = nil
@@ -164,12 +176,14 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 			m.selected = msg.data.Selection
 		}
 		m.data = msg.data
-		if previousPair != m.selected.Pair {
-			m.session.Pair = m.selected.Pair
-			if m.persistSession != nil {
-				if err := m.persistSession(m.ReviewSession()); err != nil {
-					persistFailed = true
-				}
+		m.session.Pair = m.selected.Pair
+		m.session.Mode = m.selected.Mode
+		m.session.Baseline = m.selected.Baseline
+		m.session.PinRevisions = append([]evidence.Digest(nil), m.selected.PinRevisions...)
+		sessionChanged := previousSession.Pair != m.session.Pair || previousSession.Mode != m.session.Mode || previousSession.Baseline != m.session.Baseline || !sameDigests(previousSession.PinRevisions, m.session.PinRevisions)
+		if sessionChanged && m.persistSession != nil {
+			if err := m.persistSession(m.ReviewSession()); err != nil {
+				persistFailed = true
 			}
 		}
 		m.loadID++

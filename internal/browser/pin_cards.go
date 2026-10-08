@@ -23,7 +23,7 @@ func pinSections(s *store.Store, id evidence.Digest, pin evidence.Pin, view revi
 	card := cardSection(
 		textPart("Expectation", pin.Expectation+" (your words; AFTER does not evaluate them)"),
 		textPart("Scope", fmt.Sprintf("%s · basis receipt %s", pin.Scope, shortID(pin.BasisReceipt))),
-		textPart("Reviewing", fmt.Sprintf("%s → %s (%s)", shortID(target.Snapshots.Base), shortID(target.Snapshots.Candidate), last.Review.Mode)),
+		textPart("Reviewing", fmt.Sprintf("%s %s → %s", reviewModeLabel(last.Review.Mode), shortID(target.Snapshots.Base), shortID(target.Snapshots.Candidate))),
 		textPart("Reopened", view.Reason),
 		textPart("Current", current),
 	)

@@ -128,7 +128,7 @@ Stored artifacts (including observer response/effect channels referenced by rece
 
 `after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. A capture that finds no changed or unknown paths reports that nothing is open.
 
-A private, atomic `.after/session.json` stores only the snapshot pair, original-base comparison mode and capture flags; it contains no source bytes and is not evidence. A later bare `after review` opens that pair immediately and captures in the background. A differing capture stays pending until `u`; `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`.
+A private, atomic `.after/session.json` stores the active snapshot pair, comparison mode, original baseline, selected pin revision IDs and capture flags; it contains no source bytes and is not evidence. A legacy original-base session safely infers its baseline from the saved pair. A later bare `after review` opens that exact pair and mode immediately and captures in the background. A differing capture stays pending until `u`; the TUI offers original-base (default) or last-inspected comparison and requires a reason. `c` reuses the saved flags. Changed capture flags or `--new` capture and replace the saved review. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`.
 
 Evidence discovery loads pin heads (including forks), the selected pair's newest runs and comparisons, and reports bound to the candidate. It loads at most 32 records, prioritizing pins that need another look, and the browser reports the omitted count. `after log` provides the separate bounded history view.
 
@@ -137,7 +137,9 @@ Evidence discovery loads pin heads (including forks), the selected pair's newest
 `pin RECEIPT_ID --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`
 creates an immutable pin revision; `--scope` defaults to `finite_example`, and a
 receipt that cannot support it suggests `--scope human_intent`. `pin PIN_ID` opens a
-revision read-only using the TUI's shared Card renderer, followed by full IDs.
+revision read-only using the TUI's shared Card renderer, followed by full IDs. Its
+readable view names the selected `original base` or `last inspected` pair from the
+latest immutable pin history event.
 Receipt, comparison and report inspection use the same ordered Card parts and
 bounded safe wrapping; `--json` retains the original record envelope. Decisions
 use exactly one of `--select SNAPSHOT_ID [--mode original_base|last_inspected]`,

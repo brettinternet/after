@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/brettinternet/after/internal/browser"
+	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/sandbox"
@@ -252,24 +253,41 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			p.send("u")
 			p.expect("Use this captured candidate?")
 			p.expect("Pins may reopen; earlier results become history")
+			p.expect("original base")
+			p.expect(shortID(first.Pair.Base))
+			p.expect("last inspected")
+			p.expect(shortID(first.Pair.Candidate))
+			p.send("\x1b[C")
+			p.expect("> last inspected")
 			p.send("\r")
-			p.expect("Snapshot selected; prior evidence remains history")
+			p.expect("Follow-up selected; prior evidence remains history")
 			selectedBeforeQuit := readSession()
-			if selectedBeforeQuit.Pair.Base != first.Pair.Base || selectedBeforeQuit.Pair.Candidate == first.Pair.Candidate {
-				t.Fatalf("selection was not saved immediately: first=%+v selected=%+v", first.Pair, selectedBeforeQuit.Pair)
+			if selectedBeforeQuit.Mode != evidence.FollowUp || selectedBeforeQuit.Baseline != first.Pair.Base || selectedBeforeQuit.Pair.Base != first.Pair.Candidate || selectedBeforeQuit.Pair.Candidate == first.Pair.Candidate {
+				t.Fatalf("follow-up selection was not saved immediately: first=%+v selected=%+v", first, selectedBeforeQuit)
 			}
 			resumedSelection, _ := p.finish()
 			allTranscript.WriteString(p.transcript.String())
 			resumed := readSession()
-			if resumed.Pair != resumedSelection.Pair || resumed.Pair.Base != first.Pair.Base || resumed.Pair.Candidate == first.Pair.Candidate {
-				t.Fatalf("pending capture did not remain explicit until u: first=%+v resumed=%+v", first.Pair, resumed.Pair)
+			if resumed.Pair != resumedSelection.Pair || resumed.Mode != evidence.FollowUp || resumed.Baseline != first.Pair.Base || resumed.Pair.Base != first.Pair.Candidate || resumed.Pair.Candidate == first.Pair.Candidate {
+				t.Fatalf("pending follow-up capture did not remain explicit until u: first=%+v resumed=%+v", first, resumed)
 			}
 
 			gitRun(t, project, "add", "app/main.go")
 			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(3) }\n")
+			p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
+			p.expect("AFTER · project")
+			p.expect("last inspected " + shortID(resumed.Pair.Base))
+			p.expect("candidate " + shortID(resumed.Pair.Candidate))
+			resumedAgain, _ := p.finish()
+			allTranscript.WriteString(p.transcript.String())
+			if resumedAgain.Pair != resumed.Pair {
+				t.Fatalf("resumed session opened another pair: got=%+v want=%+v", resumedAgain.Pair, resumed.Pair)
+			}
 			p = startLoopPTYSize(t, []string{"review", "--staged", "--project", project, "--json"}, variant.width, variant.height)
 			p.expect("Replaced saved review ")
 			p.expect("AFTER · project")
+			// The initial header renders before stored records enable capture.
+			p.expect("NOT CHECKED — no evidence was loaded")
 			p.send("c")
 			// A fast capture may finish between renderer frames.
 			p.expect("No new capture; the selected pair is unchanged")
@@ -306,6 +324,79 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			}
 			t.Logf("PTY %dx%d NO_COLOR=%t excerpts: NOT CHECKED — no evidence was loaded · New capture %s — u reviews it · Snapshot selected; prior evidence remains history · c: Capture running; selected pair unchanged · No new capture; the selected pair is unchanged · Saved review %s → %s · after review resumes it", variant.width, variant.height, variant.noColor, shortID(resumed.Pair.Candidate), shortID(first.Pair.Base), shortID(first.Pair.Candidate))
 		})
+	}
+}
+
+func TestReviewResumeRestoresFollowUpPairAndPinRevisionPTY(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(1) }\n")
+	actions := &browser.Actions{Project: project}
+	initial, err := actions.Capture(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions.Close()
+	receiptID, _ := seedCLIProcessRecords(t, project, string(initial.Base), string(initial.Candidate))
+	s, err := store.Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialPin, err := review.Create(s, receiptID, "resume follow-up pin", evidence.HumanIntent, "resume fixture")
+	if err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(2) }\n")
+	actions = &browser.Actions{Project: project}
+	captured, err := actions.Capture(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions.Close()
+	pair := evidence.SnapshotPair{Base: initial.Candidate, Candidate: captured.Candidate}
+	s, err = store.Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectedPin, err := review.Select(s, initialPin.ID, evidence.ReviewBasis{Snapshots: pair}, evidence.FollowUp, "selected follow-up")
+	if err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	session := browser.NewReviewSession(pair, capture.Options{Mode: evidence.WorkingTree})
+	session.Mode = evidence.FollowUp
+	session.Baseline = initial.Base
+	session.PinRevisions = []evidence.Digest{selectedPin.ID}
+	if err := saveReviewSessionFile(project, session); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "1")
+	p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
+	p.expect("last inspected " + shortID(pair.Base))
+	p.expect("[REOPENED]")
+	p.expect("No new capture; the selected pair is unchanged")
+	p.send("s")
+	p.expect("SESSION")
+	p.expect("loaded     " + shortID(selectedPin.ID))
+	selection, _ := p.finish()
+	if selection.Pair != pair {
+		t.Fatalf("resumed another snapshot pair: %+v want %+v", selection.Pair, pair)
+	}
+	raw, err := os.ReadFile(filepath.Join(project, ".after", "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := browser.DecodeReviewSession(raw)
+	if err != nil || resumed.Mode != evidence.FollowUp || resumed.Baseline != initial.Base || resumed.Pair != pair || !reflect.DeepEqual(resumed.PinRevisions, []evidence.Digest{selectedPin.ID}) {
+		t.Fatalf("CLI resume did not restore mode, baseline, pair and pin revision: %+v %v", resumed, err)
 	}
 }
 
@@ -762,5 +853,74 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("\r")
 	p.expect("receipt is not a complete observed execution")
 	p.finish()
-	t.Log("Real PTY: inspect/raw diff, pin one request, restart, edit retention, capture notification/explicit acceptance, missing current evidence, deny preview, authorize 1->2 witness and 1->1 control, cancel, reopen after restart; terminal restored")
+
+	setTerminal(variants[3])
+	configBytes, err = os.ReadFile(filepath.Join(project, "app/config.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	followUpSource := strings.Replace(string(configBytes), "5 * 60", "2 * 60", 1)
+	if followUpSource == string(configBytes) {
+		t.Fatal("could not prepare a second follow-up edit")
+	}
+	writeProjectFile(t, project, "app/config.go", followUpSource)
+	p = startLoopPTYSize(t, args(sel), 120, 40)
+	p.expect("AFTER · payment")
+	p.expect("original base")
+	p.expect(shortID(sel.Pair.Base))
+	p.expect("[REOPENED]")
+	p.send("c")
+	p.expect("New capture ")
+	p.send("u")
+	p.expect("Use this captured candidate?")
+	p.expect("last inspected")
+	p.expect(shortID(sel.Pair.Candidate))
+	p.send("\x1b[C")
+	p.send("\r")
+	p.expect("last inspected " + shortID(sel.Pair.Candidate))
+	p.expect("Follow-up selected; prior evidence remains history")
+	followUpSelection, _ := p.finish()
+	if followUpSelection.Pair.Base != sel.Pair.Candidate || followUpSelection.Pair.Candidate == sel.Pair.Candidate {
+		t.Fatalf("TUI did not select the follow-up pair: %+v prior=%+v", followUpSelection.Pair, sel.Pair)
+	}
+	sel.Pair = followUpSelection.Pair
+	pinID = latestPinID(t, project)
+	sel.Evidence = []evidence.Digest{pinID}
+	// Reopen the pin's recorded mode, not a new explicit-pair review whose
+	// supplied base intentionally becomes its original baseline.
+	p = startLoopPTYSize(t, []string{"review", string(pinID), "--project", project, "--config", cfg, "--json"}, 120, 40)
+	p.expect("AFTER · payment")
+	p.expect("last inspected " + shortID(sel.Pair.Base))
+	p.expect("[REOPENED]")
+	p.send("r")
+	p.expect("Run this exact plan?")
+	p.expect(shortID(sel.Pair.Base))
+	// The full-digest summary line exceeds 120 columns; pan to its candidate.
+	p.send("\x1b[C\x1b[C\x1b[C\x1b[C")
+	p.expect(shortID(sel.Pair.Candidate))
+	p.send("y")
+	p.expect("Running the approved plan")
+	p.expect("Measured result attached")
+	p.send("3")
+	p.expect("computed from captured sources — not Git's patch")
+	p.finish()
+	sel.Project = project
+	pinID = latestPinID(t, project)
+	followStore, err := store.Open(project, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = review.Inspect(followStore, pinID)
+	if err != nil || v.CurrentReceipt == nil || v.CurrentReceipt.Snapshots != sel.Pair || v.Applicability != evidence.Current || v.MissingCurrentResult {
+		followStore.Close()
+		t.Fatal("follow-up rerun did not attach to its exact pair", v, err)
+	}
+	if _, err := store.Get[evidence.Receipt](followStore, receiptID); err != nil {
+		followStore.Close()
+		t.Fatalf("original receipt was not retained as history: %v", err)
+	}
+	if err := followStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("Real PTY: original-base and last-inspected choices; follow-up preview/rerun attached only to its selected pair; computed follow-up diff; terminal restored")
 }
