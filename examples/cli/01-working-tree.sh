@@ -1,56 +1,34 @@
 #!/usr/bin/env bash
-# Review uncommitted work: capture HEAD versus the working tree, list every
-# changed path (including ones AFTER cannot diff), read the current patch, and
-# see status notice when the checkout moves past the stored capture.
+# Review uncommitted work: see the live change, capture it as immutable
+# snapshots, keep every path visible (including ones the patch leaves out), and
+# notice when the checkout moves past the capture.
 source "$(dirname "$0")/../lib.sh"
 
-section "A small service with a rate limit"
-workspace working-tree
-mkdir -p limits
-cat >limits/limits.go <<'EOF'
-package limits
+intro "Review uncommitted work" \
+	"A rate limit doubles, the README still says 600, and a scratch file sits untracked."
+rate_limit_project working-tree
 
-// RequestsPerMinute caps each API key.
-const RequestsPerMinute = 600
-EOF
-printf '# Rate limits\n\nEach API key may send 600 requests per minute.\n' >README.md
-commit "base"
-
-section "Edit: raise the limit, forget the docs, add a scratch file"
-perl -pi -e 's/600/1200/' limits/limits.go
-echo "load test notes" >notes.txt
-
-section "Capture (reads Git only; never builds or runs the project)"
-capture=$(after 0 capture --json)
-capture_ids "$capture"
-note "base:      $BASE"
-note "candidate: $CANDIDATE"
-
-section "Readable defaults resolve the newest capture (no IDs or jq needed)"
-after 0 status
-after 0 inspect
-after 0 log -n 3
-
-section "Inventory: every path stays visible, even untracked ones that were excluded"
-inventory "$BASE" "$CANDIDATE"
-
-section "The current change, like git diff HEAD (read live; nothing stored)"
-after 0 diff --stat
+step "Read the current change, like git diff HEAD (nothing is stored)"
 after 0 diff
-note "Use after diff --raw > exact.patch for exact bytes; --raw refuses terminal output."
+note "Stderr names what was compared and every path the patch does not cover."
 
-section "Keep editing: status says the stored capture is out of date"
+step "Capture it: base and candidate snapshots, read from Git only"
+after 0 capture
+note "Nothing was built or run. Runs, reports and pins bind to these exact snapshots."
+
+step "Inspect every path, not just the ones with a patch"
+after 0 inspect
+
+step "Keep editing: status notices the stored capture is out of date"
 perl -pi -e 's/1200/1500/' limits/limits.go
 after 0 status
 note "Status compares file contents, not timestamps, and stores nothing."
+note "after diff now shows 600 → 1500; after diff --stored still shows the captured 1200."
 
-section "The stored capture's patch still says 1200"
-after 0 diff --stored
-note "Bare after diff now shows 600 -> 1500; after review captures the current change."
+step "Opt in to the scratch file by exact path"
+after 0 capture --include-untracked notes.txt
+after 0 diff --stored --stat
 
-section "Opt in to an untracked file by exact path"
-capture=$(after 0 capture --json --include-untracked notes.txt)
-capture_ids "$capture"
-inventory "$BASE" "$CANDIDATE"
-
-note "Note the README still says 600: the inventory shows what changed, not what should have."
+takeaway "the lines that changed in tracked files" \
+	"a stored, reopenable pair covering every path, including what it left out"
+note "The README still says 600: capture shows what changed, not what should have."

@@ -3,7 +3,8 @@
 # a binary asset, an edited golden file, and secrets that must stay uncaptured.
 source "$(dirname "$0")/../lib.sh"
 
-section "Base: a small HTTP service"
+intro "Review a messy change with no evidence at all" \
+	"Renames, a deletion, a binary asset, a mode change, an edited golden file and an uncaptured secret."
 workspace tui-raw
 mkdir -p handlers legacy testdata assets
 printf 'package handlers\n\nfunc Health() string { return "ok" }\n' >handlers/health.go
@@ -13,7 +14,6 @@ printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR' >assets/logo.png
 printf '#!/bin/sh\ngo build ./...\n' >build.sh
 commit "base"
 
-section "Candidate: the kind of change an agent might hand you"
 git mv handlers/health.go handlers/status.go
 printf 'package handlers\n\nfunc Status() string { return "healthy" }\n' >handlers/status.go
 git rm -q legacy/xml.go
@@ -21,12 +21,12 @@ printf '{"status":"healthy"}\n' >testdata/health.golden.json # the oracle moved 
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x01' >assets/logo.png
 chmod +x build.sh
 echo "STRIPE_KEY=sk_test_example" >.env.local # untracked: never captured
-capture_ids "$(after 0 capture --json)"
-inventory "$BASE" "$CANDIDATE"
 
-cat >&2 <<'EOF'
+step "The kind of change an agent might hand you"
+after 0 diff --stat
+note "The untracked .env.local is listed as excluded, never read into the store."
 
-Try in the TUI:
+tui_keys <<'EOF'
   1/2/3/4    Overview, Changes inventory, Diff, and Activity; active tab is highlighted
   Tab        next view; Shift+Tab previous view (inside a detail, move between sections)
   j/k Enter  inspect one entry; Changes includes deleted, added, binary, mode, and excluded paths

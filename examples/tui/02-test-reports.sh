@@ -6,7 +6,8 @@ source "$(dirname "$0")/../lib.sh"
 command -v go >/dev/null || { echo "Go is required; run via mise exec --" >&2; exit 1; }
 export GOTOOLCHAIN=local GOFLAGS=-mod=mod GOPROXY=off
 
-section "Base: shipping is free from \$50"
+intro "Test reports beside the diff" \
+	"Shipping is free from \$50. A candidate moves the threshold to \$75 and rewrites its test to match."
 workspace tui-reports
 printf 'module example.com/cart\n\ngo 1.24\n' >go.mod
 cat >shipping.go <<'EOF'
@@ -35,31 +36,19 @@ func TestFreeShippingThreshold(t *testing.T) {
 EOF
 commit "free shipping from \$50"
 
-section "Candidate: threshold moves to \$75; its test is rewritten to match"
 perl -pi -e 's/5000/7500/' shipping.go
 perl -pi -e 's/\{4999, 599\}, \{5000, 0\}/{7499, 599}, {7500, 0}/' shipping_test.go
-capture_ids "$(after 0 capture --json)"
-inventory "$BASE" "$CANDIDATE"
 
-section "Reports you produce (AFTER only imports them)"
-note "Piped/redirected import needs no filename; without --snapshot it captures and binds the working tree."
-go test -json ./... >"$WORK/candidate.jsonl"
-report=$(after 0 import --json <"$WORK/candidate.jsonl" --producer "$(go version); candidate suite")
-cards "$report"
-cp shipping_test.go "$WORK/candidate_test.go.txt"
-git show HEAD:shipping_test.go >shipping_test.go
-if go test -json ./... >"$WORK/frozen.jsonl"; then
-	echo "Expected the frozen oracle to fail" >&2; exit 1
-else
-	test "$?" -eq 1
-fi
-cp "$WORK/candidate_test.go.txt" shipping_test.go
-frozen=$(after 0 import --json "$WORK/frozen.jsonl" --snapshot "$CANDIDATE" --producer "$(go version); base tests on candidate code")
-cards "$frozen"
+step "Import the reports you produce (AFTER only reads them)"
+shell 0 "go test -json ./... | after import --producer 'candidate suite'"
+report=$(newest report)
+frozen_tests "$WORK/frozen.jsonl"
+shell 0 "after import ../frozen.jsonl --producer 'base tests on candidate code'"
+frozen=$(newest report)
+pair=$(after_json 0 status | jq -r '.data.capture | "\(.base_snapshot) \(.candidate_snapshot)"')
+read -r base candidate <<<"$pair"
 
-cat >&2 <<EOF
-
-Try in the TUI:
+tui_keys <<EOF
   1/2/3/4    Overview, Changes, Diff, Activity; Tab/Shift+Tab cycle views
   /, n/N     search the current list or document; next/previous match
   j/k Enter  inspect a row: producer, output, and inputs/effects "unavailable" (reported, not observed)
@@ -69,4 +58,4 @@ Try in the TUI:
   u          choose original base or last inspected with Left/Right; confirm with a reason
   4          inspect capture/selection activity and full references
 EOF
-open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.id <<<"$report")" "$(jq -r .data.id <<<"$frozen")"
+open_tui "$(short "$base")" "$(short "$candidate")" "$report" "$frozen"

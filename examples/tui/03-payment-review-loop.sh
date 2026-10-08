@@ -5,11 +5,16 @@
 source "$(dirname "$0")/../lib.sh"
 require_docker
 
-section "Observe the current service (base and candidate are both 24h retention)"
+intro "Guard known-good behavior from the TUI" \
+	"Pin \"a 12h retry charges once\", let a later edit reopen it, and rerun to catch the regression."
 payment_project tui-payment
-capture_ids "$(after 0 capture --json)"
-result=$(run_pair "$BASE" "$CANDIDATE" 0)
-provider_counts "$result"
+
+step "Observe the current service (base and candidate are both 24h retention)"
+after 0 capture
+run_note
+after 0 run
+ids=$(after_json 0 status | jq -r '"\(.data.capture.base_snapshot) \(.data.capture.candidate_snapshot) \(.data.comparison.id)"')
+read -r base candidate comparison <<<"$ids"
 
 # A later "small" change, applied from another terminal while the TUI is open.
 regress=$WORK/apply-regression.sh
@@ -21,9 +26,7 @@ echo "Edited app/config.go; press c in the TUI."
 EOF
 chmod +x "$regress"
 
-cat >&2 <<EOF
-
-Try in the TUI:
+tui_keys <<EOF
   1. Expand an Overview group with Enter if needed, then inspect a case row:
      exact responses and provider calls. Esc. Use / to search; n/N cycles matches.
   2. On the 43200s (12h) row, p: review the exact receipt/pair, then Enter pins its
@@ -46,4 +49,4 @@ Try in the TUI:
 EOF
 note "The explicit pair opens stored evidence without changing a saved review."
 note "Use Activity references to reopen a new pin revision, not just the original comparison."
-open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.comparison.id <<<"$result")"
+open_tui "$(short "$base")" "$(short "$candidate")" "$(short "$comparison")"

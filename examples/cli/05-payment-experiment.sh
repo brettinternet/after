@@ -11,32 +11,45 @@
 source "$(dirname "$0")/../lib.sh"
 variant=${1:-retention}
 case $variant in
-retention) change=(300 true 1) want=4 ;;
-refactor) change=(86400 true 1) want=0 ;;
-no-dedup) change=("24 * 60 * 60" false 1) want=4 ;;
-fake-log) change=("24 * 60 * 60" true 999) want=0 ;;
+retention)
+	change=(300 true 1) want=4
+	diff_shows="one constant: 24 * 60 * 60 → 300"
+	after_shows="identical HTTP responses, but a retry after 12h now charges twice"
+	;;
+refactor)
+	change=(86400 true 1) want=0
+	diff_shows="a rewritten constant you have to check by hand"
+	after_shows="responses and provider requests equal on every frozen case"
+	;;
+no-dedup)
+	change=("24 * 60 * 60" false 1) want=4
+	diff_shows="one flag: deduplicate = false"
+	after_shows="identical HTTP responses, but every retry charges again, even after 30s"
+	;;
+fake-log)
+	change=("24 * 60 * 60" true 999) want=0
+	diff_shows="the app now reports 999 provider requests"
+	after_shows="the provider still received one request per case: AFTER observes, it does not trust logs"
+	;;
 *) echo "unknown variant: $variant" >&2; exit 2 ;;
 esac
 require_docker
 
-section "Payment API: retries with the same Idempotency-Key must not charge twice"
+intro "Same responses, different behavior ($variant)" \
+	"Clients retry a payment with the same Idempotency-Key; a retry must never charge twice."
 payment_project "payment-$variant"
 set_config "${change[@]}"
-capture_ids "$(after 0 capture --json)"
-patch "$BASE" "$CANDIDATE"
 
-section "Frozen experiment: POST /payments, then retry the same key after 12h and after 30s"
+step "The change looks harmless"
+after 0 diff
+after 0 capture
+
+step "Run base and candidate in the offline sandbox"
+note "Frozen experiment: POST /payments, then retry the same key after 12h and after 30s."
 note "AFTER's observer owns the clock and a fake provider that records every charge request."
-result=$(run_pair "$BASE" "$CANDIDATE" "$want")
-receipt=$(jq -r .data.receipt.id <<<"$result")
+run_note
+after "$want" run
 
-section "Observed provider requests (independent log, not app output)"
-provider_counts "$result"
-
-section "Deterministic comparison of the stored receipt (no execution)"
-comparison=$(after "$want" compare --json "$receipt")
-note "outcome: $(jq -r .data.comparison.outcome <<<"$comparison")"
-witnesses "$comparison"
-
-note "Receipt: $receipt"
-note "Machine-readable bundle (JSON by default): after export $(jq -r .data.comparison.id <<<"$comparison") --project $PROJECT"
+takeaway "$diff_shows" "$after_shows"
+note "Exit $want. after compare re-derives the result from the stored receipt without running anything;"
+note "after export writes the machine-readable bundle."
