@@ -1,0 +1,17 @@
+Print the newest captured patch or compare any two stored snapshots.
+
+Usage
+  after diff
+  after diff BASE CANDIDATE
+  after diff --stat [BASE CANDIDATE]
+  after diff --raw [BASE CANDIDATE]
+
+Options
+  --stat   print capture summary rows instead of the patch
+  --raw    write exact patch bytes; stdout must not be a terminal
+
+Global
+  --project DIR   checkout's Git root (default: nearest .git root)
+  --config FILE   configuration file (default: XDG_CONFIG_HOME/after/config.yaml
+                  or ~/.config/after/config.yaml, if present)
+  --json          print the versioned JSON result

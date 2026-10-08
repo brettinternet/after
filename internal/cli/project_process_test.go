@@ -128,6 +128,8 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"pin-list", []string{"pin"}, ExitOK},
 		{"pin-default-create", []string{"pin", "--expectation", "process default expectation", "--scope", "human_intent"}, ExitOK},
 		{"capture", captureArgs, ExitOK},
+		{"diff", []string{"diff"}, ExitOK},
+		{"diff-stat", []string{"diff", "--stat"}, ExitOK},
 		{"import", []string{"import", report, "--producer", "fixture", "--snapshot", candidateID}, ExitOK},
 		{"inspect-pair", []string{"inspect", baseID, candidateID}, ExitOK},
 		{"inspect-snapshot", []string{"inspect", candidateID}, ExitOK},
@@ -192,6 +194,19 @@ func TestProjectCommandProcessModes(t *testing.T) {
 						if mode != "pty" || noColor || !themeSGROnly(transcript) {
 							t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
 						}
+					}
+					if command.name == "capture" || command.name == "bare-status" || command.name == "status" || command.name == "diff" || command.name == "diff-stat" {
+						styled := strings.Contains(transcript, "\x1b[1m")
+						wantStyle := mode == "pty" && !noColor
+						if styled != wantStyle {
+							t.Fatalf("terminal styling mismatch: command=%s mode=%s NO_COLOR=%t output=%q", command.name, mode, noColor, transcript)
+						}
+					}
+					if command.name == "diff" {
+						if mode == "pipe" && (!strings.HasPrefix(stdout, "diff --git ") || !strings.Contains(stderr, "captured patch") || !strings.Contains(stderr, "uncovered inventory")) {
+							t.Fatalf("pipe diff did not separate patch and diagnostics: stdout=%q stderr=%q", stdout, stderr)
+						}
+						t.Logf("80-column diff terminal verification: mode=%s NO_COLOR=%t excerpt=%q", mode, noColor, trimExcerpt(transcript))
 					}
 					if strings.Contains(command.name, "status") || command.name == "log" || strings.Contains(command.name, "default") || command.name == "pin-list" || command.name == "run-bare-preview" || command.name == "inspect-plan" {
 						t.Logf("80-column CLI terminal verification: command=%s mode=%s NO_COLOR=%t exit=%d excerpt=%q", command.name, mode, noColor, code, trimExcerpt(transcript))

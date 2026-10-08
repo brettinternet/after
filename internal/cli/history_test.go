@@ -97,7 +97,7 @@ func TestBareDefaultsAreStoredOnlyAndNameResolvedRecords(t *testing.T) {
 		}
 	}
 	code, statusText, stderr := invoke([]string{"status", "--project", project}, false, "")
-	if code != ExitOK || stderr != "" || !strings.Contains(statusText, "Captured") || !strings.Contains(statusText, "after review "+string(base)) || strings.Contains(statusText, "after diff") {
+	if code != ExitOK || stderr != "" || !strings.Contains(statusText, "Captured") || !strings.Contains(statusText, "after review "+string(base)) || !strings.Contains(statusText, "after diff") {
 		t.Fatalf("readable status or runnable Next is incorrect: %d %q %q", code, statusText, stderr)
 	}
 

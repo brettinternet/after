@@ -132,3 +132,24 @@ The shared browser `Load` job performs source reads, diff computation and docume
 preparation off the event loop. `task test:computed` covers the applying-diff
 fuzz/property, source and output bounds, real capture/load integration, a bounded
 10-file/20,000-source-line performance fixture, and the payment-change PTY matrix.
+
+## CLI patch streaming
+
+`after diff` uses `rawdiff.Open` for a shared captured patch, then reads bounded
+64 KiB pages into `internal/terminal.WriteDiff`; it does not build an unbounded
+line index or output document. The renderer retains at most its bounded input and
+output buffers plus an incomplete UTF-8 suffix. It sanitizes control/format
+characters and invalid UTF-8, keeps tabs in pipes, and applies only fixed theme SGR
+on a terminal. Both display and raw output stream every line within the existing
+artifact byte bounds; `--raw` streams exact bytes and is refused when stdout is a
+terminal. The 100,250-line streaming test verifies the complete output digest and
+keeps full-command allocations below the terminal's 64 MiB preparation budget. `--stat` prints the capture summary instead of patch
+bytes.
+
+Pair diagnostics go to stderr: full base/candidate IDs, `captured patch` or
+`computed from captured sources — not Git's patch`, every unknown/excluded/
+unsupported/limited inventory path, and all limits. For a pair without a shared
+patch, `after diff` uses `View.Compute` and reads only stored source blobs; no Git
+or other process runs. `--raw` emits the generated computed bytes exactly but does
+not make them the original stored Git patch. See [CLI.md](CLI.md#diff) for the
+command forms and examples.

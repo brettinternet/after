@@ -153,12 +153,22 @@ func (s *Store) read(name string, max int64) ([]byte, error) {
 	if err := privateFile(f); err != nil {
 		return nil, err
 	}
-	data, err := io.ReadAll(io.LimitReader(f, max+1))
+	info, err := f.Stat()
 	if err != nil {
+		return nil, fmt.Errorf("stat store entry: %w", err)
+	}
+	if info.Size() < 0 || info.Size() > max {
+		return nil, ErrLimit
+	}
+	data := make([]byte, int(info.Size()))
+	if _, err := io.ReadFull(f, data); err != nil {
 		return nil, fmt.Errorf("read store entry: %w", err)
 	}
-	if int64(len(data)) > max {
+	var extra [1]byte
+	if n, err := f.Read(extra[:]); n > 0 {
 		return nil, ErrLimit
+	} else if err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("read store entry: %w", err)
 	}
 	return data, nil
 }

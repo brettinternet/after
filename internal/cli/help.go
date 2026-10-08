@@ -92,6 +92,19 @@ Usage
 Options
   No command-specific options.
 ` + global
+	case "diff":
+		body = `Print the newest captured patch or compare any two stored snapshots.
+
+Usage
+  after diff
+  after diff BASE CANDIDATE
+  after diff --stat [BASE CANDIDATE]
+  after diff --raw [BASE CANDIDATE]
+
+Options
+  --stat   print capture summary rows instead of the patch
+  --raw    write exact patch bytes; stdout must not be a terminal
+` + global
 	case "log":
 		body = `List recent stored captures, runs, imported reports, and pin events.
 
@@ -253,6 +266,7 @@ Everyday
   after status                  show the same status explicitly
   after review                  capture a change and open or resume its review
   after capture                 capture a local Git comparison
+  after diff                    print the newest captured patch
   after log                     list recent stored events
   after inspect                 inspect the newest capture or a stored record
 
@@ -273,12 +287,13 @@ Run after COMMAND --help for that command's options.
 }
 
 func helpNames() []string {
-	return []string{"", "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version"}
+	return []string{"", "capture", "diff", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version"}
 }
 
 func commandExample(name string) string {
 	examples := map[string]string{
 		"capture": "after capture",
+		"diff":    "after diff",
 		"import":  "after import FILE",
 		"inspect": "after inspect",
 		"compare": "after compare",

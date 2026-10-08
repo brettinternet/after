@@ -4,3 +4,5 @@ Captured candidate bbbbbbbb (working tree) against base aaaaaaaa (commit)
 Next
   after review sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     open this captured change
+  after diff
+    print this captured patch

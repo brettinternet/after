@@ -22,7 +22,7 @@ var browserKinds = []string{"receipt", "comparison", "report", "pin"}
 func validateIDInputs(ctx *ucli.Context) error {
 	var values []string
 	switch ctx.Command.Name {
-	case "inspect", "export", "compare", "pin", "review", "run":
+	case "inspect", "export", "compare", "pin", "review", "run", "diff":
 		values = append(values, ctx.Args().Slice()...)
 	}
 	var flags []string

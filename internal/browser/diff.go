@@ -189,7 +189,7 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 				view.Limited = true
 			}
 		}
-		row := DiffRow{RawLine: rawLine, File: currentFile, Style: diffLineStyle(line)}
+		row := DiffRow{RawLine: rawLine, File: currentFile, Style: terminal.DiffStyle(line)}
 		if _, ok := hunkAt[start]; ok {
 			if currentFile >= 0 {
 				row.File = currentFile
@@ -274,21 +274,6 @@ func parseRange(raw []byte) (int, int, bool) {
 	first, errFirst := strconv.Atoi(string(raw[:start]))
 	count, errCount := strconv.Atoi(string(raw[start+1:]))
 	return first, count, errFirst == nil && errCount == nil
-}
-
-func diffLineStyle(line []byte) terminal.Style {
-	switch {
-	case bytes.HasPrefix(line, []byte("diff --git ")):
-		return terminal.Strong
-	case bytes.HasPrefix(line, []byte("@@ ")):
-		return terminal.Decision
-	case len(line) > 0 && line[0] == '+' && !bytes.HasPrefix(line, []byte("+++ ")):
-		return terminal.Observed
-	case len(line) > 0 && line[0] == '-' && !bytes.HasPrefix(line, []byte("--- ")):
-		return terminal.Problem
-	default:
-		return terminal.Plain
-	}
 }
 
 func inventoryRows(entries []Entry) ([]InventoryRow, []int) {

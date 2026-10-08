@@ -41,27 +41,8 @@ func (t Theme) Render(raw string, width int, style Style, pad bool) string {
 	if !t.Color || safe == "" {
 		return safe
 	}
-	var sgr string
-	switch style {
-	case Observed:
-		sgr = "32"
-	case Changed:
-		sgr = "1;35"
-	case Attention:
-		sgr = "1;33"
-	case Problem:
-		sgr = "1;31"
-	case Reported:
-		sgr = "34"
-	case Decision:
-		sgr = "36"
-	case Muted:
-		sgr = "2"
-	case Strong:
-		sgr = "1"
-	case Reverse:
-		sgr = "7"
-	default:
+	sgr := styleCode(style)
+	if sgr == "" {
 		return safe
 	}
 	return "\x1b[" + sgr + "m" + safe + "\x1b[0m"

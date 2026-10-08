@@ -70,6 +70,13 @@ func commands(state *invocation) []*ucli.Command {
 			},
 		},
 		{
+			Name: "diff", Usage: "print the newest captured patch or any snapshot pair",
+			Before: outputBefore(state), ArgsUsage: "[BASE CANDIDATE]", Flags: append(globalFlags(),
+				&ucli.BoolFlag{Name: "stat", Usage: "print capture summary rows instead of the patch"},
+				&ucli.BoolFlag{Name: "raw", Usage: "write exact patch bytes; stdout must not be a terminal"},
+			), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return diffCommand(state, ctx) },
+		},
+		{
 			Name: "log", Usage: "list recent stored captures, runs, reports, and pin events",
 			Before: outputBefore(state), ArgsUsage: "[-n N]", Flags: append(globalFlags(), &ucli.IntFlag{Name: "n", Value: defaultLogLimit, Usage: "number of newest stored events to show (default: 20)"}),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return logCommand(state, ctx) },

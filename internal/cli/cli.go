@@ -163,7 +163,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 
 func knownCommand(value string) bool {
 	switch value {
-	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "config", "version", "help":
+	case "capture", "import", "inspect", "compare", "export", "run", "pin", "review", "status", "log", "diff", "config", "version", "help":
 		return true
 	default:
 		return false
@@ -194,7 +194,7 @@ func normalizeArgs(args []string) []string {
 		"--evidence": true, "--import-file": true,
 		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true, "--attach": true,
 	}
-	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--new": true, "--json": true, "--help": true, "-h": true}
+	boolFlags := map[string]bool{"--tui": true, "--accept": true, "--interactive": true, "--raw-diff": true, "--staged": true, "--new": true, "--json": true, "--raw": true, "--stat": true, "--help": true, "-h": true}
 	var flags, positionals []string
 	for i := start; i < len(args); i++ {
 		token := args[i]

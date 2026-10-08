@@ -588,7 +588,10 @@ func suggestedNext(kind string, raw []byte, original any) []nextCommand {
 			Candidate snapshotSummary `json:"candidate_snapshot"`
 		}
 		if json.Unmarshal(raw, &data) == nil && data.Candidate.ID != "" {
-			return []nextCommand{next("after review "+string(data.Candidate.ID), "open this captured change")}
+			return []nextCommand{
+				next("after review "+string(data.Candidate.ID), "open this captured change"),
+				next("after diff", "print this captured patch"),
+			}
 		}
 	case "import":
 		var data reportViewData

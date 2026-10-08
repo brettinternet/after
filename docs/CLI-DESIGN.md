@@ -1,7 +1,7 @@
 # Command-line design
 
 **Status: staged target design.** AFTER-27's shared readable Cards and AFTER-34
-to AFTER-40 are implemented; AFTER-41 onward remains future work. This is the
+to AFTER-41 are implemented; AFTER-42 onward remains future work. This is the
 design for backlog tasks AFTER-34 to AFTER-45, plus the `after review` launch in
 AFTER-24 (milestone M2). [CLI.md](CLI.md) documents current behavior; do not copy
 future commands from this target into runtime help before they exist.

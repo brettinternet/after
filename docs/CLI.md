@@ -34,6 +34,39 @@ first. Its JSON rows retain full record and snapshot IDs, and a shortened readab
 list reports the total and suggests a larger `-n`. Corrupt records or reached store
 bounds fail visibly rather than returning a falsely complete history.
 
+## Diff
+
+`after diff` streams the newest capture's patch; `after diff BASE CANDIDATE` accepts
+any two stored snapshot IDs or unique prefixes. A shared captured patch is used
+when available; otherwise the bounded pure-Go computed diff uses only captured
+source blobs. A computed diff is a display fallback, not Git's captured patch.
+
+Stdout contains only patch lines. Stderr names the full snapshot pair and patch
+origin, lists every unknown, excluded, unsupported, or otherwise limited inventory
+path, and reports capture/computation limits. Untrusted patch bytes pass through
+`internal/terminal`: controls, format characters and invalid UTF-8 are made visible;
+tabs remain tabs in a pipe and expand on a terminal. Terminal output uses the Diff
+view's fixed colors unless `NO_COLOR` is set or `TERM=dumb`; pipes are never colored.
+When sanitizing changes a byte, stderr warns that exact bytes are available with
+`--raw`. Both safe and raw output stream the entire selected patch without a
+line-count cutoff; storage and computed-diff byte bounds still apply.
+
+`after diff --raw [BASE CANDIDATE]` writes the selected patch bytes exactly, with no
+sanitizing, color, or summary on stdout. It is refused with exit 2 when stdout is a
+terminal; redirect to a file or pipe. For an ordinary captured pair these bytes are
+the stored patch and `git apply` can reproduce the captured candidate. A computed
+pair's raw bytes are exactly its generated computed diff, which is not claimed to
+be the captured Git patch. `--raw` and `--stat` cannot be combined. `--stat`
+prints the same readable capture summary rows as `after capture`, while stderr
+still reports pair, origin, uncovered inventory and limits. There is no pager.
+
+```sh
+after diff > change.patch
+after diff --raw > exact.patch
+git apply --check exact.patch
+after diff BASE CANDIDATE --stat
+```
+
 Bare `after inspect` summarizes the newest capture record's pair and says which
 capture it resolved. Bare `after compare` compares the newest stored run receipt
 for that pair; comparison reads stored observations and may persist a comparison,

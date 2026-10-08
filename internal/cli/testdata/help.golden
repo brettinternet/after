@@ -6,6 +6,7 @@ Everyday
   after status                  show the same status explicitly
   after review                  capture a change and open or resume its review
   after capture                 capture a local Git comparison
+  after diff                    print the newest captured patch
   after log                     list recent stored events
   after inspect                 inspect the newest capture or a stored record
 

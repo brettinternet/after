@@ -670,9 +670,13 @@ func statusNext(view statusView, history storedHistory) []nextCommand {
 		return []nextCommand{
 			next("after compare "+string(view.Receipt.ID), "compare the stored run without executing project code"),
 			next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this capture"),
+			next("after diff", "print this captured patch"),
 		}
 	}
-	commands := []nextCommand{next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this capture")}
+	commands := []nextCommand{
+		next("after review "+string(pair.Base)+" "+string(pair.Candidate), "review this capture"),
+		next("after diff", "print this captured patch"),
+	}
 	if view.Comparison != nil {
 		commands = append(commands, next("after inspect "+string(view.Comparison.ID), "inspect the stored comparison"))
 	}
