@@ -151,6 +151,27 @@ rate_limit_project() {
 	echo "load test notes" >notes.txt
 }
 
+# messy_project: renames, a deletion, a binary asset, a mode change, an edited
+# golden file and an untracked secret that must never be captured.
+messy_project() {
+	workspace "${1:-messy}"
+	mkdir -p handlers legacy testdata assets
+	printf 'package handlers\n\nfunc Health() string { return "ok" }\n' >handlers/health.go
+	printf 'package legacy\n\n// Deprecated: v1 XML API.\nfunc XML() {}\n' >legacy/xml.go
+	printf '{"status":"ok"}\n' >testdata/health.golden.json
+	printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR' >assets/logo.png
+	printf '#!/bin/sh\ngo build ./...\n' >build.sh
+	commit "base"
+
+	git mv handlers/health.go handlers/status.go
+	printf 'package handlers\n\nfunc Status() string { return "healthy" }\n' >handlers/status.go
+	git rm -q legacy/xml.go
+	printf '{"status":"healthy"}\n' >testdata/health.golden.json # the oracle moved too
+	printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x01' >assets/logo.png
+	chmod +x build.sh
+	echo "STRIPE_KEY=sk_test_example" >.env.local # untracked: never captured
+}
+
 # discount_project: the member discount moves 10% -> 15%, and its test is
 # edited to agree. Requires Go to run the tests.
 discount_project() {

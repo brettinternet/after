@@ -86,6 +86,8 @@ tasks:
 
   examples:
     desc: Smoke-test every example that needs no Docker (see examples/README.md)
+    env:
+      AFTER_EXAMPLES_STEP: "0"
     cmds:
       - task: build
       - examples/cli/01-working-tree.sh
@@ -94,6 +96,13 @@ tasks:
       - examples/cli/04-config.sh
       - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/01-raw-review.sh
       - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/02-test-reports.sh
+
+  demo:gifs:
+    desc: Record the example GIFs with VHS (needs ttyd on PATH and the Docker sandbox)
+    cmds:
+      - task: build
+      - for: [payment, oracle, review]
+        cmd: mise exec ffmpeg@8.1.1 vhs@0.11.0 -- vhs examples/demos/{{.ITEM}}.tape
 
   study:assign:
     desc: Print reproducible anonymous study assignments (supply --assign-seed via CLI_ARGS)

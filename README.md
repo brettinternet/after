@@ -4,15 +4,7 @@ See what your code does differently, not just how it reads differently.
 
 A change shortens a payment idempotency window from 24 hours to 5 minutes. The diff is one line, every HTTP response is identical, and the tests pass. AFTER runs both versions in an offline sandbox and counts what the fake payment provider actually received:
 
-```text
-$ after compare
-Using the newest run of base 564e6c29 → candidate b7668b46
-Comparison 9977cced · different · complete
-  12h responses          [EQUAL]
-  12h provider requests  [DIFFERENT] · 1 → 2
-  30s responses          [EQUAL]
-  30s provider requests  [EQUAL] · count unchanged
-```
+![after run: identical responses, but the 12h retry charges twice](examples/demos/payment.gif)
 
 A retry after 12 hours now charges the customer twice. Pin "one charge per retry" as your expectation, and AFTER reopens the pin when later evidence changes.
 

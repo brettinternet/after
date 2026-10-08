@@ -5,22 +5,7 @@ source "$(dirname "$0")/../lib.sh"
 
 intro "Review a messy change with no evidence at all" \
 	"Renames, a deletion, a binary asset, a mode change, an edited golden file and an uncaptured secret."
-workspace tui-raw
-mkdir -p handlers legacy testdata assets
-printf 'package handlers\n\nfunc Health() string { return "ok" }\n' >handlers/health.go
-printf 'package legacy\n\n// Deprecated: v1 XML API.\nfunc XML() {}\n' >legacy/xml.go
-printf '{"status":"ok"}\n' >testdata/health.golden.json
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR' >assets/logo.png
-printf '#!/bin/sh\ngo build ./...\n' >build.sh
-commit "base"
-
-git mv handlers/health.go handlers/status.go
-printf 'package handlers\n\nfunc Status() string { return "healthy" }\n' >handlers/status.go
-git rm -q legacy/xml.go
-printf '{"status":"healthy"}\n' >testdata/health.golden.json # the oracle moved too
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x01' >assets/logo.png
-chmod +x build.sh
-echo "STRIPE_KEY=sk_test_example" >.env.local # untracked: never captured
+messy_project tui-raw
 
 step "The kind of change an agent might hand you"
 after 0 diff --stat
