@@ -1,107 +1,59 @@
 # Exact finite comparisons
 
-`internal/compare.Run(store, receiptID)` implements AFTER-9. It reads validated
-immutable receipts and snapshots, never executes code, and persists a comparison
-record plus a bounded `comparison-details-v1` artifact. The [headless CLI](CLI.md)
-exposes `compare`, `inspect`, and `export`; none executes project code. The store
-must be writable to publish the result and idempotently reconstruct
-frozen input/scenario records. Inspection alone must not call the runner executor.
+`internal/compare.Run(store, receiptID)` compares stored observations and writes a versioned comparison plus a bounded `comparison-details-v1` artifact. It never runs code. The CLI's `compare`, `inspect` and `export` commands read stored data; comparison needs a writable store to publish its result.
 
-## Supported policy and compatibility
+## What can be compared
 
-The shipped `runner.ComparisonRules` JSON is the only accepted policy. Its exact
-bytes are retained as a `comparison-rules` artifact and hashed into the scenario
-and receipt. A policy edit changes that digest, the scenario and authorization
-plan. Both old and new artifacts can be inspected or passed to `compare.JSON`
-for a precise policy diff. Arbitrary masks, field dropping and normalization
-rules are **not supported**, including candidate-owned rules. Unknown/older
-policies are incomparable, never silently upgraded. Earlier AFTER-8 receipts
-with its placeholder rules require a newly authorized run for comparison.
+Only the shipped `runner.ComparisonRules` policy is accepted. Its exact bytes are stored and hashed into the scenario, receipt and authorization plan. A policy change requires a new approved run. Masks, field dropping, arbitrary normalization and candidate-owned rules are unsupported. Unknown or older policies are incomparable, not upgraded; old placeholder-policy receipts need a newly authorized run.
 
-Before comparing, the engine reconstructs the shipped plan from the captured
-sources, recorded limits, repetition count and original request ID. Exact plan
-bytes, authorization, scenario/input/driver/observer/rules bindings, toolchain,
-argv and each source-bound environment/dependency digest must match. Environment
-hashes include the source archive: they are not simply required to be identical
-across different versions, nor ignored. No Docker call or project build occurs
-in this verification. Missing sources, unknown plans, incomplete capture or
-incompatible environments cannot prove equality.
+Before comparison, AFTER reconstructs the frozen plan from source, limits, repetition count and request ID. Plan bytes, authorization, scenario/input/driver/observer/rules, toolchain, argv and environment/dependency bindings must match. Environment hashes include the source archive; different snapshots need not have identical hashes. This validation does not call Docker or build the project.
 
-Every expected side/case/repetition must have one complete metadata and
-observation artifact with matching receipt/request/pair/time bindings. Each sample's
-app and observer execution-plan identities must match its reconstructed side/case.
-Required observation fields must be present and non-null with the correct type;
-explicit empty bodies/keys and zero timestamps remain valid values. Duplicate,
-new, missing, malformed or unsupported channels fail closed. Report imports,
-failed execution, redaction and truncation remain incomparable. Store corruption
-or unavailable referenced data returns an error; the raw inventory/diff remains
-a separate API, not dependent on comparison success.
+Every expected case, side and repetition must have complete, correctly bound sample metadata and observation artifacts. Missing, duplicate, malformed, redacted, truncated, extra or unsupported channels fail closed. Required fields must exist and have the right type; explicit empty strings, empty arrays, zero values and JSON `null` remain distinct. Report imports and failed executions cannot compare. Corrupt or unavailable storage returns an error; the independent raw inventory and diff remain available.
 
-## Exact witnesses
+## Compared values
 
-The detail artifact links its receipt and both source inventories, retains every
-receipt artifact reference, and contains paired and within-side repetition
-witnesses. Each witness identifies both sample metadata and observation blobs.
-All samples are inspectable, including those associated with failed comparisons.
-The receipt leads to the snapshot file inventory and captured raw diff. The TUI and
-readable `after inspect` share deterministic Card templates for the receipt,
-comparison, payment cases and witnesses; full IDs and artifact sections keep the
-referenced records reachable. Strict-decode or unexpected-shape failures retain the
-complete readable raw artifact with an explicit limitation instead of partial
-comparison prose.
+| Channel      | Values compared                                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Responses    | Ordered HTTP status and body. Valid JSON bodies compare structurally; other bodies compare as exact text. JSON and text are different representations.        |
+| Provider log | Ordered timestamp, method, fixed observer destination `127.0.0.1:18082`, path, idempotency key and body. Call count is the independently recorded log length. |
 
-- Responses: ordered HTTP status and body. Valid JSON bodies compare structurally;
-  other bodies compare as exact text. JSON and text are distinct representations.
-- Provider: ordered timestamp, method, fixed observer destination
-  `127.0.0.1:18082`, recorded path, idempotency key and body. Count is the independent
-  log length, not an app-reported number. Identical responses do not conceal a
-  changed count, destination path, operation, payload or ordering.
-- JSON: sorted object-key traversal; arrays retain order; null differs from
-  missing; exact decimal values without floating-point conversion; Unicode code
-  points are not normalized. `1`, `1.0` and `1e0` compare equal, but large adjacent
-  integers remain distinct. Original numeric tokens survive in witness values.
-  RFC 6901 pointers escape `~` and `/`; absent values are omitted, unlike `null`.
-  Duplicate keys, invalid UTF-8 and unpaired UTF-16 escapes are rejected.
+JSON object keys are traversed in sorted order; array order and Unicode code points are exact. `null` differs from a missing field. Numbers use exact decimal comparison, not floating point: `1`, `1.0` and `1e0` are equal, while adjacent large integers remain distinct. Original numeric tokens remain in witnesses. RFC 6901 pointers escape `~` and `/`; absent values are omitted, not rendered as `null`. Duplicate keys, invalid UTF-8 and unpaired UTF-16 escapes are rejected.
 
-Paired differences produce `different`, not a regression judgement. Disagreeing
-repetitions on either side take precedence as `unstable`; all paired and
-repetition witnesses remain available. Repetition equality is recomputed under
-the frozen semantic policy, rather than treating the runner's byte-level
-instability hint as a semantic difference (e.g. JSON key order alone).
-Missing/incompatible evidence takes precedence over conclusive outcomes. A new
-redaction policy hiding comparison details makes the persisted record and detail
-summary incomparable. Never treat a partial witness list as complete equality.
+Each witness links both sample metadata and observation blobs. The detail artifact retains all receipt references, paired witnesses and within-side repetition witnesses, including samples from failed comparisons. Readable cards lead back to full IDs and source inventories. Strict decode failures retain the raw artifact with a limitation rather than partial comparison prose.
 
-## Bounds and finite scope
+| Outcome        | Meaning                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------- |
+| `equal`        | All required samples and channels are complete and equal under the frozen policy.       |
+| `different`    | A paired base/candidate witness differs; this is not a regression judgement.            |
+| `unstable`     | Repetitions on either side disagree; takes precedence over `different`.                 |
+| `incomparable` | Evidence is missing, partial, incompatible, redacted or unsupported; no equality claim. |
 
-JSON inputs and the stored report are limited to 1 MiB; nesting to 64 levels;
-nodes to 32768; number tokens to 1024 bytes and exponents to signed 32-bit values;
-witnesses to 2048 changes per comparison. Decimal comparison does not allocate
-exponent-sized numbers. Samples retain the runner's 1–5 repetitions, two cases,
-128 provider-call and 4096-byte body limits. Limit failures are explicit, not
-silent truncation. Oversized detail publication returns an error without a
-conclusive record; the receipt remains inspectable.
+The engine recomputes repetition stability under semantic JSON rules, so key-order-only differences are not unstable. It never cherry-picks a repetition. A newly redacted detail artifact makes the persisted comparison incomparable.
 
-These are two sequential synthetic same-key requests at 12h and 30s, not universal
-safety, causation or performance claims. The provider channel does not record
-query strings, other headers, other destinations or effects after its observation
-window. Recorded paths and the known observer endpoint are not a general network
-trace. Receipt hashes are bindings, not producer authentication. No model,
-account, network service or API key is involved. Terminal clients must escape all
-untrusted strings; this package returns data, not terminal-ready text.
+## Bounds and limits
 
-## Verification
+| Input or work                      |                                                                      Bound |
+| ---------------------------------- | -------------------------------------------------------------------------: |
+| JSON body and stored detail report |                                                                 1 MiB each |
+| JSON nesting / nodes               |                                                   64 levels / 32,768 nodes |
+| Number token / exponent            |                                                1,024 bytes / signed 32-bit |
+| Witness changes per comparison     |                                                                      2,048 |
+| Samples                            | 1–5 repetitions, 2 cases, at most 128 provider calls and 4,096-byte bodies |
 
-`mise exec -- task check:go` covers deterministic golden/property tests, exact
-numbers/Unicode, missing/new channels, failures, malicious rules, repetitions,
-redaction and stored artifact/inventory links. `mise exec -- task comparison:fuzz`
-runs the bounded JSON determinism/reflexivity fuzz target.
+Decimal comparison does not allocate exponent-sized numbers. Limit failures are explicit, never silent truncation. If detail publication exceeds its budget, no conclusive comparison record is written; the receipt stays inspectable.
 
-With the pinned sandbox image already provisioned and explicit local Docker
-binary/endpoint, `mise exec -- task comparison:proof` authorizes only synthetic
-payment execution. It stores real observations, compares two repetitions, and
-requires identical responses, 12h counts 1 versus 2, 30s counts 1 versus 1, and
-16 paired/repetition channel witnesses. It uses the same `AFTER_DOCKER_BINARY`
-and `AFTER_DOCKER_HOST` setup as [the runner proof](RUNNER.md). Ordinary tests do
-not execute Docker or project code. The live proof was run on macOS with a Colima
-Linux aarch64 daemon; it is not certification of other host/daemon platforms.
+This experiment is two sequential same-key requests at 12 hours and 30 seconds. It does not prove universal safety, causation or performance. The provider channel omits query strings, other headers, other destinations and effects outside its observation window; it is not a general network trace. Hashes bind records but do not authenticate a producer. There is no model, account, network service or API key. Terminal clients must escape all untrusted strings.
+
+## Checks and live proof
+
+`mise exec -- task check:go` covers deterministic JSON, exact numbers and Unicode, missing/new channels, failures, malicious rules, repetitions, redaction and artifact/inventory links. `mise exec -- task comparison:fuzz` fuzzes bounded JSON determinism and reflexivity.
+
+The opt-in live proof requires the pinned image and explicit local Docker CLI/socket:
+
+```sh
+AFTER_DOCKER_BINARY=/usr/bin/docker \
+AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
+mise exec -- task comparison:proof
+```
+
+It authorizes only synthetic payment runs and checks identical responses, 12-hour counts 1 vs 2, 30-second counts 1 vs 1, two repetitions and 16 artifact-linked witnesses. It uses the same Docker settings as [the runner proof](RUNNER.md). Unit tests do not run Docker or project code. The existing live validation was macOS with a Colima Linux aarch64 daemon; it does not certify other host/daemon combinations.

@@ -1,124 +1,62 @@
 # Local Git capture
 
-`internal/capture.Capture(ctx, repositoryRoot, store, options)` implements AFTER-3.
-The [headless CLI](CLI.md) exposes capture and raw-diff inspection. Capture reads
-source; it never builds, tests, runs project commands or creates an execution receipt.
+`internal/capture.Capture(ctx, repositoryRoot, store, options)` stores bounded Git snapshots and a normal diff. Capture reads source files; it never builds, tests, runs project commands, or creates an execution receipt.
 
-Project commands resolve their checkout root by checking for a `.git` directory
-or worktree `.git` file from the selected directory upward. This lookup is
-filesystem-only; it runs no Git command. The CLI passes that root explicitly to
-`Capture`, which retains its no-discovery rule. If capture fails, the CLI prints
-an allowlisted fixed reason and fix, such as `after: capture failed: unmerged
-index is unsupported — resolve the index conflicts, then retry capture`. Git
-output, repository-controlled text and absolute project paths are never included.
+## Modes and paths
 
-## Selection and identity
+| Mode                                       | Compared content                                                        | Notes                                                                                     |
+| ------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Default `working_tree`                     | `HEAD` → tracked working tree, plus explicitly selected untracked files | Also stores the index snapshot, so staged and unstaged bytes stay distinct.               |
+| `--staged` (`index`)                       | `HEAD` → index                                                          | Ignores unstaged edits.                                                                   |
+| `--base REF [--target REF]` (`merge_base`) | Unique merge base of `REF` and target commit                            | Target defaults to `HEAD`; no fetch. Stores resolved commit identities, not branch names. |
 
-- Default: HEAD versus tracked working-tree files, plus explicitly selected
-  non-ignored untracked paths. The candidate also references a separately stored
-  index snapshot, so staged and unstaged bytes remain distinguishable. Each
-  snapshot's diff is the patch from HEAD to that snapshot, so the index snapshot
-  carries the staged patch, never the working-tree one.
-- `Mode: evidence.Index`: HEAD versus the index, ignoring unstaged edits.
-- `Mode: evidence.MergeBase`, with `Base` and `Target`: resolve both commit-ish
-  values, compare their unique merge base with the target commit, without fetch.
-  Store the resolved base tip, target and merge-base identities, not branch names.
-- An unborn repository has an empty base with `unborn: true` and an empty commit
-  field, not a fabricated all-zero commit. Its index and working tree can still
-  be captured.
+An unborn repository has an empty base with `unborn: true` and no fake all-zero commit. Its index and working tree can still be captured. Each snapshot's patch is from its commit base: an index snapshot contains the staged patch, not working-tree edits.
 
-An empty implicit `after review` capture, when no review is saved, exits 0 without
-opening the TUI. It says the working tree or index matches HEAD (or that the
-merge-base comparison has no changes), suggests a default-branch comparison when
-HEAD has commits ahead, and names up to three sanitized excluded untracked paths
-with `--include-untracked` suggestions. `after capture` persists the empty capture
-and shows the same guidance in `Next`. Excluded untracked entries alone do not
-suppress the guidance; unknown or unsupported entries still require review. The
-branch check uses the hardened, network-disabled Git runner to read
-`refs/remotes/origin/HEAD`, then local `main`, then `master`; it executes no project
-code and does not fetch. Saved reviews and `after review --new` retain their normal
-resume/start-over behavior, and the JSON capture envelope is unchanged.
+Untracked paths are excluded and listed by default. `--include-untracked PATH` accepts repeated exact repository-relative, non-ignored file paths—not globs or directories. Ignored files cannot be selected. Existing tracked files follow Git's tracked-file rules. Any `.after` or `.git` path component is excluded, even when tracked. Invalid UTF-8 or schema-unrepresentable paths (backslash, colon, traversal) fail instead of being rewritten. Spaces, tabs, newlines, Unicode and leading dashes work through NUL-delimited Git output and argument vectors.
 
-Content-addressed private storage retains source bytes and Git executable modes.
-Capture IDs include the selection inventory, limitations, diff and index binding;
-mtimes are not identities. No user index, refs or files are changed. The only
-persistent writes are to the caller's already-open [private store](STORAGE.md).
+The CLI finds a checkout root by walking upward for a `.git` directory or worktree `.git` file; this is filesystem-only. It passes the root explicitly because the capture API does no discovery. Failures use fixed allowlisted reason/fix text; Git output, repository text and absolute project paths are not printed.
 
-Non-ignored untracked files are excluded and listed by default. Inclusion takes
-exact repository-relative paths, not globs or directories. Ignored untracked
-files cannot be selected; existing tracked files follow Git's tracked semantics.
-Any `.after` or `.git` path component is always excluded, even if tracked.
-Invalid UTF-8 and paths not representable by the [record schema](SCHEMA.md)
-(backslash, colon, traversal) fail capture explicitly rather than being rewritten.
-Spaces, tabs, newlines, Unicode and leading dashes are supported using NUL-delimited
-Git inventory and explicit argument vectors.
+## Example
 
-## Incomplete and unsupported content
+From a throwaway repository, capture one explicitly selected untracked file:
 
-Symlinks, symlink parents, non-regular files, submodules, LFS pointers and files
-larger than 8 MiB remain in the unsupported inventory. Their bytes are not
-captured, and completeness is `incomplete`. Submodules are never traversed; LFS
-payloads are never fetched. Missing Git objects, conflicts, sparse/skip-worktree
-or assume-unchanged indexes, shallow/partial repositories and ambiguous merge
-bases fail visibly rather than produce a supposedly complete snapshot.
+```sh
+./bin/after capture --include-untracked README.md
+```
 
-The ordinary binary Git diff is generated in a private temporary repository from
-captured regular-file bytes only. Renames appear as deletion/addition. Unsupported
-or excluded entries are **not** represented faithfully by that patch: always
-inspect both inventories alongside it. The [captured raw review API](RAW-DIFF.md)
-combines those inventories with bounded diff/context windows and hunk bookkeeping. Literal redaction in the store forces incomplete snapshots;
-a redacted capture must not be treated as the original executable source.
+Actual output excerpt (IDs vary). The temporary checkout used a `bin/after` symlink to the built CLI, so capture listed it as excluded:
 
-Budgets are 2,000 entries per inventory, 8 MiB per source file, 64 MiB of source
-bytes across base/index/candidate per read pass, and 16 MiB per Git stdout/diff.
-Repository-wide/output-budget failures return errors, never silently truncated
-complete captures. Each Git command has a 30-second deadline; caller cancellation
-also applies. Storage has its own additional bounds. Failed publication may leave
-unreferenced immutable artifacts, never a successful partial result.
+```text
+Captured candidate 93a57585 (working tree) against base 4747a69f (commit)
+  Base         4747a69f · 0 paths · complete · 0 excluded · 0 unsupported
+  Candidate    93a57585 · 1 path · complete · 1 excluded · 0 unsupported
+  Limit        two matching reads; not an atomic filesystem snapshot
+  Limit        diff includes captured regular files only; inspect excluded and unsupported inventory
+```
 
-## Consistency and execution boundary
+If `after review` has no saved review and the implicit capture has no changed or unknown paths, it exits 0 without opening the TUI. It explains whether the working tree/index matches `HEAD` or a merge-base comparison is empty. If `HEAD` is ahead, it suggests a local default-branch comparison, checking `refs/remotes/origin/HEAD`, then `main`, then `master`; it does not fetch. Up to three sanitized excluded untracked paths are shown with `--include-untracked` suggestions. Excluded-only paths do not suppress this guidance; unknown or unsupported paths remain reviewable. `after capture` persists an empty capture and gives the same `Next` guidance. Saved reviews and `after review --new` keep their resume/start-over behavior; the JSON capture envelope is unchanged.
 
-Each attempt performs two full reads of selected content, modes, index inventory,
-untracked selection and resolved refs. Only identical reads are persisted. A
-changed read retries up to three attempts; repeated change fails with
-`ErrInconsistent`. A file changing size or mtime while open fails immediately.
+## Completeness and budgets
 
-`ReadLive` (bare `after diff`) and `Unchanged` (the status/inspect freshness check)
-perform the same consistent read without writing evidence. `ReadLive` returns
-unstored snapshots whose file and diff identities are SHA-256 digests of the bytes
-read, plus the generated patch. `Unchanged` compares a stored working-tree or index
-capture's commit, file content identities, excluded and unsupported inventory, and
-index snapshot with the current read; it never uses timestamps and accepts only
-complete stored snapshots.
-The tests use a deterministic between-read barrier, not timing sleeps.
+Symlinks, symlink parents, non-regular files, submodules, LFS pointers and files over 8 MiB are inventoried as unsupported, not read; they make the snapshot incomplete. Submodules are never traversed and LFS data is never fetched. Missing Git objects, conflicts, sparse/skip-worktree or assume-unchanged indexes, shallow/partial repositories and ambiguous merge bases fail visibly.
 
-This is **not an atomic filesystem snapshot**. Coordinated ABA edits (changing and
-restoring bytes between reads), adversarial metadata restoration, or edits after
-the accepted read cannot be ruled out. Stop writers for stronger consistency;
-subsequent edits never alter already stored bytes or create an observation.
-Rooted reads prevent escapes outside the supplied root; symlinks are rejected,
-not intentionally followed. This is capture isolation, not an execution sandbox.
+The normal diff is generated in a private temporary Git repository from captured regular-file bytes. Renames appear as deletion plus addition. Excluded and unsupported entries are not faithfully represented by the patch: inspect both inventories too. [Raw review](RAW-DIFF.md) adds bounded patch pages, context and hunk bookkeeping. Literal redaction marks the snapshot incomplete; redacted source must not be treated as executable original content.
 
-Git receives a fresh environment without ambient Git overrides, loader settings,
-traces, credentials or proxies. System/global config and attributes are disabled;
-local fsmonitor, hooks, automatic maintenance, protocols and external attributes
-are overridden. Source access uses only read-only plumbing (`ls-tree`, `ls-files`,
-`cat-file`, ref/config queries). Blobs are read in batches: one `cat-file
---batch-check` for identities and sizes, then `cat-file --batch` chunks kept under
-the 16 MiB process-output ceiling. Replies must match each requested object's ID,
-type and size, and the capture byte budget is charged before payloads are read.
-Patch generation hashes each distinct frozen payload once, in one private
-`hash-object --stdin-paths` process with generated file names. No source-repository diff, textconv, clean/smudge,
-checkout, hook, credential or network command is requested. Lazy fetch is disabled
-and all transport protocols are denied. Supported macOS/Linux hosts must provide trusted Git at `/usr/bin/git`; capture
-never searches ambient `PATH`. That system executable and the operator-selected
-repository root are trusted inputs, not repository commands.
+| Bound                                             |                                              Limit |
+| ------------------------------------------------- | -------------------------------------------------: |
+| Entries per inventory                             |                                              2,000 |
+| One source file                                   |                                              8 MiB |
+| Source bytes per read pass (base/index/candidate) |                                             64 MiB |
+| Git stdout or diff                                |                                 16 MiB per process |
+| Git command deadline                              |               30 seconds, plus caller cancellation |
+| Consistency retries                               | 3 attempts; each requires two identical full reads |
 
-## Verification
+A budget failure errors; it never returns a silently truncated complete capture. Failed publication may leave unreferenced immutable artifacts, not a successful partial result. A changed read retries and then returns `ErrInconsistent`. File size or mtime changes while a file is open fail immediately.
 
-`mise exec -- task check:go` runs build, race tests, vet and formatting checks.
-The capture tests exercise all modes, staged/unstaged separation, unborn history,
-weird paths/binary/mode changes, exclusions, unsupported content, source immutability,
-controlled overlapping writes, hostile config/environment/helpers, cancellation
-and redaction. These are capture tests, not evidence that the future runner or
-review loop works.
+`ReadLive` (bare `after diff`) and `Unchanged` (status/inspect freshness) perform the same consistent read without storing evidence. `ReadLive` returns unstored file/diff SHA-256 identities and a patch. `Unchanged` compares commit, content hashes, index, and excluded/unsupported inventory; it uses no timestamps and accepts only complete stored snapshots. These reads are not atomic filesystem snapshots: ABA edits, restored metadata, or writes after the accepted read are not ruled out. Stop writers for stronger consistency. Later edits cannot alter stored bytes or create an observation.
+
+## Git trust boundary
+
+Capture invokes only read-only Git plumbing. It uses `/usr/bin/git` on supported macOS/Linux hosts, a fresh environment, disabled system/global config and attributes, disabled fsmonitor/hooks/maintenance/external filters, disabled lazy fetch and all transport protocols. It does not request checkout, diff drivers, textconv, clean/smudge, credentials or network access. Blobs are read in bounded batches after charging the byte budget; replies must match requested object IDs, types and sizes. Patch generation hashes frozen payloads once in a private object database. The system Git binary and caller-selected repository root are trusted inputs; repository commands are not run.
+
+`mise exec -- task check:go` runs build, race tests, vet and gofmt checks. Capture tests cover modes, index separation, unborn history, unusual paths, binary/mode changes, exclusions, unsupported content, source immutability, overlapping writes, hostile Git configuration, cancellation and redaction. They do not prove the runner or review loop.

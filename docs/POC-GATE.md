@@ -1,62 +1,62 @@
 # Adversarial POC gate
 
-`mise exec -- task test:poc` explicitly authorizes **synthetic** offline Docker experiments, including builds, hostile workloads, resource exhaustion probes and real terminal sessions. It is not an inspection-only command. Set `AFTER_DOCKER_BINARY` to a trusted absolute Docker CLI and `AFTER_DOCKER_HOST` to its local Unix socket. Separately provision the [pinned image and required isolation capabilities](SANDBOX.md). The gate never pulls an image or falls back to host execution.
+`mise exec -- task test:poc` explicitly authorizes synthetic offline Docker experiments, hostile workloads, resource probes, and real terminal sessions. It is not an inspection-only check. Set `AFTER_DOCKER_BINARY` to a trusted absolute Docker CLI and `AFTER_DOCKER_HOST` to its local Unix socket; provision the [pinned image and isolation capabilities](SANDBOX.md) separately. The gate never pulls an image or falls back to host execution.
 
-The gate serially runs the existing Go suite without cached test results, enables every Docker/CLI/PTY proof, rejects **any skipped test**, and requires named proofs. It then uses temporary Go source overlays to break snapshot freshness binding and discard repeated requests in the protected observer. Each mutant must fail its designated test with the expected assertion, not merely fail compilation. Production source and assertions are not rewritten. The gate fails if a mutation survives. Linux CI separately provisions the pinned image, runs this same command and uploads its log, even on failure. Local ordinary `task test` still does not authorize Docker; it is not a substitute for this gate.
+## What the gate runs
 
-## Executable design-check map
+The gate runs the Go suite serially without cached results, enables every Docker/CLI/PTY proof, rejects any skipped test, and requires named proofs. Temporary Go source overlays then break snapshot freshness binding and drop repeated requests in the protected observer. Each mutant must fail its designated test with the expected assertion; compile errors or unrelated failures do not count. The checkout and assertions are unchanged. A mutant that survives fails the gate.
 
-All named tests below run through `test:poc`, along with the rest of the suite. Synthetic unit fault injection is distinguished from real isolated execution.
+Linux CI provisions the pinned image, runs the same command, and uploads its log even on failure. Ordinary `task test` does not authorize Docker and is not a substitute.
 
-| Check                              | Executable evidence                                                                                                                                                                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Same response, changed effect   | `compare/TestComparisonProof`, `runner/TestRunnerProof`: real isolated HTTP responses and independently received 1→2 requests; 30s control remains 1→1                                                                                       |
-| 2. Implementation and oracle edits | `runner/TestRunnerProof`: candidate driver/test panic cannot replace the frozen observer; `rawdiff/TestCapturedModesInventoryAndFrozenContext`: changed oracle remains inventory                                                             |
-| 3. Changed basis                   | `review/TestInvalidationMatrix`: fixture, driver, observer, runtime, dependencies, environment, argv, rules/mask, renamed scenario/test, code/harmless edit, missing footprint; binding negative control                                     |
-| 4. Late result                     | `runner/TestLateResultAndInstability`, `browser/TestLoopConsentAndSnapshotBarrier`: deterministic barriers, immutable old pair/request binding and explicit snapshot acceptance                                                              |
-| 5. Failed execution                | `runner/TestFailuresAndRedaction`: injected faults; `TestRunnerProof`: real broken build, exited parent with live child, refused upstream, legitimate HTTP 502; `sandbox/TestObservedProof`: start/output/timeout/cancel                     |
-| 6. Unstable repeats                | `runner/TestLateResultAndInstability`, `compare/TestRepetitionsAndExactPayloads`, `browser/TestStatesAndLatePersistedRun`: all repetitions retained, no cherry-picked equality                                                               |
-| 7. Missing evidence                | `rawdiff/TestMissingArtifactsRedactionAndInvalidPair`, `gotestreport/TestMalformedAndUnsupportedKeepUnrelatedCards`, `browser/TestEngineBrowserAndCapturedPages`: usable inventory/raw escape, explicit unavailable state                    |
-| 8. No models                       | `cmd/after/TestPaymentCLIProof`, `cli/TestReviewLoopPTYProof`: actual capture, execution, comparison, pin, restart, reopen and consented rerun, with no model integration or account                                                         |
-| 9. Hostile content                 | `capture/TestHostileGitConfigurationAndEnvironment`, `TestNonRegularAndParentSymlink`; `store/TestConfinement`, `TestRedactionAndFalseCompleteness`; `sandbox/TestInputPaths`, `TestDockerProof`; terminal/import/browser hostile-data tests |
-| 10. Finite scope                   | `compare/TestPaymentAndDeterminism`, `browser/TestEngineBrowserAndCapturedPages`, real CLI/PTY proofs: concrete inputs and channels, visible sequential synthetic limits                                                                     |
+## Executable design checks
 
-`paymentfixture/TestPaymentProof` also runs the real disabled-deduplication and forged printed-count mutations: actual provider traffic changes when deduplication is disabled, not when an app prints a different count. The separate protected-observer negative control drops repeated requests and must be caught by `runner/TestRunnerProof`.
+These named tests run through the gate along with the full suite. Synthetic fault injection is not a substitute for the real isolated proofs.
+
+| Check                                 | Tests and required evidence                                                                                                                                                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same response, changed effect         | `internal/compare/TestComparisonProof`, `internal/runner/TestRunnerProof`: real identical HTTP responses, twelve-hour provider calls 1→2, thirty-second control 1→1.                                                                                             |
+| Implementation and oracle both change | `internal/runner/TestRunnerProof`, `internal/rawdiff/TestCapturedModesInventoryAndFrozenContext`: frozen observer stays independent; changed oracle remains inventory.                                                                                           |
+| Changed basis                         | `internal/review/TestInvalidationMatrix`: fixture, driver, observer, runtime, dependencies, environment, argv, rules, mask, scenario/test name, code/harmless edit, missing footprint, and binding negative control.                                             |
+| Late result                           | `internal/runner/TestLateResultAndInstability`, `internal/browser/TestLoopConsentAndSnapshotBarrier`: barriers retain old snapshot/request binding; acceptance is explicit.                                                                                      |
+| Failed execution                      | `internal/runner/TestFailuresAndRedaction`, `TestRunnerProof`, `internal/sandbox/TestObservedProof`: injected faults, broken build, live child, refused upstream, HTTP 502, start/output/timeout/cancel.                                                         |
+| Unstable repeats                      | `internal/runner/TestLateResultAndInstability`, `internal/compare/TestRepetitionsAndExactPayloads`, `internal/browser/TestStatesAndLatePersistedRun`: retain all repetitions; no cherry-picked equality.                                                         |
+| Missing evidence                      | `internal/rawdiff/TestMissingArtifactsRedactionAndInvalidPair`, `internal/gotestreport/TestMalformedAndUnsupportedKeepUnrelatedCards`, `internal/browser/TestEngineBrowserAndCapturedPages`: explicit unavailable state and usable raw/inventory view.           |
+| No models                             | `cmd/after/TestPaymentCLIProof`, `internal/cli/TestReviewLoopPTYProof`: real capture/run/compare/pin/reopen/consented rerun without a model or account.                                                                                                          |
+| Hostile content                       | `internal/capture/TestHostileGitConfigurationAndEnvironment`, `TestNonRegularAndParentSymlink`, `internal/store/TestConfinement`, `TestRedactionAndFalseCompleteness`, `internal/sandbox/TestInputPaths`, `TestDockerProof`, plus terminal/import/browser tests. |
+| Finite scope                          | `internal/compare/TestPaymentAndDeterminism`, `internal/browser/TestEngineBrowserAndCapturedPages`, CLI/PTY proofs: exact inputs, finite channels, sequential synthetic limits.                                                                                  |
+
+`internal/paymentfixture/TestPaymentProof` also mutates application deduplication and printed counts: disabling deduplication changes actual provider traffic, while forged app output does not. The independent observer mutation separately proves the runner catches dropped repeated requests.
 
 ## Performance reproduction
 
-`mise exec -- task terminal:bench` generates a fresh Git repository with medium (10 files, 20,000 changed lines) and large (50 files, 100,000 changed lines) fixed inputs. It records capture, first application raw-view open, warm raw-view open, cached inventory access, document preparation, allocated bytes, per-event allocation, maximum navigation/resize rendering and quit latency. It asserts every expected path and unclassified hunk is retained. Capture limitations are printed, not removed to imply perfect coverage. The OS file cache is **warm from capture**, not a claimed cold disk benchmark; no privileged cache purge is attempted. `BenchmarkCapturedViewport` measures the large warm viewport separately.
+`mise exec -- task terminal:bench` creates fresh Git repos with medium (10 files, 20,000 changed lines) and large (50 files, 100,000 changed lines) inputs. It records capture, first and warm raw view, cached inventory, document preparation, allocations, input/resize rendering, and quit latency; it asserts all expected paths and unclassified hunks. The OS cache is warm from capture, not a cold-disk benchmark. `BenchmarkCapturedViewport` separately measures the large warm viewport.
 
-Warm raw open ≤1s, cached inventory access ≤2s, document preparation ≤1s/64MiB, navigation/resize/quit ≤100ms and ≤256KiB allocated per event are evaluation budgets, not portable guarantees. `cli/TestReviewLoopPTYProof` separately records actual PTY input-to-help rendering while an authorized fixture is active, with a 1s scheduling-inclusive budget. This is the small payment fixture, not a claim that the generated large diff was simultaneously running in a container. Memory numbers are Go allocation counters, not whole-system or Docker peak RSS.
+| Author measurement      |      Medium |        Large |
+| ----------------------- | ----------: | -----------: |
+| Paths / changed lines   | 10 / 20,000 | 50 / 100,000 |
+| Raw bytes               |   1,501,270 |    7,506,350 |
+| First raw open          |    1.480 ms |     7.099 ms |
+| Warm raw open           |    1.468 ms |     5.791 ms |
+| Cached inventory        |      585 ns |     1.869 µs |
+| Document preparation    |    1.281 ms |     4.779 ms |
+| Preparation allocations | 2,168,112 B | 11,613,488 B |
+| Max input/render        |      171 µs |       129 µs |
+| Max resize/render       |      263 µs |       365 µs |
 
-## Threat-model limits
+Budgets are evaluation targets, not portable guarantees: warm raw view ≤1s, cached inventory ≤2s, document preparation ≤1s/64 MiB, navigation/resize/quit ≤100ms and ≤256 KiB per event. `internal/cli/TestReviewLoopPTYProof` measured 15.31 ms from PTY input to help rendering while a fixture ran; this was not the generated large diff running in a container. Allocation counters are not whole-system or Docker peak RSS.
 
-The Docker daemon, CLI, pinned image, host kernel and AFTER executable are trusted. The probes exercise finite adversarial inputs, not a proof of real-world sandbox safety. The workload-crash test kills the container's workload with a descendant alive; timeout/cancel/crash must return only after owned-container removal. An unrelated sentinel must survive. Storage tests separately cover interrupted writes and writer recovery.
+## Trust limits
 
-A **host supervisor SIGKILL, daemon failure or host power loss** can prevent deferred cleanup. This gate does not claim automatic orphan recovery after those events. Do not infer such recovery from the workload-crash test. Preserve exact owned resource identities and inspect ownership before manual cleanup; never prune by a shared label. Cancellation and normal workload failure, unlike uncatchable host death, are covered by executable cleanup checks.
+The Docker daemon, CLI, pinned image, host kernel, and AFTER executable are trusted. Finite adversarial probes are not proof of general sandbox safety. The workload-crash test kills a container workload with a live descendant and requires cleanup of its owned container while an unrelated sentinel survives. Storage tests cover interrupted writes and writer recovery.
 
-Imported provenance is not a signature; repository text cannot grant execution or observed/current status. Redaction and missing/truncated channels fail closed. Finite sequential synthetic payment observations are not production billing, concurrency, universal behavior, user benefit or human acceptance evidence. No human study was run.
+A host-supervisor SIGKILL, daemon failure, or power loss can prevent deferred cleanup. The gate does not claim orphan recovery after those events. Cancellation and ordinary workload failure are covered. Inspect exact owned resource identities before manual cleanup; never prune by shared label.
+
+Imported provenance is not a signature. Repository text cannot grant execution or observed/current status. Redaction and missing/truncated channels fail closed. Synthetic sequential payment observations are not production billing, concurrency, universal behavior, human acceptance, or usability evidence.
 
 ## Verification record
 
-Author execution: `mise exec -- task test:poc` completed with exit 0 on an Apple M5 Max, 18 logical CPUs, 64GiB RAM, macOS arm64 with a local Linux/cgroup-v2 Docker daemon. All required proofs ran without skips. The snapshot-binding mutant failed `TestInvalidationMatrix` with `bad reopening`; the protected-observer mutant failed `TestRunnerProof` with `got 1 calls want 2`. The final gate success line followed both failures. No owned sandbox containers or derived images remained. `mise exec -- task check` also passed (race tests, build/vet/format, local links, backlog integrity and secrets). CI is configured; no remote CI run is claimed before pushing.
+Author run: `mise exec -- task test:poc` exited 0 on macOS arm64 (Apple M5 Max, 18 logical CPUs, 64 GiB) with a local Linux/cgroup-v2 Docker daemon. All required proofs passed without skips. The snapshot-binding mutant failed `TestInvalidationMatrix` with `bad reopening`; the observer mutant failed `TestRunnerProof` with `got 1 calls want 2`. The final gate success line followed both expected failures. No owned sandbox containers or derived images remained. `mise exec -- task check` also passed. These are author results; no remote CI result is claimed.
 
-| Author measurement          |      Medium |        Large |
-| --------------------------- | ----------: | -----------: |
-| Paths / changed lines       | 10 / 20,000 | 50 / 100,000 |
-| Raw bytes                   |   1,501,270 |    7,506,350 |
-| First application raw open  |     1.480ms |      7.099ms |
-| Warm raw open               |     1.468ms |      5.791ms |
-| Cached inventory access     |       585ns |      1.869µs |
-| Document preparation        |     1.281ms |      4.779ms |
-| Preparation allocated bytes |   2,168,112 |   11,613,488 |
-| Maximum input + render      |       171µs |        129µs |
-| Maximum resize + render     |       263µs |        365µs |
+An independent check found no item-scoped defect in gate guards, CI wiring, or performance coverage. It passed `task test:terminal`, `task terminal:bench`, and `git diff --check`; the large warm viewport measured 29,727 ns/op, 16,185 B/op, and 285 allocations/op. It did not rerun Docker or independently certify the full gate log.
 
-Actual active-fixture PTY input-to-help render: **15.31ms**. All generated inventory/hunk counts were complete. These are one-run measurements with the cache and memory limits described above.
-
-Independent verification: a separate fresh-context verifier found no concrete item-scoped defect in gate guards, CI wiring or performance coverage. It independently passed `task test:terminal`, `task terminal:bench` and `git diff --check`, measuring the large warm viewport at 29,727ns/op, 16,185B/op and 285 allocations/op. It did **not** rerun Docker or certify the author's full gate log; those results above remain author execution evidence. The full report and limitations are summarized separately in AFTER-15.
-
-An earlier author invocation was killed by its shell tool's 20-minute timeout; it was **not** a pass. Its one identified owned staging container was inspected and manually removed before the complete successful run. This is direct evidence of the host-supervisor interruption limitation, not automatic recovery.
-
-The gate's final success line is emitted only after both real proofs and mutation controls complete; a partial or interrupted log is not a pass.
+The author measurements are one run. All generated inventory and hunk counts were complete. The PTY and performance figures are not cross-machine guarantees.

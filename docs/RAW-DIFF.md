@@ -1,160 +1,89 @@
 # Captured raw review
 
-`internal/rawdiff.Open(store, result.Base, result.Candidate)` adds the shared
-read-only review surface. A pair returned by [`capture.Capture`](CAPTURE.md)
-shares a captured patch. Any other pair (cross-capture, reversed, or a
-working-tree capture's index snapshot paired with its base or candidate) retains
-inventory and both captured sources, but exposes no patch or complete hunk count:
-a patch is claimed only for a commit base and non-commit candidate sharing a diff
-identity (`rawdiff.CapturedPair`). CLI and TUI use this same fallback. This is not a behavior comparator or an execution engine.
+`internal/rawdiff.Open(store, base, candidate)` exposes captured inventory, patch pages, source context and hunk bookkeeping. It never runs a process. This is a review surface, not a behavior comparator or execution engine.
+
+## A stored patch
+
+```sh
+./bin/after diff --stored
+```
+
+Output from a throwaway Git repository (IDs and file content vary). It lists the CLI symlink as an unselected untracked file:
+
+```text
+after diff: stored pair 4747a69f → 93a57585
+  origin: captured patch
+  uncovered inventory:
+    bin/after — excluded: untracked; not selected
+  limits:
+    two matching reads; not an atomic filesystem snapshot
+    diff includes captured regular files only; inspect excluded and unsupported inventory
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..fea9225
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,3 @@
++# Example
++
++A local change.
+```
+
+The command's diagnostic is on stderr; patch lines are on stdout. [Capture](CAPTURE.md) creates the patch in a private temporary Git repository from captured regular files only.
+
+## Captured pairs and inventory
+
+A captured patch is available only for a commit base and non-commit candidate with the same diff identity—the pair returned as `rawdiff.CapturedPair`. Cross-capture, reversed and index-vs-base/candidate pairs still expose both inventories and captured sources, but no captured patch or complete hunk count. CLI and TUI may instead show a computed diff (below).
 
 ```go
-v, err := rawdiff.Open(s, captured.Base, captured.Candidate)
-// Handle err before using v.
+v, err := rawdiff.Open(s, result.Base, result.Candidate)
+if err != nil { /* handle before use */ }
 entries := v.Inventory()
 hunks := v.Hunks()
 page, err := v.Raw(0, rawdiff.MaxPageBytes)
 context, err := v.Context(rawdiff.Candidate, "main.go", 0, 4096)
-counts, err := v.Count(nil, nil) // initially all indexed hunks are unclassified
+counts, err := v.Count(nil, nil) // all indexed hunks initially unclassified
 ```
 
-## Inventory and hunk bookkeeping
+The sorted inventory includes content/mode changes and every excluded/unsupported path from either manifest. Unknown entries remain `unknown`, even when both manifests list the same reason: uncaptured bytes cannot prove they are unchanged. With an incomplete capture, even identical stored records remain unknown because redaction can collapse distinct source into the same bytes. Inventory length counts visible paths; it does not claim every unknown path changed. Binary paths follow Git's binary-patch header. Mode-only changes, binary changes, empty additions and deletions may have no text hunk. Renames remain delete/add pairs.
 
-The sorted inventory includes every content/mode change plus every excluded or
-unsupported path from either manifest. Unsupported and excluded entries have
-`Change: "unknown"` even if both manifests list the same reason: their bytes were
-not captured, so unchanged cannot be established. When either capture is incomplete,
-equal stored file records also remain unknown: redaction can collapse different
-original contents into identical blobs. This conservatively includes unchanged
-paths too. Inventory length is the visible path count, not a claim that every
-unknown path changed. Binary paths are marked
-from Git's binary-patch header. Mode-only changes, binary changes, empty additions
-and deletions need not have text hunks. Renames retain capture's deletion/addition
-representation. Every path remains inspectable without an example mapping.
-
-Each hunk has its exact captured patch byte range and a stable SHA-256 identity
-bound to the diff digest and header offset. Duplicate identical hunk text at
-different positions stays distinct. `Files()` returns copies of the exact
-`diff --git` section byte ranges used with `Hunks()` for file/hunk navigation; an
-unmatched raw header has an empty path and remains visible. `Count` unions references across examples;
-folded IDs must belong to that union. Its disjoint counts satisfy:
+Each indexed hunk has its exact byte range and a stable SHA-256 identity bound to the diff digest and header offset; identical text at two offsets remains distinct. `Files()` returns copies of exact `diff --git` sections. Unmatched headers stay visible with an empty path. `Count` unions example references; folded IDs must belong to that union. Counts satisfy:
 
 ```text
-Total = Mapped (visible) + Folded (mapped but hidden) + Unclassified
+Total = visible Mapped + Folded + Unclassified
 ```
 
-Unknown IDs are errors, not invented mappings. `Complete` is false when capture or
-indexing is incomplete. Counts then describe indexed hunks only, never omitted
-ones. A zero-hunk complete diff and a zero-mapped first review are valid.
+Unknown IDs are errors. `Complete` is false when capture or indexing is incomplete; counts then cover indexed hunks only. Zero-hunk complete diffs and zero-mapped initial reviews are valid. Paths with names such as `test`, `spec`, `fixture`, `mask`, `golden`, `expected`, `snapshot` or `comparison` receive a broad `potential oracle` filename hint. It has false positives and negatives and does not classify or approve behavior. The view cannot mutate scenarios, receipts, pins or frozen policies.
 
-Paths containing test, spec, fixture, mask, golden, expected, snapshot, comparison
-or compare-policy (case insensitive) receive a **potential oracle** hint. This is
-a deliberately broad filename heuristic with false positives and false negatives,
-not semantic classification or approval. Production and potential-oracle changes
-have identical raw access. The view has no scenario, receipt or pin mutation API;
-opening it cannot replace a frozen driver, expectation or comparison policy.
+## Paging, source context and failures
 
-## Bounds and failure behavior
+`Raw` and `Context` return at most 64 KiB. Continue from `Next` until `More` is false; the first window is not the whole patch. Offsets at EOF return an empty final page. Zero, invalid or oversized windows fail. The raw patch is loaded within storage's 16 MiB blob bound; at most 100,000 hunks are indexed. Exceeding that cap leaves raw bytes available but makes counts incomplete. Long patch lines do not hit a scanner token limit.
 
-- `Raw` and `Context` return byte windows of at most 64 KiB. `Next`, `Total` and
-  `More` support viewport/paging consumers. Follow `Next` until `More` is false;
-  never present the first window as the entire patch. Offsets at EOF return an
-  empty final page. Invalid ranges, zero sizes and oversized requests fail.
-- The raw patch is loaded once within storage's 16 MiB blob limit. At most 100,000
-  hunks are indexed; exceeding this limit leaves the complete retained raw patch
-  accessible, adds a limitation and makes counts incomplete. Long lines do not
-  encounter a scanner token limit. Inventory and hunk lists are bounded by the
-  existing capture/blob budgets, not lazily loaded from a repository.
-- Context checks an exact manifest path and reads only its content-addressed
-  blob. No path is joined to a repository directory. Each call verifies the whole
-  bounded source blob before returning a window; it is not disk streaming.
-- Missing/unsupported context returns `ErrContext`. A missing or corrupt diff
-  retains inventory, adds a limitation and makes `Raw` return `ErrDiff`. No live
-  filesystem fallback or helper execution occurs. Already opened raw bytes remain
-  available if a context artifact disappears later.
-- Capture limitations, including redaction, are carried on every page. Reaching
-  the final retained byte does not remove these limits or establish completeness.
-  Unmatched patch headers remain in raw bytes and make hunk counts incomplete.
-- Strict `store.Get` still rejects missing referenced artifacts. Inventory recovery
-  described above requires already available validated manifests, such as the
-  capture result or an already loaded pair; this is not a damaged-store recovery
-  loader. `Open` validates record shape and requires a captured pair before
-  exposing patch bytes, not producer honesty or arbitrary pair provenance.
+`Context` matches an exact manifest path and reads its content-addressed blob; it never joins a repository path. Each call verifies the whole bounded blob before returning a window; it is not streaming disk access. Missing or unsupported context returns `ErrContext`. Missing/corrupt patch retains inventory, adds a limitation and makes `Raw` return `ErrDiff`. No live filesystem fallback or helper runs. Limits remain on every page even at EOF. `Open` validates record shape and requires an eligible captured pair before exposing patch bytes; it is not a damaged-store recovery loader or producer authentication.
 
-Page bytes, paths, hints and limits are **untrusted**, not terminal-safe strings.
-Byte windows can split Unicode or lines. CLI/TUI renderers must decode across
-windows and sanitize controls (including OSC), and keep partial-view limits
-visible. This package does not render terminal content or silently alter raw
-bytes. Captured source can be sensitive; keep it in the private store.
-
-Neither opening a view nor reading any page launches a process. Only capture
-creates the patch, using its isolated Git object database and disabled external
-helpers. Import failure, no report adapter, missing observations and absent
-example mappings do not participate in this API and cannot disable raw access.
-
-## Verification
-
-`mise exec -- task check:go` exercises all three capture modes with real temporary
-Git repositories, weird/Unicode/control-character paths, binary and mode changes,
-additions/deletions, unsupported/oversized paths, excluded untracked files, frozen
-context after live edits, hostile helper configuration, traversal rejection,
-missing artifacts, malformed reports, frozen scenarios, redaction, long lines,
-page bounds, hunk-index limits, stable IDs and deduplicated counts.
+Patch bytes, paths, hints and limits are untrusted and not terminal-safe. Windows may split UTF-8 or lines. Renderers must decode across windows, escape controls (including OSC), and keep partial-view limits visible. The package never alters raw bytes or renders terminal content. Keep captured source in the private store.
 
 ## Computed source diffs
 
-For snapshot pairs that do not satisfy `CapturedPair`, `View.Compute(ctx)` builds a
-separate Git-style unified presentation from the two stored source manifests. It
-uses sorted inventory order, three context lines, and a deterministic pure-Go
-Myers line diff. It reads only content-addressed blobs; it never runs Git, shell
-commands, or another process. This is a display fallback, not Git's patch. Its
-navigation offsets have no hunk IDs, and computed hunks are not returned by
-`View.Hunks()` or included in `View.Count()`.
+For a stored pair without a shared captured patch, `View.Compute(ctx)` creates a deterministic Git-style display from the two stored source manifests. It uses sorted inventory, three context lines and a pure-Go Myers diff. It reads only content-addressed blobs; it does not invoke Git or any other process. This is not Git's patch: computed offsets have no hunk IDs and computed hunks do not appear in `Hunks()` or `Count()`.
 
-The computation is explicitly bounded:
+| Work                                   |                                       Bound |
+| -------------------------------------- | ------------------------------------------: |
+| One text-file pair                     | 1 MiB combined bytes; 20,000 combined lines |
+| One path                               |                                       4 KiB |
+| Changed known source bytes across pair |                                       8 MiB |
+| Myers walk                             |  1,000,000 diagonal visits/line comparisons |
+| Generated output                       |                                      16 MiB |
+| Binary detection                       |     NUL in first 8,000 bytes of either side |
 
-- A text file pair may use at most 1 MiB combined source bytes and 20,000 combined
-  lines; an individual inventory path is capped at 4 KiB. The total source budget
-  is 8 MiB across the pair's changed known paths.
-- The Myers walk stops after 1,000,000 diagonal visits/line comparisons. A
-  pathological diff that reaches this work limit is shown as
-  `too large to diff here — open both sources`.
-- The generated output is capped at 16 MiB. After that, remaining inventory paths
-  retain their limitation in Changes/source details and the document states that
-  the output bound was reached.
-- Storage independently caps an individual source blob at 16 MiB. Binary
-  classification checks for NUL in the first 8,000 bytes of either side before
-  text diffing. Files with such a NUL display `binary`; mode-only changes display
-  their old/new modes; unknown paths preserve their captured limitation and have
-  no computed hunk.
+A work-limit failure says `too large to diff here — open both sources`. Output exhaustion limits later paths but keeps them and their limits in Changes/source detail. Binary files show as binary; mode-only changes show both modes; unknown paths keep their limitation and have no computed hunk. Storage separately caps any source blob at 16 MiB. Browser `Load` computes and prepares the document off the UI event loop.
 
-The shared browser `Load` job performs source reads, diff computation and document
-preparation off the event loop. `task test:computed` covers the applying-diff
-fuzz/property, source and output bounds, real capture/load integration, a bounded
-10-file/20,000-source-line performance fixture, and the payment-change PTY matrix.
+`task test:computed` checks applying-diff properties, source/output bounds, capture/load integration, a 10-file/20,000-line performance fixture and payment-change PTY behavior.
 
-## CLI patch streaming
+## CLI streaming
 
-Bare `after diff` uses `capture.ReadLive`: capture's consistent, hardened read and
-private-Git patch generation, with nothing stored. `rawdiff.Unstored` derives its
-inventory from those unstored snapshots. `after diff --stored` and explicit pairs
-use `rawdiff.Open` for a shared captured patch and read it in bounded 64 KiB pages;
-the selected patch never exceeds the stored artifact bound. Either patch goes to
-`internal/terminal.WriteDiff`, which does not build an unbounded line index or
-output document. The renderer retains at most its bounded input and
-output buffers plus an incomplete UTF-8 suffix. It sanitizes control/format
-characters and invalid UTF-8, keeps tabs in pipes, and applies only fixed theme SGR
-on a terminal. Both display and raw output stream every line within the existing
-artifact byte bounds; `--raw` streams exact bytes and is refused when stdout is a
-terminal. The 100,250-line streaming test verifies the complete output digest and
-keeps full-command allocations below the terminal's 64 MiB preparation budget. `--stat` prints per-file changed-line counts parsed
-from the selected patch's sections, like `git diff --stat`.
+Bare `after diff` uses `capture.ReadLive` and `rawdiff.Unstored`: consistent hardened reads and a private-Git patch, without writing storage. `after diff --stored` and explicit pairs page a captured patch in 64 KiB windows; pairs without one use `View.Compute` from stored sources. `internal/terminal.WriteDiff` streams both safe and raw output under the existing artifact bounds instead of building an unbounded line index.
 
-Diagnostics go to stderr: the current change's sources or the short base/candidate
-IDs, `current checkout; not stored`, `captured patch` or
-`computed from captured sources — not Git's patch`, every unknown/excluded/
-unsupported/limited inventory path, and all limits. For a pair without a shared
-patch, `after diff` uses `View.Compute` and reads only stored source blobs; no Git
-or other process runs. `--raw` emits the generated computed bytes exactly but does
-not make them the original stored Git patch. See [CLI.md](CLI.md#diff) for the
-command forms and examples.
+Safe display sanitizes controls, format characters and invalid UTF-8; tabs stay tabs in pipes and expand on terminals. Terminal color uses fixed theme SGR. `--raw` emits exact selected bytes and is refused when stdout is a terminal; computed raw bytes are the computed patch, not Git's original. `--stat` counts changed lines by selected patch section like `git diff --stat`; it cannot combine with `--raw`. Stderr names the pair/source and patch origin, then lists every unknown/excluded/unsupported/limited path and limit. See [CLI diff forms](CLI.md#diff).
+
+`mise exec -- task check:go` covers real temporary Git repositories, unusual paths, binary/mode changes, unsupported files, frozen context, hostile helpers, missing artifacts, redaction, long lines, page/hunk bounds and stable accounting. Streaming tests cover 100,250 lines and a complete output digest under the terminal's 64 MiB preparation budget.

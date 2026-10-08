@@ -1,89 +1,54 @@
 # Go test report importer v1
 
-`internal/gotestreport.Import(io.Reader, Metadata)` imports stock `go test -json`
-bytes without opening a project, running Go, fetching URLs, or following paths.
-The [headless CLI](CLI.md) exposes file, stdin-pipe, and `-` import plus inspection. Its default binding captures the working tree with the normal capture policy and records a capture event; that binding is not proof the report ran on the captured candidate. Report cards remain data
-for later inspection, not runner receipts.
+`internal/gotestreport.Import(io.Reader, Metadata)` parses stock `go test -json` as reported data. It opens no project, runs no Go command, fetches no URLs and follows no paths. An imported report is not a runner receipt or behavioral observation.
 
-## Tested compatibility
+## Import
 
-Dialect `go-test-json-v1`, report schema 1, is tested with **Go 1.27.1** on
-macOS/arm64. Checked-in JSONL fixtures and their deliberately synthetic source
-live in `internal/gotestreport/testdata/`. Regenerate them explicitly with:
+```sh
+go test -json ./... | ./bin/after import --project /work/payment
+./bin/after import report.jsonl --producer 'go1.27.1 on linux/amd64' \
+  --snapshot CANDIDATE_ID --project /work/payment
+```
+
+The CLI accepts a file, `-`, or piped stdin. Without `--snapshot`, it captures the working tree with normal capture rules and writes a capture event. A supplied snapshot is a caller binding, not proof that the tests ran on it. The default binding is also not proof. Omit `--producer` for no producer claim; `--producer` and `--captured-at` are unauthenticated caller claims. A supplied snapshot digest is syntax-checked but not resolved by the importer.
+
+Every card has this evidence state:
+
+| Field                            | Value                      |
+| -------------------------------- | -------------------------- |
+| Producer / kind                  | `importer` / `reported`    |
+| Applicability                    | `unknown`                  |
+| Execution / comparison           | `not_run` / `not_compared` |
+| Inputs, expected values, effects | `unavailable`              |
+
+A reported `pass`, `fail` or `skip` stays separate from AFTER execution. Test names, output and elapsed times never establish inputs/effects, equality or freshness. Package pass does not prove any tests ran. Build failure is a build card, not a fabricated runtime failure. An event stream without terminal status has report status `none` and a `missing_completion` diagnostic; empty input does not establish success. Event times remain reported first/last event times, not trusted capture or AFTER run times.
+
+## Supported dialect
+
+The importer accepts dialect `go-test-json-v1` (report schema 1), tested with Go 1.27.1 on macOS/arm64. Checked-in synthetic JSONL fixtures live in `internal/gotestreport/testdata/`; their sources are nested so deliberately failing fixtures stay outside product tests/builds. Regenerate only with:
 
 ```sh
 mise exec -- task fixtures:go-report
 ```
 
-This developer-only target executes synthetic tests with module networking off.
-It is never invoked by import or normal tests. It records `go version`, captures
-passing/failing/skipped tests, nested subtests, paused/continued parallel tests,
-interleaved packages with duplicate test names, package failure, build failure,
-and a package run selecting no tests. An invalid timeout invocation captures
-empty stdout (exit 2); an empty report does not establish success. Test/build
-failure fixtures intentionally exit 1. Capture timestamps and scheduling vary
-on regeneration. The nested module prevents deliberately failing fixture sources
-from entering the product test/build graph.
+That developer target runs synthetic tests with module networking disabled; import and normal tests never invoke it. Fixtures cover passing/failing/skipped and nested/parallel tests, duplicate names in separate packages, package/build failure, no tests, and an invalid-timeout command with empty output.
 
-Supported test actions: `start`, `run`, `pause`, `cont`, `output`, `pass`, `fail`,
-`skip`; build actions: `build-output`, `build-fail` with `ImportPath`. Supported
-fields are `Time`, `Action`, `Package`, `Test`, `Elapsed`, `Output`, `OutputType`
-(empty, `frame`, or `error`), `FailedBuild`, and `ImportPath`. Output annotations,
-elapsed time, and failed-build names do not create observations. Unknown fields,
-actions, incompatible field combinations, or invalid field types are diagnosed,
-not silently interpreted as a newer dialect. Other Go versions are not certified.
-Benchmarks and fuzz exploration are not reconstructed into scenarios.
+Supported test actions are `start`, `run`, `pause`, `cont`, `output`, `pass`, `fail`, `skip`; build actions are `build-output` and `build-fail` with `ImportPath`. Supported fields: `Time`, `Action`, `Package`, `Test`, `Elapsed`, `Output`, `OutputType` (empty, `frame` or `error`), `FailedBuild` and `ImportPath`. Unknown fields/actions, invalid types and incompatible fields produce diagnostics; they are not interpreted as a newer dialect. Benchmarks and fuzz exploration are not reconstructed as scenarios. Other Go versions are not certified.
 
-## Evidence and provenance
+Each card is scoped to package/test/build and has an attempt number. A new `run`/`start` after completion begins another attempt. Conflicting events after completion are diagnosed, not used to overwrite status.
 
-Each report retains the exact original byte count and SHA-256, optional
-caller-supplied producer claim, import time, optional caller-supplied capture
-time, and optional snapshot SHA-256 binding. An omitted producer is absent from
-the JSON metadata; AFTER never invents one. The importer validates digest syntax,
-not snapshot existence or producer honesty. The caller must resolve a supplied
-snapshot through the local store when integrating the command. With or without
-that binding, applicability is **unknown**. Event timestamps are retained as
-reported first/last event times,
-not trusted capture or AFTER execution times. Missing timestamps stay absent.
+## Limits and trust
 
-Each card has a package/test/build scope and attempt number. Identical test names
-in different packages remain separate. A new `run`/`start` after completion opens
-a new attempt; conflicting events after completion are diagnosed rather than
-overwriting prior status. Package pass is not proof that any tests ran. Build
-failure is a build card, not a fabricated failing runtime test. A card without a
-terminal event has report status `none` and a `missing_completion` diagnostic.
+| Input or output          |                                        Limit |
+| ------------------------ | -------------------------------------------: |
+| Complete report input    | 8 MiB; reads at most one extra sentinel byte |
+| JSONL line               |                                       64 KiB |
+| Cards                    |                                        4,096 |
+| Retained output per card |                       16 KiB, UTF-8 boundary |
+| Diagnostics              |             100, plus exact suppressed count |
 
-Every card has producer `importer`, kind `reported`, applicability `unknown`,
-execution `not_run`, and comparison `not_compared`. Reported pass/fail/skip is
-separate from AFTER execution. Inputs, expected values, and effects are explicitly
-`unavailable`; test names and output are never mined for behavioral observations.
-Even a complete report does not support equality, freshness, or observed badges.
+Oversize input or reader errors fail the import entirely; no partial digest is returned. Malformed lines, unsupported events and invalid UTF-8 produce fixed line-numbered codes; later valid lines survive. A valid final JSON line without newline is accepted. Missing completions, empty reports, truncation or any diagnostic make the report incomplete. A valid prefix cannot prove the producer supplied the full original stream. Callers own reader deadlines/cancellation; a blocking reader has no importer deadline.
 
-## Bounds and recovery
+The report stores original byte count and SHA-256, optional producer/snapshot claims, import time and optional capture-time claim. The API does not write the original stream. The CLI stores a bounded report artifact under store redaction policy; original and retained artifact digests are distinct. Malformed stored reports remain available as raw bytes with a limitation, not guessed cards.
 
-- Read at most 8 MiB + one sentinel byte. Oversize or reader errors fail the import
-  entirely with a fixed error; no misleading partial original digest is returned.
-- Lines over 64 KiB, malformed/truncated JSON, unsupported events, and invalid
-  UTF-8 produce line-numbered fixed diagnostic codes. Later valid lines survive.
-- At most 4,096 cards and 16 KiB output per card are retained. Additional cards
-  and truncated output are explicitly diagnosed; output truncates on a UTF-8
-  boundary. The original digest always covers the whole accepted input.
-- At most 100 diagnostics are retained with an exact suppressed-diagnostic count.
-  Any diagnostic makes report completeness `incomplete`.
-- A final valid JSON object without a newline is accepted. Missing terminal
-  events and empty reports remain incomplete. A valid prefix cannot prove that
-  the producer supplied its entire original stream.
-
-Callers own reader deadlines/cancellation. The importer provides bounded byte
-consumption, not a deadline for a blocking reader. It is not a Go event-sequence
-or producer-authenticity validator.
-
-All strings remain untrusted data, including producer, package, test names and
-output. JSON encoding escapes terminal controls; the shared TUI/CLI Card renderers
-also sanitize and bound displayed text. No importer function renders raw text or
-interprets an output URL/path. The API returns report data and does not write the
-original stream to disk. The CLI stores the bounded report artifact through the
-private store's redaction policy and keeps the original digest distinct from the
-stored artifact digest; malformed stored reports remain available as raw bytes with
-a limitation, not a guessed Card. Do not commit real project reports, credentials,
-or participant data.
+All report strings are untrusted, including names, producer and output. JSON encoding escapes controls; the shared CLI/TUI Card renderers sanitize and bound display. The importer does not render text or interpret URLs/paths. Never commit real project reports, credentials or participant data.

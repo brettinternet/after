@@ -1,13 +1,10 @@
 # Build, package and reproduce
 
-AFTER is a bounded local proof of concept, not a general application runner.
-The [CLI](CLI.md) and [TUI](TUI.md) work without Bun, models, accounts or GitHub.
-The presentation remains an invented simulation; this walkthrough produces real
-receipts only after separately authorized execution. No human benefit study has run.
+AFTER is a local CLI/TUI proof of concept with a payment-specific offline runner, not a general application runner. This page covers native builds, the no-Docker inspection demo, and the separately authorized real fixture loop. The presentation is a simulation; no human benefit study has run.
 
-## Fresh checkout and native packages
+## Build and package
 
-Install mise, then from a fresh checkout:
+From a fresh checkout:
 
 ```sh
 mise trust
@@ -18,71 +15,47 @@ mise exec -- task build
 mise exec -- task package
 ```
 
-Go is pinned in `mise.toml`; `go.mod`/`go.sum` pin modules. Preparation may download
-trusted tools/modules. It is separate from offline project execution. Packaging
-uses the local Go toolchain, read-only module resolution, `CGO_ENABLED=0` and
-trimmed paths. It creates a new ignored `dist/0.1.0-dev.COMMIT[-suffix]/` directory
-(the actual version uses `.dirty` for modified checkouts), containing four raw
-executables named `after_VERSION_OS_ARCH`, `SHA256SUMS` and `BUILD.txt`.
-No archive extractor, installer, signing, upload or release publication runs.
+Go and modules are pinned in `mise.toml`, `go.mod` and `go.sum`. Tool/module setup may use the network; it is separate from offline project execution. `task package` uses the local Go toolchain, read-only module resolution, `CGO_ENABLED=0` and trimmed paths. It creates a unique ignored `dist/0.1.0-dev.<commit>[.dirty]-<suffix>/` directory with four executables, `SHA256SUMS` and `BUILD.txt`; it does not sign, archive, install, upload or publish a release.
 
-Supported inspection targets: macOS and Linux, amd64 and arm64. `/usr/bin/git`
-is required for capture and demo setup; an actual terminal is required for the
-TUI. The binary has Go module dependencies but no runtime Go, Bun or C-library
-requirement. Development race tests require a C compiler. Cross-compilation is
-not cross-platform execution proof: CI is configured to run native checks on all
-four host targets and the Docker gate on Linux amd64. Local macOS/Colima results
-are not a claim that a new CI run has passed.
+| Target                   | Support                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| macOS/Linux, amd64/arm64 | Inspection; native CI is configured for all four targets.         |
+| Execution                | Linux Docker daemon with cgroup v2; no Windows execution support. |
 
-From the printed package directory, verify before installing the matching file:
+Capture and demo setup require trusted `/usr/bin/git`; the TUI requires a terminal. The executable has no runtime Go, Bun or C-library requirement. Race tests need a C compiler. Cross-compilation is not proof of native execution.
+
+Verify a package before installing a matching binary:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-# Linux also supports: sha256sum -c SHA256SUMS
+# Linux: sha256sum -c SHA256SUMS
 ```
 
-Checksums detect corruption, not publisher authenticity. Unsigned development
-binaries may require the platform's explicit local execution approval.
+Checksums detect corruption, not publisher authenticity. Unsigned development binaries may need local execution approval.
 
-## Without Docker
+## Inspect without Docker
 
 ```sh
 mise exec -- task demo:inspect
-# Retain private JSON steps and captured state for exploration:
+# Keep the private workspace and JSON steps for inspection:
 mise exec -- task demo:inspect -- --keep
 ```
 
-This creates a private temporary Git repository from exactly four allowlisted
-synthetic payment fixture files. It commits the 24-hour base, edits retention to
-five minutes, captures the dirty candidate and inspects the raw diff. It imports
-the checked-in synthetic Go report, explicitly labeled **reported / unknown /
-not_run**. It does not run those tests, contact Docker, infer HTTP inputs or invent
-payment effects. The fixture files and report are the only source data copied;
-no caller project, ignored files, credentials or production services are used.
+The demo creates its own temporary Git repository from four allowlisted synthetic payment files, commits a base, changes retention, captures the candidate, inspects the diff and imports a checked-in Go report. It does not run the imported tests, the payment app, or Docker; the report is labeled `reported / unknown / not_run`. It copies no caller project, ignored files, credentials or production services. JSON steps live outside the fixture repository. Use captured IDs with `after inspect` or `after review BASE CANDIDATE --project WORKSPACE/payment`.
 
-Each native CLI response is written to `step-NN.json` outside the fixture project.
-Use the capture step's base/candidate IDs with `after inspect` or
-`after review BASE CANDIDATE --project PRINTED_WORKSPACE/payment`.
-The no-Docker route has no observed receipt to pin as a finite example. In the
-TUI, `1`/`2`/`3` and Tab/Shift+Tab switch Overview, Changes, and Diff; the frame
-shows short snapshot IDs and sources. After an external edit, `c` captures in the
-background and `u` confirms use of the new candidate while retaining the original
-base. `p`, `u`, and eligible `a` actions name their exact IDs and record a reason;
-Esc cancels. `a` accepts a pin's current complete result, never a snapshot.
+There is no observed receipt to pin in this route. In the TUI, `1`/`2`/`3` and Tab/Shift+Tab switch Overview, Changes and Diff. After an edit, `c` captures and `u` explicitly selects the new candidate while retaining the base. `p`, `u` and eligible `a` actions identify their target and record a reason; Esc cancels. `a` accepts a pin's current complete result, never a snapshot.
 
-## Real offline payment loop
+## Run the synthetic payment experiment
 
-Execution requires an explicitly selected trusted absolute Docker CLI, a local
-Unix socket, a Linux daemon with cgroup v2/resource controls, and the pinned image.
-macOS requires a prepared Linux VM, such as Colima (at least 2 GiB memory).
-See [sandbox provisioning and limits](SANDBOX.md). Provisioning is an explicit
-network action, never performed by the demo:
+Execution is a separate operator action. It requires an explicitly configured absolute Docker CLI, local Unix socket, Linux daemon with cgroup v2/resource controls, and the pinned image. On macOS, prepare a Linux VM such as Colima with at least 2 GiB RAM. See [sandbox setup and recovery](SANDBOX.md).
+
+Pulling the image is an explicit network action; the demo never pulls it:
 
 ```sh
 docker pull docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
 ```
 
-Example for a prepared Linux machine:
+Example for Linux:
 
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
@@ -90,63 +63,29 @@ AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
 mise exec -- task demo -- --keep
 ```
 
-On macOS substitute the installed CLI's absolute path and the local socket from
-`docker context inspect colima`. No context or credential configuration is
-inherited by the actual sandbox. The demo never silently pulls a missing image.
+On macOS, use the absolute CLI path and local socket from `docker context inspect colima`; the sandbox does not inherit Docker contexts or credentials. The demo shows the exact plan and requires its digest. EOF or a different digest stops before execution. Builds and processes run offline in isolation and may take several minutes.
 
-The command walks capture/import/inspect, displays an exact execution preview,
-and asks you to type its digest. Read the snapshots, image, argv, isolation and
-limits before consenting. EOF or a different digest stops before execution.
-Allow several minutes: every observation builds and runs real processes offline.
+The actual workflow is:
 
-1. The initial receipt must record identical HTTP responses, **one → two** actual
-   provider requests at twelve hours, and the unchanged **one → one** 30s control.
-2. A finite expectation is pinned with an explicit synthetic-demo reason.
-3. The demo restores 24-hour retention with a small comment edit and captures it.
-4. Selecting that candidate must reopen the pin as stale with no current result.
-5. A second preview requires separate exact consent. The rerun uses the pin's
-   original base, records **one → one** in both cases, and attaches its new receipt.
-6. Attachment does **not** accept the expectation or establish universal behavior.
-   Human acceptance remains a separate [review action](REVIEW.md).
+1. The original 24-hour/5-minute pair has identical HTTP responses, with provider requests **1 → 2** at 12 hours and **1 → 1** at 30 seconds.
+2. AFTER pins a finite expectation with a synthetic-demo reason.
+3. The demo restores 24-hour retention with a comment edit and captures the new candidate.
+4. Selecting it reopens the pin as stale with no current result.
+5. A second exact-plan consent reruns the original base against the new candidate. Both cases record **1 → 1**; the receipt is attached but not accepted.
+6. Human acceptance remains a separate [review action](REVIEW.md). The expectation is not a general assertion.
 
-For an explicitly authorized automated synthetic check, `task demo:proof` passes
-`--authorize-synthetic-plans`, then logs and authorizes both exact generated plans
-without prompts. No environment variable skips consent. This is the demo's
-CI proof mode, not consent configuration for arbitrary project execution.
-`task test:poc` additionally runs the full adversarial Docker/PTY gate and mutation
-controls. Neither command starts production services or uses a host fallback.
+`task demo:proof` explicitly authorizes only generated synthetic plans, without prompts; no environment variable bypasses consent. This is a CI proof mode, not permission for arbitrary project commands. `task test:poc` runs the broader adversarial Docker/PTY gate and mutation checks. Neither uses a host fallback or production service.
 
-## Ownership, failure diagnostics and recovery
+## Ownership and recovery
 
-A successful demo removes only the temporary directory it created in the canonical
-OS temporary directory, after checking its original inode, random ownership token
-and prefix. Symlink targets are not followed during deletion. Docker resources are
-removed by the runner using exact random names and ownership labels. Unrelated
-repositories/resources are untouched. `--keep`, consent denial and operational
-errors retain the printed workspace and JSON steps for diagnosis. There is no
-cross-session automatic deletion command: inspect the exact retained directory
-and `.owner` before manually moving it to Trash. Do not delete paths by glob,
-shared label or guessed name. Retained `.after` data is private; never commit it.
+A successful demo deletes only its own temporary directory after checking the canonical temp directory, inode, random ownership token and prefix. It does not follow symlinks. Runner resources use exact random names and ownership labels. `--keep`, consent denial and operational errors retain the printed workspace and JSON steps. Inspect the exact retained directory and `.owner` before moving it to Trash; never delete by glob, label alone or guessed name. Keep `.after/` private and out of Git.
 
-- **Missing binary/tools:** run `task init` then `task build`. Demo setup requires
-  `/usr/bin/git`; missing fixture data means run the task from a complete checkout.
-- **Docker endpoint/image/isolation failure:** inspect the incomplete run JSON and
-  sandbox diagnostics. Set both Docker variables, provision the exact image,
-  verify the local daemon/cgroup controls, then start a new demo. Do not substitute
-  host execution or weaken policy. Operational failure is not behavioral equality.
-- **Store lock/permissions/schema/hash errors:** stop competing writers, check
-  ownership and private permissions, and preserve the store. Never remove a live
-  lock, edit hashes/manifests or downgrade a newer schema. Use a compatible binary;
-  for this disposable demo start a fresh workspace instead of repairing evidence.
-- **Interrupted execution/cleanup failure:** stop further execution and follow
-  [sandbox recovery](SANDBOX.md#residual-limits-and-failure-recovery). Match exact
-  names, labels, creation time and inputs to the interrupted invocation before
-  removing anything. Never globally prune. Ordinary CLI SIGINT/SIGTERM cancels the
-  runner context; forced process death, power loss or daemon failure can still
-  leave resources. A killed client does not prove daemon cleanup completed.
-- **Package/checksum failure:** keep the failed directory for diagnosis; rerun
-  packaging to a new directory. Never distribute a partial or mismatched set.
+| Failure                                 | Safe next step                                                                                                                                                                                             |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Missing tools/binary                    | Run `task init`, then `task build`; demo setup requires `/usr/bin/git`.                                                                                                                                    |
+| Docker/image/isolation                  | Inspect incomplete run JSON and sandbox diagnostics; configure both Docker variables, provision the exact image and verify daemon/cgroup controls. Start a new demo. Never use host execution.             |
+| Store lock, permissions, schema or hash | Stop competing writers, check ownership/private permissions and preserve the store. Do not remove a live lock, edit hashes, or downgrade a newer schema. Start a fresh workspace for this disposable demo. |
+| Interrupted run or cleanup failure      | Stop execution. Follow [sandbox recovery](SANDBOX.md#residual-limits-and-failure-recovery), matching exact names, labels, time and inputs. Never globally prune.                                           |
+| Package/checksum failure                | Retain the failed directory; retry into a new directory. Do not distribute partial/mismatched files.                                                                                                       |
 
-The runner observes only sequential synthetic payment HTTP responses and fake
-provider requests, with a finite window. Arbitrary application adapters, remote
-PR synchronization, browser behavior and human validation remain deferred.
+Normal SIGINT/SIGTERM cancels the runner context. Forced process death, power loss or daemon failure may leave resources; a killed client does not prove daemon cleanup. The runner observes only sequential synthetic HTTP responses and fake-provider requests in a finite window. Arbitrary adapters, remote PR sync, browser behavior and human validation are deferred.

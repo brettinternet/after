@@ -1,148 +1,58 @@
 # Evidence records, version 1
 
-AFTER-1 provides Go types and validation in `internal/evidence`. AFTER-2 adds
-[private storage](STORAGE.md); AFTER-3 adds [local Git capture](CAPTURE.md).
-AFTER-4 adds [Go test report cards](GO-REPORTS.md), including incomplete cards
-with report status `none`. AFTER-8 adds [frozen paired execution](RUNNER.md);
-AFTER-9 adds [exact finite comparisons](COMPARISON.md); AFTER-11 adds
-[persistent expectations and explicit review transitions](REVIEW.md). All test
-records and the [scenario example](schema-example.json) are **synthetic**.
-Their digests are placeholders, not measurements.
+`internal/evidence` defines and validates AFTER's local record contracts. [Storage](STORAGE.md), [capture](CAPTURE.md), [Go report import](GO-REPORTS.md), [runner](RUNNER.md), [comparison](COMPARISON.md), and [review](REVIEW.md) own persistence and behavior. The [schema example](schema-example.json) is synthetic; its digests are placeholders, not measurements.
 
-## Encoding and identities
+## Encoding and identity
 
-Each record has `schema_version: 1` and an `id` formatted as
-`sha256:` plus 64 lowercase hex digits. Content references use the same format.
-Resolved Git commit identities are 40 or 64 lowercase hex digits. An unborn
-snapshot instead has `unborn: true` and an empty `commit` (never in merge-base mode).
-Merge-base captures additionally retain the resolved input `base_commit` alongside
-the target `commit` and `merge_base`. Working-tree snapshots may bind an
-`index_snapshot` digest; storage verifies that it is an index snapshot with the
-same commit/unborn basis. Branch names,
-timestamps and paths are not content identities. ID derivation and checking
-referenced bytes against digests belong to capture/storage, not this validator.
-Stored pin IDs identify immutable content versions; AFTER-11 owns stable review
-selection and append-only history transitions.
+Every record has `schema_version: 1` and an ID of `sha256:` plus 64 lowercase hex digits. Content references use that form. Resolved Git commits are 40- or 64-character lowercase hex. An unborn snapshot has `unborn: true` and an empty `commit` (never in merge-base mode). Merge-base captures retain the resolved base tip, target commit, and merge-base—not branch names. A working-tree snapshot may bind an index snapshot with the same commit/unborn basis.
 
-`Decode[Snapshot|Capture|Scenario|Receipt|Comparison|Pin]` accepts one JSON
-object, at most 4 MiB, rejects unknown fields, unsupported versions (including
-zero), trailing values and invalid records, and returns a zero record on failure.
-It never rewrites or migrates input. Strings are UTF-8 JSON; times use RFC 3339.
-The Go JSON decoder's
-duplicate-key handling applies (later values replace/merge earlier values);
-records are local data, not signed canonical JSON.
+Storage derives a new record ID from the Go JSON encoding with `id` empty; supplied IDs must match. This is a local encoding contract, not canonical cross-language JSON or a signature. Capture/storage verify referenced bytes and content hashes. Branch names, timestamps, and paths are not content identities.
 
-Call `Validate` before persisting constructed records. Values are ordinary Go
-structs, not immutable objects: storage must preserve immutable receipts rather
-than overwrite them. Optional fields use `omitempty`; required enums have no
-implicit safe-success zero value. A nil collection means no entries, not evidence
-of coverage.
+`Decode[Snapshot|Capture|Scenario|Receipt|Comparison|Pin]` reads at most 4 MiB, accepts one JSON object, rejects unknown fields, unsupported versions (including zero), trailing values, and invalid records, and returns a zero record on failure. It does not rewrite or migrate input. Strings are UTF-8 JSON; times are RFC 3339. Go's JSON decoder handles duplicate keys by replacing/merging earlier values with later values; records are local data, not signed canonical JSON.
 
-An immutable **Capture** record identifies one successful capture event: its
-`captured_at` RFC 3339 time, `mode`, base/candidate snapshot IDs, optional index
-snapshot ID, and exact selected untracked paths. It is stored separately from
-snapshots so recapturing unchanged content preserves snapshot IDs but records a
-new event. Capture times are event metadata, never inferred from file mtimes;
-older snapshots without a matching Capture record have no recorded capture time.
-The event ID is content-addressed like other records and does not change snapshot
-identity.
+Call `Validate` before persisting constructed records. Go structs are mutable; storage must not overwrite immutable receipts. Optional fields use `omitempty`; required enums have no implicit success value. A nil collection means no entries, not evidence of coverage.
 
-## Record fields
+A successful immutable `Capture` event stores `captured_at`, mode, base/candidate snapshot IDs, optional index ID, and exact selected untracked paths (each at most 4096 bytes). Recapturing unchanged content preserves snapshot IDs but creates a new event. Capture time is not inferred from file mtimes; snapshots without a matching event have no recorded time. The event ID does not change snapshot identity.
 
-| Record   | Required content and meaning                                                                                                                                                                                                                                                              |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Snapshot | Source mode (`commit`, `working_tree`, `index`, `merge_base`), resolved commit, merge-base only for that mode, files with relative path/content digest/Git mode, excluded and unsupported entries with reasons, completeness, ordinary diff digest, limits.                               |
-| Capture  | Successful capture time and mode, base/candidate and optional index snapshot IDs, and selected untracked paths. It is a new immutable event on every successful capture, even when all snapshot IDs are unchanged.                                                                        |
-| Scenario | Frozen concrete input/setup/actions artifact digest, driver, observer and rules digests, supported boundary, author and explicit limits. Expectations are deliberately absent.                                                                                                            |
-| Receipt  | Independent state fields, selected snapshot identities, ordered start/finish times, completeness, bounded artifact references and limits. Runner records additionally require both snapshots, scenario/input/driver/observer/rules bindings, both environments, and authorization digest. |
-| Pin      | Scenario, human expectation text (specific result or explicitly broader requirement), basis receipt and snapshot pair, human decision and chronological history. No evidence state, execution authority or observation fields.                                                            |
+## Record fields and bounds
 
-A complete snapshot means complete within the declared selection policy, not that
-excluded files were captured. Untracked exclusions remain inventoried. Unsupported
-entries force incomplete capture. Incomplete captures need a limitation. Paths
-cannot be absolute, traverse upwards, contain NUL/backslash/colon or repeat across
-inventory lists. Only regular Git modes `100644` and `100755` are captured here;
-symlinks and other entries must be inventoried as unsupported.
+| Record       | Contract                                                                                                                                                                                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Snapshot`   | Source mode (`commit`, `working_tree`, `index`, `merge_base`), resolved commit, merge-base identities when applicable, relative path/content digest/Git-mode inventory, excluded and unsupported entries with reasons, completeness, ordinary diff digest, and limits.        |
+| `Capture`    | Successful capture time/mode, base/candidate and optional index snapshot IDs, selected untracked paths. A new immutable event per successful capture.                                                                                                                         |
+| `Scenario`   | Frozen input/setup/actions artifact, driver, observer and rules digests, supported boundary, author, and explicit limits. Expectations are separate.                                                                                                                          |
+| `Receipt`    | Independent state axes, snapshot pair, ordered start/finish times, completeness, bounded artifact references, and limits. Runner receipts also bind scenario/input/driver/observer/rules, both environments, and authorization.                                               |
+| `Comparison` | Outcome, completeness, and scoped limits, bound to a receipt. Optional `details` references a `comparison-details-v1` artifact with exact channel witnesses, sample references, policy digest, and source-inventory links. Old comparisons without `details` remain readable. |
+| `Pin`        | Scenario, human expectation, basis receipt and snapshot pair, last human decision, and chronological history. It has no execution authority or observation fields.                                                                                                            |
 
-Imported Go test report metadata may omit `producer`. When present, it is an
-unverified caller-supplied claim; absence means no producer claim, not an
-inferred producer. Existing reports with a producer remain valid. A report's
-optional `snapshot` is likewise only a caller binding and does not prove test
-applicability.
+A complete snapshot is complete only within its selection policy; excluded files were not captured. Unsupported entries force incomplete capture. Incomplete captures need a limitation. Paths cannot be absolute, traverse upward, contain NUL/backslash/colon, or repeat across inventory lists. Selected untracked paths cannot include `.git` or `.after` components. Only regular Git modes `100644` and `100755` are captured; symlinks and other entries are unsupported.
 
-Environment bindings contain environment, toolchain and dependency digests plus
-explicit argv. These are actual execution identities when a runner exists, not
-permission to execute. Runner receipts, including failed/cancelled runs, require
-the entire planned binding; unavailable actual environment evidence must not be
-fabricated to make a record validate. Pre-execution planning errors need not
-produce a run receipt. AFTER-8 receipts add optional `request_id` (a runner-only
-digest) to bind asynchronous submission through storage. Its failed/unstarted
-samples retain the frozen plan bindings but explicitly omit actual derived image
-identities when no container was prepared; they never claim observed execution.
-Per-side/case/repetition sample artifacts record actual images, completion,
-cleanup, timestamps and separate observation/diagnostic artifact references.
+Imported Go reports may omit `producer`. If present, it is an unverified caller claim; absence means no producer claim. Optional report `snapshot` is likewise a caller binding, not proof of test applicability.
 
-Artifacts contain a content digest (never an arbitrary path), channel, retained
-byte count, positive maximum byte count, completeness, redaction and truncation
-flags. A complete receipt requires at least one complete, unredacted, untruncated
-artifact. Storage must additionally enforce real byte limits and content hashes.
-Artifacts and receipts optionally carry `redaction_policy: literal-v1`; redacted
-records require it. Receipt-level `redacted` also forces incomplete evidence.
-The initial conservative contract permits conclusive comparisons only for complete
-receipts. A stored Comparison binds an outcome, completeness and scoped limits to
-a receipt. AFTER-9 adds optional `details`, an artifact descriptor for the bounded
-`comparison-details-v1` report: exact channel witnesses, paired/repetition sample
-references, policy digest and source inventory links. Old records without details
-remain readable. Values live in the artifact, preserving number tokens rather
-than passing through generic record sanitization. Partial/redacted/truncated
-details cannot support a conclusive comparison.
+Runner receipts—including failed or cancelled runs—require the complete planned binding. Do not invent actual environment evidence when unavailable. Pre-execution planning errors need no run receipt. An unstarted sample retains frozen plan bindings but omits actual derived image identities if no container was prepared. Samples retain actual images, completion, cleanup, timestamps, and separate observation/diagnostic artifact references. AFTER-8 may add `request_id` to bind asynchronous submission through storage.
+
+Artifacts use content digests, never arbitrary paths, with channel, retained bytes, positive max bytes, completeness, redaction, and truncation flags. Storage enforces byte limits and hashes. A complete receipt needs at least one complete, unredacted, untruncated artifact. Redacted records require `redaction_policy: literal-v1`; receipt-level redaction forces incomplete evidence. The initial contract permits conclusive comparison only for complete receipts. Comparison details cannot be partial, redacted, or truncated if used for a conclusive result. Values remain in the artifact to preserve JSON number tokens.
 
 ## Independent state axes
 
-| Field                     | Values                                                           |
-| ------------------------- | ---------------------------------------------------------------- |
-| Producer                  | `importer`, `runner`                                             |
-| Kind                      | `reported`, `observed`, `none`                                   |
-| Applicability             | `unknown`, `current`, `stale`                                    |
-| Execution                 | `not_run`, `completed`, `failed`, `cancelled`                    |
-| Comparison                | `not_compared`, `equal`, `different`, `incomparable`, `unstable` |
-| Report status             | `none`, `pass`, `fail`, `skip`                                   |
-| Human decision (pin only) | `pinned`, `accepted`, `reopened`                                 |
+| Axis          | Values                                                           |
+| ------------- | ---------------------------------------------------------------- |
+| Producer      | `importer`, `runner`                                             |
+| Kind          | `reported`, `observed`, `none`                                   |
+| Applicability | `unknown`, `current`, `stale`                                    |
+| Execution     | `not_run`, `completed`, `failed`, `cancelled`                    |
+| Comparison    | `not_compared`, `equal`, `different`, `incomparable`, `unstable` |
+| Report        | `none`, `pass`, `fail`, `skip`                                   |
+| Pin decision  | `pinned`, `accepted`, `reopened`                                 |
 
-An imported pass is always reported/unknown/not_run/not_compared. Its selected
-candidate snapshot is an association, not validated applicability. It cannot
-assert runner environments, frozen bindings or authorization. A report without a
-terminal status uses `none`, never inferred success. Importer snapshot bindings
-remain caller-supplied and unverified; they never promote applicability.
+Imported evidence is always `importer`/`reported`/`unknown`/`not_run`/`not_compared`. A snapshot association is not applicability. Importers cannot assert runner environments, frozen bindings, or authorization. A report without terminal status is `none`, never inferred success. Caller-supplied snapshot binding never promotes applicability.
 
-Observed evidence requires completed runner execution. Completion means the
-experiment completed, not that behavior passed. Failed/cancelled/unexecuted runs
-have no evidence and cannot be current, equal, different or unstable. An old
-observation may remain observed while applicability becomes stale or unknown.
-Incomplete, missing, redacted or truncated observations cannot establish equality.
+Observed evidence requires completed runner execution; completion means the experiment finished, not that behavior passed. Failed, cancelled, or unexecuted runs have no observation and cannot be current, equal, different, or unstable. Old observations may remain observed while stale or unknown. Missing, incomplete, redacted, or truncated observations cannot establish equality.
 
-A pin's last history event determines its decision; history begins with pinned.
-Accepting/reopening it never changes a receipt, expectation or applicability.
-The store/review layer enforces snapshot/scenario/receipt basis checks and appends
-immutable revisions. Scoped pins add `scope` (`finite_example` or `human_intent`)
-and a `review` context per history event: action, comparison mode, prior candidate,
-expected target bindings, and optional actual receipt ID. Changed selections
-reopen without a current receipt. Attachment cannot accept, and a different
-receipt reopens an accepted pin; explicit acceptance
-cannot change selection. Missing contexts/scope in legacy pins remain readable
-but confer no current applicability. See [review](REVIEW.md) for bounds and reuse.
+A pin's latest history event determines its decision; history starts with `pinned`. Accept/reopen never changes the expectation, receipt, or applicability. The store/review layer checks snapshot/scenario/receipt basis and appends immutable revisions. Scoped pins use `finite_example` or `human_intent`; each history event records action, comparison mode, prior candidate, expected bindings, and optional actual receipt. Changed selection reopens without a current result. Attachment does not accept; attaching a different receipt reopens an accepted pin; acceptance cannot change selection. Legacy pins without scope/context remain readable but confer no current applicability. See [review](REVIEW.md) for transitions and reuse rules.
 
-## Trust boundary and deferred checks
+## Trust boundary
 
-Validation establishes **structural consistency, not truth**. It cannot check
-whether referenced captures exist, whether a producer actually executed, whether
-artifacts are compatible, or whether a receipt applies to a newly selected pair.
-Even a fully bound digest is not a signature. Consumers must not decode arbitrary
-repository JSON as trusted runner evidence. AFTER-4 constructs importer
-cards from supported report facts; AFTER-8 owns locally authorized runner
-receipts; AFTER-9/11 own compatibility and applicability derivation.
+Validation checks structural consistency, not truth. It cannot prove referenced captures exist, that a producer executed, that artifacts are compatible, or that a receipt applies to a newly selected pair. A digest is not a signature. Never decode arbitrary repository JSON as trusted runner evidence. `internal/gotestreport` constructs importer cards; `internal/runner` creates locally authorized receipts; `internal/compare` and `internal/review` derive compatibility/applicability.
 
-The [headless CLI](CLI.md) accepts and emits these records through bounded
-commands. Help, configuration display, import, inspection, and comparison do not
-execute repository code. The exact authorized runner path is separate; no model
-client or init-time hook can create evidence or grant consent.
+The [CLI](CLI.md) accepts and emits records through bounded commands. Help, configuration, import, inspection, and comparison do not execute repository code. Execution uses the separate exact-consent runner path. No model client or init-time hook creates evidence or grants consent.

@@ -1,266 +1,121 @@
 # Review-loop study kit v1
 
-**Status: runnable technical kit, not a completed study.** Generated runs are
-**author rehearsals**. No participants, timing observations, usability gains or
-market-value results are supplied. M1/M2 technical completion does not establish
-usability or market value. AFTER-18 requires explicit human authorization.
+This is a runnable technical kit, not a completed human study. Generated runs are **author rehearsals**; there are no participant results, usability gains, or market-value findings. AFTER-18 requires explicit human authorization.
 
 ## Prepare and freeze
 
-Use a prepared checkout and the [demo prerequisites](DEMO.md), including the
-separately provisioned pinned Docker image. These commands only use synthetic
-payment files; never substitute a participant's repository or credentials.
+Use a prepared checkout and the [demo prerequisites](DEMO.md), including separately provisioned pinned Docker image. Use only the kit's synthetic payment files, never a participant's repository or credentials.
 
 ```sh
 mise exec -- task study:check
 mise exec -- task study:assign -- --assign-seed cohort-01 --participants 12
-# Set AFTER_DOCKER_BINARY and AFTER_DOCKER_HOST as in docs/DEMO.md first.
-# Explicit authorization for six bounded synthetic runs; retains private kit:
+# Set AFTER_DOCKER_BINARY and AFTER_DOCKER_HOST as described in DEMO.md.
 mise exec -- task study:proof -- --keep
 ```
 
-`study:proof` is the automated consistency/smoke check and author rehearsal. It
-fails on incomplete runs, wrong responses/counts, missing controls, cleanup
-failures or failure to reopen stale/missing. It executes the shipped native CLI,
-not a simulated evidence renderer. Omit `--keep` for an automatically cleaned
-check. Without Docker, `task study:check` exercises assignments and native
-capture of all three initial cases, including their changed oracle inventory.
-That check alone does **not** validate observed keys.
+`study:proof` explicitly authorizes six synthetic offline runs and validates the independently observed keys. It fails on incomplete runs, wrong responses/call counts, missing controls, cleanup failures, or failure to reopen stale/missing evidence. `--keep` retains the private kit; omit it for automatic cleanup. `study:check` needs no Docker: it checks assignment consistency and captures the three initial cases, including changed-oracle inventory, but does not validate observed keys. For interactive per-plan consent, use `task demo -- --study --keep`. No silent pull or host-execution fallback is allowed. Do not distribute an incomplete generation without all three facilitator keys.
 
-For per-plan interactive consent instead, run `task demo -- --study --keep`.
-No silent image pull or host execution fallback is permitted. Interrupted runs
-retain diagnostics under the demo's ownership rules; see [recovery](DEMO.md).
-Do not distribute an incomplete generation lacking all three facilitator keys.
+Before recruitment, freeze the Git commit, Go version, executable checksum, assignment seed/output, kit version, and successful proof log in private study storage. Preserve generated receipt IDs, which bind snapshots, driver, observer, rules, and runtime—not just screenshots. Keep generated paths and `.after` stores private and out of Git. A case or scoring change requires a new kit version and rehearsal.
 
-Freeze the Git commit, Go version, executable checksum, assignment seed/output,
-kit version and successful proof log in private study storage before recruitment.
-Generated receipt IDs bind the actual snapshots, driver, observer, rules and
-runtime. Preserve those IDs, not just a screenshot or this prose. All generated
-paths and `.after` stores stay private and out of Git. Changing cases or scoring
-requires a new kit version and a new rehearsal before collecting human data.
+## Cases and keys
 
-## Cases and independent keys (facilitator only)
+The synthetic payment API is unfamiliar to eligible participants. Exclude AFTER implementers and anyone who has seen this fixture or its keys. Teach the API, not the retention defect. The cases are matched variants of one service, not three independent domains; record prior familiarity and analyze order/period effects.
 
-The synthetic service is unfamiliar to eligible participants: exclude people who
-implemented AFTER or have seen this fixture/answer key. Explain the small payment
-API during training, not the retention defect. These are matched variants of one
-service, not three independent real-world domains. Transfer learning is likely;
-record prior familiarity and analyze period/order effects.
+| Case | Initial change from 24h                                     | Follow-up                                      | Twelve-hour provider calls, base → candidate |
+| ---- | ----------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| A    | Retention becomes 5m; test expectation is changed to match. | Restore 24h and the matching test.             | Initial 1→2; follow-up 1→1.                  |
+| B    | Retention becomes 1h; test expectation is changed to match. | Comment only.                                  | Initial and follow-up 1→2.                   |
+| C    | Retention becomes 6h; test expectation is changed to match. | Weaken test to a positive-retention assertion. | Initial and follow-up 1→2.                   |
 
-| Case | Initial edit from 24h retention                 | Controlled follow-up                        | Key at 12h, base → candidate   |
-| ---- | ----------------------------------------------- | ------------------------------------------- | ------------------------------ |
-| A    | Retention 5m; test expectation changed to match | Restore 24h and matching test               | Initial 1 → 2; follow-up 1 → 1 |
-| B    | Retention 1h; test expectation changed to match | Comment only                                | Initial and follow-up 1 → 2    |
-| C    | Retention 6h; test expectation changed to match | Weaken test to positive-retention assertion | Initial and follow-up 1 → 2    |
+Every run has identical HTTP responses on both sides and a thirty-second control with provider calls 1→1. Counts come from the runner's protected observer, not app stdout or expected-output files. `facilitator-key.json` is written after those checks pass and links the initial and independently executed follow-up receipts. `initial-observations.json` and `key-observations.json` contain the response/call documents used by assertions. Participant-edited tests are captured source, **not executed test reports**.
 
-For **every** run: two identical HTTP responses on both versions, and a 30s
-control with provider requests 1 → 1. Counts are actual requests recorded by the
-runner's protected observer, not app stdout or changed expected-output files.
-`facilitator-key.json` is written only after those assertions pass; it links the
-initial receipt and independently executed follow-up receipt.
-`initial-observations.json` and `key-observations.json` contain the actual response
-and call documents used by the assertions. The participant's changed tests are
-not the observer. They are captured source, **not executed test reports**; do not
-describe them as passing or use them to claim preserved behavior.
+The finite expectation is one provider request for a repeated payment at twelve hours. Initial A/B/C violate it; A's follow-up repairs this witnessed defect, while B/C do not. B changes no executable behavior: whole-footprint invalidation is conservative, not proof of a regression. C changes only the oracle and adds no behavioral evidence. A changed oracle cannot redefine the frozen expectation.
 
-The expectation is one provider request for a repeated payment at twelve hours.
-Initial A/B/C all violate that finite expectation even though responses match.
-A repairs this witnessed defect; B/C do not repair it. B adds no executable change:
-whole-footprint invalidation is conservative, not evidence of a new regression.
-C changes only the oracle and supplies no stronger behavioral evidence. A changed
-oracle cannot redefine the frozen expectation.
+### Phases
 
-Each case has three presentation phases:
+1. **Missing:** show captured code/diff, no observation. A labeled prediction is allowed; an observed/fresh claim is wrong. `missing-project/` is a separate pre-execution checkpoint with no receipt.
+2. **Initial:** provide initial response/call artifacts to all conditions. A setup pin expresses the finite requirement, not participant acceptance.
+3. **Follow-up:** show the controlled edit, old observation, and reopened pin. Applicability is stale, with no current result. Do not reveal the independently verified follow-up until the participant explains and chooses whether another experiment would help. Old evidence is not fresh even in B.
 
-1. **Missing:** captured code/diff, no observation. Prediction is allowed if labeled
-   as such; an observed/fresh claim is wrong. `missing-project` is a separate
-   pre-execution checkpoint with no receipt.
-2. **Initial:** provide the initial response/call artifacts in all conditions.
-   A setup pin expresses the finite requirement, not participant acceptance.
-3. **Follow-up:** show the controlled edit, old observation and reopened pin.
-   Applicability is stale, with no current result. Do not reveal the separately
-   verified follow-up until the participant submits an explanation and chooses
-   whether another experiment is useful. Old results are not fresh even in B.
+For this study's question, rerunning B only to recover the same finite example after a comment edit is scored avoidable; it can still be a reasonable conservative policy. Record the reason. Rerunning A to check the repair is useful. For C, a changed test is not proof of preserved behavior; verifying unchanged executable code is conservative, not evidence of a new effect.
 
-A rerun of B solely to recover the same finite example after a comment edit is
-scored as avoidable for this study's question; it may still be a reasonable
-conservative operational policy. Record the participant's reason and distinguish
-that cost from a false-freshness error. Rerunning A to check the repair is useful.
-C does not justify treating the changed test as preserved behavior; verifying an
-unchanged executable can be conservative, not proof of a new effect.
+Limits: sequential synthetic retries at 30s and 12h only; no real charges, concurrency, other intervals, production provider, or universal correctness. Score source inference separately from independent observation.
 
-Limits: sequential, synthetic retries at 30s and 12h only; no real charges,
-concurrency, other intervals, production provider, or universal correctness.
-Source-based inference and independent observations must be scored separately.
+## Conditions and private packets
 
-## Equivalent conditions and packet isolation
+Each person sees each case once, in one condition. All conditions get the same scenario, finite expectation, source, diffs, evidence documents, and time budget; only navigation/presentation differs. Raw gets all artifacts too, so information availability is not confounded with interface quality.
 
-One participant sees each case once, in one condition. Never repeat a case in a
-second condition for the same person. All conditions receive the same scenario,
-finite expectation, source, diffs, evidence documents and time budget. Only the
-navigation/presentation differs. A raw condition without the available artifacts
-would confound information availability with interface quality.
+Generated `A/`, `B/`, `C/` directories contain:
 
-Generated case directories `A/`, `B/`, `C/` contain:
+| Files                                                             | Contents                                                                                                          |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `initial.diff`, `followup.diff`                                   | Full tracked app/oracle diffs vs HEAD. Follow-up still uses original base; compare diffs to isolate the new edit. |
+| `missing.json`, `initial.json`, `followup.json`                   | Captured pair and immutable pin revision IDs. Follow-up deliberately has no current receipt.                      |
+| `missing-project/`, `initial-project/`                            | Pre-execution and initial source/store checkpoints. Initial has no follow-up snapshot.                            |
+| `payment/`                                                        | Participant inspection store with initial observations and stale follow-up, **not** the answer-key run.           |
+| `facilitator-project/`, `facilitator-key.json`, `key-*`, `step-*` | Facilitator answers and diagnostics; never share with participants.                                               |
 
-- `initial.diff`, `followup.diff`: complete tracked app/oracle diffs versus HEAD.
-  Explain that follow-up diffs still use the original base; compare the two to
-  isolate the new edit.
-- `missing.json`, `initial.json`, `followup.json`: exact captured pair and immutable
-  pin revision IDs. `followup.json` deliberately has no current receipt.
-- `missing-project/`: pre-execution source/store checkpoint.
-- `initial-project/`: initial source/store checkpoint, with no follow-up snapshot.
-- `payment/`: participant inspection store, containing initial observations and
-  the stale follow-up, **not** the follow-up answer-key run.
-- `facilitator-project/`, `facilitator-key.json`, `key-*`, `step-*`: facilitator
-  diagnostics/answers. Never place these in a participant's accessible directory.
+The generated root is a facilitator master, not a handout. Make separate private participant directories/accounts. Copy only the selected source, phase diff/ID file, and permitted initial-observation document. For AFTER, copy only `missing-project`, `initial-project`, or `payment` for the relevant phase. Never share the master, keys, proof log, or this facilitator document. Use an isolated participant account; never use the `payment` store during the initial phase because it contains the follow-up snapshot.
 
-The generated root is a **facilitator master**, not a participant handout. Prepare
-separate private participant directories/accounts: copy only the selected source,
-phase diff, phase ID file and permitted initial observation document. For AFTER,
-copy only the appropriate `missing-project`, `initial-project`, or `payment` store
-for the missing, initial, or follow-up phase, respectively. Do not share the master root, key files, proof log or this
-facilitator document. These synthetic copies contain no secrets; nevertheless
-use an isolated participant account so sibling paths cannot reveal answers.
-Never use the `payment` store in the initial phase: it contains the follow-up
-snapshot. Separate checkpoints permit independent browsing without future-state
-or answer-key leakage.
+| Condition | Allowed material                                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------------------- |
+| Raw       | Ordinary diff/source viewer, phase facts, plain JSON response/call artifacts; no AFTER labels or guided annotations. |
+| Tour      | Same material plus the identical scripted tour below.                                                                |
+| AFTER     | Native CLI/TUI, same artifacts, complete raw-diff escape; no extra verbal diagnosis.                                 |
 
-| Condition | Allowed presentation                                                                                                    |
-| --------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Raw       | Ordinary diff/source viewer, phase facts and plain JSON response/call artifacts. No AFTER labels or guided annotations. |
-| Tour      | The same materials plus the scripted guided tour below, delivered identically by the facilitator.                       |
-| AFTER     | Native CLI/TUI, the same artifacts and complete raw-diff escape; no additional verbal diagnosis.                        |
-
-Use an absolute native binary path after copying a store. Read IDs from the phase
-JSON; do not choose the newest receipt automatically. For missing:
+Use an absolute native binary path after copying a store. Read IDs from the phase JSON; never choose newest receipt automatically. Missing phase:
 
 ```text
 after review BASE CANDIDATE --project PARTICIPANT_MISSING_PROJECT
 ```
 
-For initial or follow-up, take `capture.candidate_snapshot.id`,
-`capture.base_snapshot.id` and `pin` from the respective phase JSON:
+Initial/follow-up: use `capture.candidate_snapshot.id`, `capture.base_snapshot.id`, and `pin` from that phase JSON:
 
 ```text
 after review BASE CANDIDATE PIN --project PARTICIPANT_PHASE_PROJECT
 ```
 
-The facilitator handles any execution preview, with the participant's explicit
-choice recorded first. Never give blanket authorization or permit arbitrary
-commands. When a participant requests a rerun, record the request and wait time,
-then reveal the already independently captured matching follow-up artifacts to
-**all conditions under the same policy**. Treat this as a standardized experiment
-request, not live execution time. If measuring actual rerun/setup friction as an
-additional endpoint, run the exact selected pair with new explicit consent in all
-conditions and log it separately; do not mix the two timings.
+The facilitator handles any execution preview after recording the participant's explicit choice. No blanket authorization or arbitrary commands. If a participant requests a rerun, record request and wait time, then reveal the already independently captured follow-up artifacts to every condition under the same policy. Treat this as standardized experiment request, not live execution time. To measure actual rerun/setup friction, obtain new explicit consent in all conditions and log it separately.
 
-### Strong guided tour script
+### Strong guided-tour script
 
-Deliver without inventing conclusions or withholding inconvenient files:
+Deliver verbatim; do not invent conclusions or hide files:
 
-1. “Here is the changed-file map: `app/config.go` is runtime retention;
-   `app/config_test.go` is the test oracle. Read their changes together.”
-2. “Trace retention into the duplicate-request handling in `app/main.go`.
-   The driver issues a repeated payment. Consider response and provider effects
-   separately, using the stated twelve-hour requirement and thirty-second control.”
-3. “The evidence index identifies the captured pair. When available, open the
-   response array and the provider-call array for both sides and both intervals.
-   Check provenance and missing channels before drawing a conclusion.”
-4. “For the follow-up, compare initial and follow-up diffs. The old observation
-   refers to the old candidate. Decide what can be inferred from source, what is
-   actually observed now, and whether another experiment would change your decision.”
+1. “Here is the changed-file map: `app/config.go` is runtime retention; `app/config_test.go` is the test oracle. Read their changes together.”
+2. “Trace retention into the duplicate-request handling in `app/main.go`. The driver issues a repeated payment. Consider response and provider effects separately, using the stated twelve-hour requirement and thirty-second control.”
+3. “The evidence index identifies the captured pair. When available, open the response array and the provider-call array for both sides and both intervals. Check provenance and missing channels before drawing a conclusion.”
+4. “For the follow-up, compare initial and follow-up diffs. The old observation refers to the old candidate. Decide what can be inferred from source, what is actually observed now, and whether another experiment would change your decision.”
 
-This is a strong, curated code/evidence tour, not a straw-man file list. It gets
-no facilitator-only answers. Freeze wording; log deviations and assistance.
+This is a curated code/evidence tour, not a straw-man file list. It gets no facilitator-only answers. Freeze the wording; log deviations and help.
 
-## Reproducible assignment and session
+## Assignment and sessions
 
-`study:assign` emits anonymous P01… slots. Freeze an operator-chosen seed before
-assignment. SHA-256 ordering shuffles the six condition permutations within each
-six-person block, and shuffles initial case order. Case order rotates across
-blocks. At 12 participants each condition occupies each period four times and
-each case/condition pair appears four times. At 18, case/period exposure also
-balances completely. At 16, the final partial block is intentionally incomplete:
-report the actual cells rather than claiming exact balance. At 12, case/period
-balance is incomplete; report that limitation too. Assign consented participants
-to the next unused slot, without rerolling based on skill or desired results.
+`study:assign` emits anonymous P01… slots. Freeze the operator-chosen seed. SHA-256 ordering shuffles the six condition permutations within six-person blocks and initial case order; case order rotates by block. At 12 people, each condition occurs in each period four times and each case/condition pair appears four times, but case/period balance is incomplete. At 18, case/period exposure balances fully. At 16, the last partial block is incomplete. Report actual cells; never reroll assignments based on skill or desired results.
 
-Target **12–16 practicing engineers**, not a completed sample. Reserve 75 minutes:
-consent/background 5m, uniform neutral CLI/TUI/diff training 10m, three 15m trials,
-breaks 5m, debrief 10m. Use an unrelated neutral diff for training, not A/B/C.
-Each trial: missing-evidence probe (2m maximum), initial explanation (5m maximum),
-follow-up explanation/experiment choice (5m maximum), confidence/debrief (3m).
-Mark timeout/censoring rather than inventing a completion time. Offer breaks or
-withdrawal without penalty. Do not troubleshoot during the timer: log downtime,
-stop the active timer and report wall-clock/setup time separately.
+Target **12–16 practicing engineers**, not a completed sample. Reserve 75 minutes: consent/background 5m, neutral CLI/TUI/diff training 10m, three 15m trials, breaks 5m, debrief 10m. Train on an unrelated diff, not A/B/C. Each trial: missing-evidence probe ≤2m, initial explanation ≤5m, follow-up explanation/experiment choice ≤5m, confidence/debrief 3m. Mark timeouts/censoring; never invent completion time. Offer breaks/withdrawal. During troubleshooting stop the active timer and record downtime and wall time separately.
 
-For each phase ask exactly:
+Ask exactly:
 
-> What changed, what concrete user-visible or external consequence follows, and
-> what supports that claim? Is this result observed for the selected candidate?
-> What is unknown? Would you accept this finite requirement, request another
-> example/run, or withhold judgment? Explain why.
+> What changed, what concrete user-visible or external consequence follows, and what supports that claim? Is this result observed for the selected candidate? What is unknown? Would you accept this finite requirement, request another example/run, or withhold judgment? Explain why.
 
-Use the [blank recording sheet](evaluation/trials.csv) and
-[session sheet](evaluation/sessions.csv). Record monotonic elapsed seconds, not
-identifying timestamps. No audio/video, screen recording, credentials, employer
-names, emails, private source or free-form personal background. Obtain informed
-consent separately; keep contact/scheduling data in an operator-controlled system,
-not this repository. Notes must describe synthetic task reasoning only. Tell
-participants they may stop and request deletion; agree on a retention deadline
-before collection (recommended: delete raw notes within 30 days of the report).
+Use [trial sheet](evaluation/trials.csv) and [session sheet](evaluation/sessions.csv). Record monotonic elapsed seconds, not identifying timestamps. No audio/video, screen recording, credentials, employer names, emails, private source, or free-form personal background. Get informed consent separately; keep contact/scheduling data outside this repository. Record only synthetic-task reasoning. Tell participants they can stop and request deletion; agree on a retention deadline first (recommended: raw notes deleted within 30 days of report).
 
-## Predeclared scoring and interpretation
+## Scoring and interpretation
 
-Two raters independently score anonymized explanations against the keys, with
-condition hidden where possible; adjudicate disagreements and retain both scores.
-Do not silently change the rubric after seeing outcomes.
+Two raters independently score anonymized explanations against the keys, hiding condition where possible; adjudicate disagreements and retain both scores. Freeze the rubric before collection.
 
-- **Correct explanation (0–4):** one point each for retention/oracle distinction;
-  exact finite consequence (1→2 initial/B/C or 1→1 A repair, identical responses);
-  evidence applicability (missing/current/stale for the phase); explicit finite
-  scope/unknowns. In the missing phase a properly qualified prediction earns the
-  consequence point; it is not an observed result.
-- **Missed defect (0/1):** initial or B/C follow-up accepts the twelve-hour behavior
-  as satisfying one-call requirement, or fails to identify duplicate requests.
-  A follow-up instead records false-positive defect claims separately.
-- **False freshness (0/1):** treats missing or old-candidate evidence as a current
-  observation. Source reasoning that a comment cannot affect execution is not
-  itself a trust error if the observation is still called stale.
-- **Useful example:** participant can identify an available response/effect
-  witness answering the question; record yes/no/unavailable, time to find, and
-  whether manually authored guidance was necessary. Missing-phase unavailable is
-  not a navigation failure. Report both availability and conditional find rate.
-- **Cost:** initial/re-review active seconds, wall seconds, setup/assistance
-  seconds, experiment requests, and B comment-only avoidable reruns with reason.
-  Record missing timings as NA, never zero. Keep censored trials in the report.
+| Measure                   | Rule                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Correct explanation (0–4) | One point each: retention/oracle distinction; finite consequence (initial/B/C 1→2 or A repair 1→1, with identical responses); phase applicability (missing/current/stale); finite scope/unknowns. A qualified missing-phase prediction earns the consequence point but is not observed evidence. |
+| Missed defect (0/1)       | Initial or B/C follow-up accepts the twelve-hour behavior as meeting one-call expectation or misses duplicate calls. Record false-positive follow-up claims separately.                                                                                                                          |
+| False freshness (0/1)     | Calls missing or old-candidate evidence a current observation. Source reasoning that a comment cannot affect execution is not a trust error if the observation is still called stale.                                                                                                            |
+| Useful example            | Whether participant finds an available response/effect witness that answers the question; record yes/no/unavailable, find time, and whether manual guidance was needed. Missing-phase unavailability is not navigation failure. Report availability and conditional find rate.                   |
+| Cost                      | Initial/re-review active and wall seconds, setup/help seconds, experiment requests, and B comment-only avoidable reruns with reason. Missing times are NA, never zero; retain censored trials.                                                                                                   |
 
-Primary descriptive endpoint: paired participant re-review-time ratio for AFTER
-versus each baseline, adjusted/described by case and period. Report raw anonymous
-cell counts, medians, ratios, uncertainty intervals and individual trajectories;
-exclude downtime from active time but report it separately. With one trial per
-condition per person, case/condition matching is across people, not repeated
-identical tasks. Do not interpret a within-person difference as causal without
-accounting for case/order, learning, familiarity and guided-tour assistance.
+Primary descriptive endpoint: paired participant re-review-time ratio for AFTER vs each baseline, described by case and period. Report anonymous cell counts, medians, ratios, uncertainty intervals, and individual trajectories. Exclude downtime from active time but report it separately. Identical cases are matched across people, not repeated within a person; account for case/order, learning, familiarity, and tour assistance before causal interpretation.
 
-**Proposed target:** roughly **30% lower re-review time** (ratio ≤0.70), with no
-reduction in defect detection and **zero false-freshness errors** on constructed
-missing/stale phases. These are go/no-go targets, not achieved effects or powered
-statistical guarantees. Any false-freshness error triggers a safety/design review;
-do not average it away with faster times. Report missed-defect counts alongside
-speed, and describe usefulness/setup/rerun costs even if the speed target passes.
-Small samples, related synthetic cases, facilitator effects, censoring and
-carryover preclude general safety, broad usability or market-demand claims.
+**Proposed target, not achieved:** ~30% lower re-review time (ratio ≤0.70), no drop in defect detection, and zero false-freshness errors on constructed missing/stale phases. Any false-freshness error triggers safety review; do not average it away with faster times. Report misses, usefulness, setup/rerun cost, and speed together. Small samples, related synthetic cases, facilitator effects, censoring, and carryover do not establish general safety, broad usability, or market demand.
 
-## Exact handoff for AFTER-18
+## AFTER-18 authorization
 
-Do not auto-start M3. The operator must authorize scheduling/recruitment and name
-a facilitator, a second scorer, a consent/contact-data owner and deletion date;
-recruit 12–16 consenting engineers unfamiliar with the fixture; reserve 75-minute
-sessions on prepared macOS/Linux terminals; approve the frozen assignment and
-scoring protocol and the standardized rerun policy. Perform a facilitator dry run
-first, explicitly labeled **author rehearsal**, not a participant or a data row.
-Only actual consenting humans supply study outcomes. AFTER-18 must report failures,
-missed defects, false freshness, unnecessary reruns and a justified continue,
-narrow, integrate-or-stop decision. No result is supplied by this kit.
+Do not start M3 automatically. The operator must authorize recruitment/scheduling and identify a facilitator, second scorer, consent/contact-data owner, and deletion date; recruit 12–16 consenting engineers unfamiliar with the fixture; reserve prepared macOS/Linux sessions; and approve the frozen assignment, scoring, and rerun policy. Run a facilitator dry run labeled **author rehearsal**, never as participant data. Only consenting humans supply outcomes. AFTER-18 must report failures, missed defects, false freshness, unnecessary reruns, and a justified continue/narrow/integrate/stop decision. This kit supplies no study result.

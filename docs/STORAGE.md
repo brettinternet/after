@@ -1,112 +1,52 @@
 # Private local storage
 
-`internal/store` implements AFTER-2 storage on macOS and Linux. It is a library;
-the [headless CLI](CLI.md) composes it with capture, import, execution, comparison,
-and inspection commands. Opening storage never executes project code.
+`internal/store` persists versioned records and content-addressed artifacts in a project's private `.after/` directory. It is a library, not a database or execution engine; opening it never runs project code.
 
-## Objects and identities
+## Open and identify records
 
-`Open(project, writable, secrets)` takes a trusted project directory and opens its
-private `.after/` directory. Read-only opens create nothing. A writable open
-publishes `.after/.gitignore` containing `*` through the same private, durable,
-no-overwrite publication path used for store objects. This also supplies the file
-for an existing store that predates it. The rule ignores store contents without
-changing the checkout's `.gitignore` or `.git/info/exclude`. `Put`/`Get` support
-snapshots, capture records, scenarios, receipts, comparisons and pins. Leave a new
-record ID empty; storage derives it from SHA-256 of the Go JSON encoding with
-`id` set to the empty string. A supplied ID must match. Ordered slices, nil
-versus empty slices, and all other fields participate in identity. This is a
-local encoding contract, not a cross-language canonical JSON or signature
-scheme.
+`Open(project, writable, secrets)` takes a trusted project directory. A read-only open creates nothing. A writer creates `.after/` with mode `0700`, takes a nonblocking advisory lock, and publishes `.after/.gitignore` containing `*`. This ignores store contents without changing the checkout's `.gitignore` or `.git/info/exclude`.
 
-Every version is immutable, including capture events and pin history revisions.
-A successful capture publishes one new event even when its snapshot identities
-are unchanged; failed capture attempts do not create an event. Snapshot identity
-never includes a capture time. `CapturesForSnapshot` searches at most 512 capture
-records and 16 MiB of capture-record data, then returns at most the eight latest
-matching events found. It reports when a scan or result bound was reached, so a
-partial history is never presented as complete. No filesystem modification time
-is used to fill missing capture history. Legacy snapshots with no event have no
-recorded capture time.
+```text
+.after/                 0700, private and ignored
+  writer.lock           permanent lock inode; do not delete or replace
+  .gitignore            *
+  <kind>-<sha256>        immutable records and artifact descriptors/blobs
+  session.json           replaceable UI session, not evidence
+  pending-<random>        possible interrupted publication
+```
 
-This task stores pin versions; AFTER-11 owns append-only history transitions and
-stable review selection. Comparison records currently bind a result and scope to
-a receipt; AFTER-9 owns channel witnesses and actual comparison computation.
+Stored records include snapshots, successful capture events, scenarios, receipts, comparisons and pins. Leave a new record ID empty: storage derives it from SHA-256 of Go JSON encoding with `id` empty. A supplied ID must match. Field order, slice order and nil-versus-empty slices affect identity. This is a local Go encoding contract, not cross-language canonical JSON or a signature. Records and artifacts are immutable; reads verify references, size and content hashes. Digests do not authenticate producers.
 
-Artifacts have a hash of retained bytes plus an immutable descriptor containing
-channel, retained/max bytes, redaction policy and completeness. Receipts must
-reference an already persisted exact descriptor; changing its flags does not
-turn partial bytes into complete evidence. Snapshot content/diff and scenario
-input blobs must exist. Receipt snapshot/scenario bindings and pin receipt/basis
-are checked. Toolchain, authorization, driver, observer and rules digests are
-identities, not necessarily blobs stored here. Reads verify local dependencies,
-byte sizes and content hashes; missing, corrupt or unsupported-version records
-produce errors without deleting history. This does not authenticate producers.
+A successful capture creates a new immutable capture event even when snapshot IDs are unchanged; failed capture creates no event. Snapshot IDs exclude capture time. `CapturesForSnapshot` scans at most 512 records/16 MiB and returns at most eight matching events; reached bounds are visible, never presented as complete history. Legacy snapshots without an event have no recorded capture time. Pin revisions are also immutable; review history and selection rules are in [REVIEW.md](REVIEW.md).
 
-## Durability and one writer
+Artifact identity is the hash of retained bytes plus an immutable descriptor (channel, byte counts, redaction policy and completeness). Receipts must reference an already stored exact descriptor; changing flags cannot turn partial bytes into complete evidence. Snapshot source/diff blobs and scenario input blobs must exist. Storage checks snapshot/scenario/receipt and pin-basis bindings but does not authenticate a producer. Toolchain, authorization, driver, observer and rules digests are identities; they need not be stored as blobs.
 
-Writers acquire a nonblocking OS advisory lock on the permanent `writer.lock`
-inode. A second writer is rejected, including another handle in the same process.
-Read-only handles may coexist. Do not delete, replace or rename the lock file.
-There is no stale-PID timeout or lock stealing: normal close, process death and
-reboot release the kernel-held lock. Retry opening after the owner has exited.
-An unrelated file is never deleted during lock recovery.
+## Single writer and durability
 
-Publication writes a private random pending file, syncs it, links the complete
-inode to an unused content name without replacement, removes the pending link,
-then syncs the directory. A failure may leave an unreferenced complete object;
-retrying is idempotent. A crash between link creation and pending-link removal
-can leave a two-link object, which reads reject rather than trusting a hard link.
-A prior complete version is never replaced. A successful return means both file
-and directory sync completed, subject to the filesystem's durability guarantees.
+Writers hold the permanent `writer.lock` inode for their lifetime. A second writer is rejected, including another handle in the same process; read-only handles may coexist. There is no stale-PID timeout or lock stealing. Normal close, process death or reboot releases the OS lock. Retry only after its owner exits; never delete or rename the lock as recovery.
 
-Interrupted pending files count toward storage limits. No automatic garbage
-collection or broad pending-file deletion is implemented. If repair is needed,
-stop all users of the store, retain a backup, and inspect the exact pending and
-content inodes before making a manual repair. Never remove the permanent lock
-as a recovery shortcut. Prefer recapturing into a new private store when ownership
-of leftover data is uncertain.
+Publication writes a private random pending file, syncs it, links the complete inode to an unused content name without replacement, removes the pending link, then syncs the directory. Successful return means file and directory sync completed, subject to filesystem guarantees. A failed publication may leave an unreferenced complete object; retries are idempotent and prior versions are not replaced. A crash after linking but before removing the pending link can leave a two-link object, which reads reject.
 
-## Confinement, limits and redaction
+Pending files count toward limits. There is no automatic garbage collection or broad pending-file deletion. For repair, stop all store users, keep a backup and inspect exact pending/content inodes. Never remove the lock. If ownership is uncertain, recapture into a new private store rather than repairing evidence.
 
-The store uses a directory capability (`os.Root`), digest-only flat names,
-no-follow nonblocking file opens and regular-file checks. `.after` must be a real
-0700 directory; files must be owned by the current user, 0600 and single-linked.
-Symlink stores, symlink artifacts, hard links, FIFOs and arbitrary path IDs are
-rejected. Existing unsafe permissions are rejected, not silently repaired.
-The caller's project path is trusted; the store is not a sandbox against another
-process running as the same user that actively replaces directories or lock
-inodes. Use a local filesystem supporting advisory locks, hard links and fsync.
+## Confinement, bounds and redaction
 
-Limits are 4 MiB per record, 16 MiB per input/retained blob, 10,000 directory
-entries (including lock/pending files), and 512 MiB logical aggregate bytes.
-Space for each publication is checked. Disk-full and permission errors retain
-wrapped OS error identities. Failed multi-object operations can leave harmless
-unreferenced blobs/descriptors; no complete receipt is fabricated.
+The store uses an `os.Root` directory capability, digest-only flat names, no-follow/nonblocking opens and regular-file checks. It rejects symlink stores/artifacts, arbitrary path IDs, hard links, FIFOs and unsafe permissions rather than repairing them. Files must be owned by the current user and mode `0600`; `.after/` must be a real `0700` directory.
 
-Supply up to 128 nonempty literal secrets (maximum 4096 bytes each) in memory
-when opening a writer. `literal-v1` replaces all matching byte spans, including
-overlapping matches, **before truncation, hashing, or any filesystem write**.
-Artifacts, channels and record free-text fields (paths, reasons, authors,
-boundaries, limits, argv and expectations) are covered. JSON strings are decoded
-before redaction, so escaped secrets are covered. Hashes, timestamps and enums
-are structural fields, not secret-bearing text. The literal list is never
-persisted; the store does not log payloads or secret values. This is explicit
-redaction, not a secret detector: callers must select safe inputs and supply
-known sensitive values. Encoded/transformed variants require their own literals.
+| Bound                                 |                                    Maximum |
+| ------------------------------------- | -----------------------------------------: |
+| One record                            |                                      4 MiB |
+| One input/retained blob               |                                     16 MiB |
+| Entries, including lock/pending files |                                     10,000 |
+| Logical aggregate storage             |                                    512 MiB |
+| Redaction literals                    | 128; each nonempty and at most 4,096 bytes |
 
-Truncation or redaction marks artifacts incomplete. Receipt free-text redaction
-marks the receipt incomplete with its policy; conclusive partial comparisons are
-rejected. Redacted source manifests are marked incomplete. Reopening preserves
-these flags even with a different in-memory secret list. Nothing here implies
-that incomplete evidence is equal, fresh, accepted or executable.
+Space for publication is checked. Disk-full and permission errors preserve wrapped OS identities. Failed multi-object operations may leave unreferenced blobs/descriptors, never a complete fabricated receipt.
 
-## Verification
+`literal-v1` redaction replaces matching byte spans (including overlaps) **before truncation, hashing or filesystem writes**. JSON strings are decoded first. It covers artifact bytes/channels and record free text: paths, reasons, authors, boundaries, limits, argv and expectations. Hashes, timestamps and enums are structural, not redacted text. Literals stay in memory and are never logged or persisted.
 
-Run `mise exec -- task check:go` and `mise exec -- task test`. Storage tests cover
-all five record types, immutable identity, reopen, damaged manifests/references,
-publication fault injection, ENOSPC/EACCES propagation, permissions, paths,
-symlink/hard-link/FIFO rejection, byte/count budgets, decoded-field and overlapping
-redaction, metadata forgery, and a real killed writer process followed by lock
-recovery without deleting unrelated files. Fault tests exercise durability
-boundaries; they do not simulate a physical drive losing acknowledged writes.
+This is explicit redaction, not secret discovery. Supply safe inputs and known secrets; encoded/transformed variants need their own literals. Truncation or redaction marks artifacts incomplete. Redacted receipt free text and source manifests also mark records incomplete; comparisons reject conclusive partial evidence. Reopening preserves those flags even with a different literal list. Incomplete evidence is not equal, fresh, accepted or executable.
+
+The caller's project path is trusted. Storage does not defend against another process running as the same user that actively replaces directories or lock inodes. Use a local filesystem with advisory locks, hard links and `fsync` support.
+
+`mise exec -- task check:go` and `mise exec -- task test` cover immutable records, reopen, damaged references, publication fault points, ENOSPC/EACCES, permissions, path/link/FIFO rejection, budgets, decoded-field and overlapping redaction, and a killed writer followed by lock recovery without deleting unrelated files. They do not simulate a physical drive losing acknowledged writes.

@@ -1,88 +1,90 @@
 # Headless CLI
 
-This page documents current behavior. The broader CLI target, including commands
-that are not implemented yet, is specified in [CLI-DESIGN.md](CLI-DESIGN.md).
+`CLI.md` documents the commands shipped in `after`; [CLI-DESIGN.md](CLI-DESIGN.md) records their interaction contract. Use `after --help` and `after COMMAND --help` for the installed binary's syntax.
 
-`after` is the CLI entry point over AFTER's capture, private store, Go test report, raw-diff, frozen runner, comparison and pin APIs. It has no model, account, GitHub, or editor dependency. `--help` and `--version` are side-effect free. Data commands print concise readable text by default; pass `--json` for the unchanged version-1 `schema_version` / `kind` / `data` envelope. `export` always prints JSON. Diagnostics use stderr. `after review` captures and opens or resumes the [captured evidence browser](TUI.md) on a terminal, without execution on open. Explicit IDs and pairs remain read-only and do not consult saved session state. JSON strings escape terminal control characters. Consumers must still sanitize untrusted values when rendering them.
+`after` is a Go CLI over local capture, private storage, Go test report import, diff, the frozen payment runner, comparison and pins. It has no model, account, GitHub or editor dependency. Help, version and configuration display do not run repository code. Data commands print readable text by default; `--json` requests the version-1 `schema_version` / `kind` / `data` envelope, while `export` always emits JSON. Diagnostics go to stderr. See [DEMO.md](DEMO.md) for packaging and a prepared-checkout walkthrough.
 
-See [packaging, the repeatable demo and recovery](DEMO.md) for native distributions and a prepared-checkout walkthrough. Build with `mise exec -- task build`, then run commands from any directory with a selected project:
+Build with `mise exec -- task build`. These commands show the usual capture-to-review path:
 
 ```sh
-./bin/after capture --project "/work/payment" --include-untracked "fixtures/new case.json"
-./bin/after inspect BASE_ID CANDIDATE_ID --project "/work/payment"
-go test -json ./... | ./bin/after import --project "/work/payment"
-./bin/after import "go test output.jsonl" --producer "go1.27.1 on linux/amd64" --snapshot CANDIDATE_ID --project "/work/payment"
-./bin/after inspect REPORT_ARTIFACT_ID --project "/work/payment"
-./bin/after compare RECEIPT_ID --project "/work/payment"
-./bin/after export COMPARISON_ID --project "/work/payment"
+./bin/after capture --project /work/payment
+./bin/after inspect BASE CANDIDATE --project /work/payment
+./bin/after review --project /work/payment
+./bin/after diff --project /work/payment
+```
+
+A real capture in a throwaway Git checkout with one edited file and one untracked file looked like this (IDs shortened):
+
+```text
+$ after capture
+Captured candidate 128f4386 (working tree) against base 89005345 (commit)
+  Base         89005345 · 1 path · complete · 0 excluded · 0 unsupported
+  Candidate    128f4386 · 1 path · complete · 1 excluded · 0 unsupported
+  Limit        two matching reads; not an atomic filesystem snapshot
+  Limit        diff includes captured regular files only; inspect excluded and unsupported inventory
+Next
+  after review
+    open a review of this change
+  after diff --stored
+    print this captured patch
+```
+
+## Commands
+
+Commands are `capture`, `review`, `diff`, `log`, `inspect`, `import`, `run`, `compare`, `pin`, `export`, `status`, `config` and `completion`; `help` and `version` are also available. Bare defaults and command-specific options are below and in `after --help`.
+
+Global options are `--project DIR`, `--config FILE` and `--json`. Flags may come before or after positional arguments. Snapshot pairs are always `BASE CANDIDATE`. `--base` on `capture`, `diff` or `review` is a Git ref for a merge-base capture, with `--target` defaulting to `HEAD`; it is not a snapshot ID. `--include-untracked` selects exact, non-ignored paths and may repeat.
+
+`help`, `version` and `config` work outside Git. Bare `after` prints short help outside a checkout; project commands exit 2 with `after: not inside a Git repository — run AFTER in a checkout, or pass --project DIR`. Unknown commands and flags suggest a close match within two edits. Missing arguments show a runnable example. Removed forms exit 2 with the replacement syntax.
+
+## Checkout and private storage
+
+By default, project selection starts at the invocation directory. `--project`, `AFTER_PROJECT` or YAML `project` can select a directory inside a checkout. The CLI finds the nearest parent containing a `.git` directory or worktree `.git` file by filesystem checks only; it runs no Git command to find the root. The capture API still receives an explicit repository root. Relative project and config paths resolve from the invocation directory.
+
+Read-only commands do not create `.after/`. Writers open `.after/` at the checkout root, with directory mode `0700` and private files mode `0600`. A writable open creates `.after/.gitignore` containing `*`, including for an older store without that file. It does not edit the user's `.gitignore` or `.git/info/exclude`. The store admits one writer; a second writer fails rather than merging concurrent changes. See [STORAGE.md](STORAGE.md).
+
+Capture failures exit 1 with fixed, allowlisted reason and fix text, never repository content or the absolute project path. For example:
+
+```text
+after: capture failed: unmerged index is unsupported — resolve the index conflicts, then retry capture
 ```
 
 ## Bare commands and stored defaults
 
-`after` and `after status` show a read-only summary of the newest stored capture,
-its pair, any stored run/comparison, applicable pin heads, and reports bound to the
-candidate. They do not capture, import, run, compare, or create `.after/`; a
-checkout with no capture suggests `after review`, then `after capture`. Outside Git, bare `after` prints
-short help, while `after status` reports the checkout requirement. The JSON form
-`after status --json` returns these same facts with full IDs. A saved review on a
-different pair is named in a `Saved review` row; its resume (`after review`) and
-start-over (`after review --new`) suggestions take precedence over pin/run actions.
+Bare `after` and `after status` summarize the newest capture event, its pair, the newest run/comparison for that pair, applicable pin heads and reports bound to the candidate. They do not capture, import, run, compare or create storage. A readable result ends with a `Next` block of up to three available commands. JSON keeps full IDs. Bare `inspect`, `compare` and `export` include a `using` object with the resolved capture, snapshot, receipt or comparison IDs.
 
-The summary is labeled `Stored capture`, and status and bare `after inspect` say
-whether the checkout still matches it. They reread the checkout with the capture's
-consistent, hardened Git reads and compare content hashes (never timestamps) of
-HEAD, the index, tracked files, the recorded untracked selection and the excluded
-untracked inventory. Nothing is stored. The `Checkout` row and the JSON `freshness`
-object report `matches`, `changed`, `unknown` (an incomplete capture or an
-unreadable checkout, with a `reason`), or `not_checked`. Merge-base captures are
-`not_checked` with reason `immutable_comparison`, because they compare commits, not
-checkout state. When the checkout changed, Next leads with `after diff` and a review
-of the current change (`after review --new` when a review is saved). If the
-checkout cannot be read, the labeled stored summary is still printed but the
-command exits 1. `--stored` skips the check (`not_checked`, reason
-`stored_requested`).
+The summary labels itself `Stored capture` and checks whether the checkout still matches it. `after status --json` returns the same facts with full IDs. `freshness` is `matches`, `changed`, `unknown` or `not_checked`. The check rereads the capture's scope with the hardened reads in `internal/capture` and compares content hashes, not timestamps: HEAD, index, tracked files, selected untracked paths and excluded untracked inventory. Incomplete captures and unreadable checkouts are `unknown`; a failed read still prints the stored summary but exits 1. Merge-base captures are `not_checked` (`immutable_comparison`); `--stored` skips the check (`stored_requested`).
 
-`after log [-n N]` lists the newest 20 stored capture events, run receipts,
-imported reports, and pin revision events; `-n` accepts 1–10000. Rows are newest
-first. Its JSON rows retain full record and snapshot IDs, and a shortened readable
-list reports the total and suggests a larger `-n`. Corrupt records or reached store
-bounds fail visibly rather than returning a falsely complete history.
+| Status condition                              | Suggested next step                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------- |
+| No capture                                    | `after review`                                                      |
+| A saved review is on another pair             | Resume with `after review`, or start over with `after review --new` |
+| Checkout changed                              | `after diff`, then `after review` (`--new` if a review is saved)    |
+| A pin needs another look                      | `after review`; accept only when offered and supported              |
+| No run for this pair, but an earlier pair ran | Bare `after run` prepares a rerun                                   |
+| Otherwise                                     | `after review` and `after diff`                                     |
+
+A saved review on another pair appears in a `Saved review` row. Bare `after inspect` summarizes the newest capture and performs the same freshness check; `--stored` skips it. Bare `after compare` compares the newest receipt for that pair and may persist a comparison, but never executes project code. Bare `after export` emits JSON for the newest comparison associated with the pair. Bare `after pin` lists computed heads without choosing one; it may suggest pinning an unpinned observation from the newest run. `after log` lists newest events first; readable output shortens IDs, reports the total and suggests a larger `-n` when more events exist, while JSON retains record and snapshot IDs. Corrupt records or reached store bounds fail instead of returning a partial history. Every readable result names resolved defaults and offers only commands that exist. Suggested IDs use the shortest unique prefix of at least eight hex characters; suggestions retain explicit project/config flags and shell-quote values.
+
+## Capture, import and review
+
+`capture` compares HEAD with the working tree by default; `--staged` compares HEAD with the index. `--base REF [--target REF]` captures a merge-base comparison. Untracked files are excluded unless selected explicitly. Capture stores immutable snapshots plus a capture event containing time, mode, snapshot IDs and selected untracked paths. Capturing unchanged content reuses snapshot IDs but creates another event. Capture times come from events, never file modification times. Empty captures are recorded too; output suggests a merge-base comparison for committed branch changes or `--include-untracked` for excluded files. See [CAPTURE.md](CAPTURE.md).
+
+`import` accepts `FILE`, `-`, or omitted input when stdin is piped. Omitted terminal input exits 2 without reading. Input is bounded to 8 MiB; empty input or a stream with no Go test JSON events exits 2 and stores nothing. `--producer` and `--captured-at` are optional caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using capture policy and binds the report to its candidate; untracked files remain excluded. A failed capture names its reason and suggests `--snapshot ID`. A binding does not prove where tests ran. When untracked files are excluded, readable output warns that tests may have used them. Imported outcomes are `reported`, producer `importer`, applicability unknown, execution `not_run`, comparison `not_compared`—not runner observations. `--offset` and `--limit` page report cards (defaults 0 and 128; limit 1–256). See [GO-REPORTS.md](GO-REPORTS.md).
+
+`review` needs a terminal on stdin and stderr. With no saved session, it captures and opens the pair; with a session, it resumes that exact pair and mode while capturing in the background. A changed capture stays pending until `u`; choose the original baseline (default) or last-inspected comparison and give a reason. `c` recaptures with the saved flags. `--new` or changed capture flags captures afresh and replaces only the UI session, names the replaced pair on stderr, and keeps old evidence and pins. An explicit pin ID remains on that revision. Next blocks use bare `after review` for the newest or saved pair and explicit pairs for older captures. Explicit IDs/pairs open stored records without reading or changing the saved session; `review ID` and `review BASE CANDIDATE [EVIDENCE …]` accept up to 32 evidence IDs. The session `.after/session.json` is atomic private UI state: pair, mode, original baseline, pin revisions and capture flags; it contains no source bytes and is not evidence.
+
+An empty fresh review exits 0 without opening the TUI. It says whether the worktree/index matches HEAD or a merge-base comparison is empty, and can suggest `--base` when the branch is ahead or `--include-untracked` for excluded files. Default-branch discovery checks `refs/remotes/origin/HEAD`, then local `main`, then `master`; when HEAD is ahead, guidance includes the commit count. It does not fetch or choose the comparison automatically. Up to three excluded paths are shown. Unknown or unsupported inventory remains reviewable. `--import-file FILE [--producer TEXT]` is read only after the TUI's explicit `i` import action. A fresh `--new` review opens even when its capture is empty. Evidence discovery loads up to 32 records, prioritizing pins needing review, and reports omissions. Legacy original-base sessions infer the baseline from the saved pair. TUI output and the saved-review message go to stderr; stdout stays empty except for `--json`, which prints the session after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; inspect stored pairs with `after inspect BASE CANDIDATE --json`. See [TUI.md](TUI.md) and [REVIEW.md](REVIEW.md).
 
 ## Diff
 
-`after diff` prints the checkout's current change, HEAD versus the working tree,
-like `git diff HEAD`. It reads the checkout with the same consistent, hardened
-Git reads and capture flags as `after capture` (`--staged`, `--base REF
-[--target REF]`, repeated `--include-untracked PATH`), but stores nothing and never
-creates `.after/`. It does not inherit a prior capture's or saved review's flags.
-If the checkout cannot be read it exits 1 with an empty stdout and suggests
-`after diff --stored`; it never falls back to a stored patch.
+`after diff` prints the current checkout change (HEAD versus working tree) like `git diff HEAD`; capture flags select staged, merge-base or untracked inputs. It stores nothing, creates no `.after/`, and does not inherit flags from a prior capture or saved review. If a live read fails, it prints no patch, exits 1 and suggests `after diff --stored`; it never falls back to an older patch.
 
-`after diff --stored` streams the newest stored capture's patch; `after diff BASE
-CANDIDATE` accepts any two stored snapshot IDs or unique prefixes. Capture flags
-cannot be combined with either. A shared captured patch is used when available;
-otherwise the bounded pure-Go computed diff uses only captured source blobs. A
-computed diff is a display fallback, not Git's captured patch.
+`after diff --stored` prints the newest stored capture's patch; `after diff BASE CANDIDATE` accepts any stored snapshot pair. Capture flags cannot be combined with either. AFTER uses a shared captured patch when available; otherwise a bounded pure-Go diff is computed from captured source blobs. The computed diff is a display fallback, not Git's captured patch.
 
-Stdout contains only patch lines. Stderr names what was compared (the current
-change's sources, or the short stored snapshot pair) and the patch origin, lists every unknown, excluded, unsupported, or otherwise limited inventory
-path, and reports capture/computation limits. Untrusted patch bytes pass through
-`internal/terminal`: controls, format characters and invalid UTF-8 are made visible;
-tabs remain tabs in a pipe and expand on a terminal. Terminal output uses the Diff
-view's fixed colors unless `NO_COLOR` is set or `TERM=dumb`; pipes are never colored.
-When sanitizing changes a byte, stderr warns that exact bytes are available with
-`--raw`. Both safe and raw output stream the entire selected patch without a
-line-count cutoff; storage and computed-diff byte bounds still apply.
+Stdout contains only patch lines. Stderr names the comparison and origin, then lists uncovered, excluded, unsupported or unknown inventory and limits. `internal/terminal` makes controls, format characters and invalid UTF-8 visible; tabs remain tabs in pipes and expand on terminals. Terminal colors are disabled by `NO_COLOR` or `TERM=dumb`; pipes are never colored. If sanitization changes bytes, stderr points to `--raw`. Safe and raw modes stream the full selected patch without a line cutoff; stored/computed byte bounds still apply.
 
-`after diff --raw` writes the selected patch bytes exactly, with no
-sanitizing, color, or summary on stdout. It is refused with exit 2 when stdout is a
-terminal; redirect to a file or pipe. For the current change or an ordinary
-captured pair these bytes are the generated patch and `git apply` can reproduce
-the candidate. A computed pair's raw bytes are exactly its generated computed
-diff, which is not claimed to be the captured Git patch. `--raw` and `--stat`
-cannot be combined. `--stat` prints per-file changed-line counts and a total, like
-`git diff --stat`; binary files show `Bin`. Stderr still reports what was compared,
-the origin, uncovered inventory and limits. There is no pager.
+`--raw` writes exact bytes to stdout with no sanitization, color or summary, and is refused with exit 2 when stdout is a terminal. Redirect it to a file or pipe. For a current change or ordinary captured pair, the generated patch can be checked with `git apply --check`; computed diffs are their generated bytes, not a captured Git patch. `--stat` prints per-file changed-line counts and a total (`Bin` for binary files). `--raw` and `--stat` cannot be combined. There is no pager; use `after review` for an interactive diff. `diff` rejects `--json`.
 
 ```sh
 after diff > change.patch
@@ -92,74 +94,103 @@ after diff --stored --stat
 after diff BASE CANDIDATE --stat
 ```
 
-Bare `after inspect` summarizes the newest capture record's pair, says which
-capture it resolved, and reports checkout freshness like status (`--stored` skips
-the check). Bare `after compare` compares the newest stored run receipt
-for that pair; comparison reads stored observations and may persist a comparison,
-but never captures or executes project code. Bare `after export` always emits JSON
-for the newest stored comparison associated with that capture pair. These results
-include a `using` object with the full resolved capture, snapshot, receipt, and/or
-comparison IDs. If a required record is missing, the diagnostic names the missing
-record and the command that creates it. A missing run suggests bare `after run`
-for the newest capture.
+## Short IDs and pin heads
 
-Bare `after pin` lists computed pin heads, including forks, without choosing one.
-Its Next block offers `after pin RECEIPT` when the newest capture's newest run
-has a suggested observation not yet pinned. Otherwise it suggests `after review`,
-where pins are created from run results.
-`after pin --expectation TEXT` may omit the receipt to use the newest run of the
-newest capture pair; this resolves a receipt, never a pin revision. Every decision
-still requires an explicit pin revision ID. Pin history corruption or the 512-head /
-16 MiB lookup limit is reported as unavailable rather than as a partial head list.
+Stored-ID arguments accept any unique prefix of at least four hex characters, with or without `sha256:`, in any case. For example, `after inspect A750186B` and `after inspect sha256:a750186b` resolve the same record when unique. Git refs and approval digests are not ordinary ID prefixes; `--approve` requires the full lowercase `sha256:` plus 64 hex characters.
 
-Every readable result ends with a `Next` block containing at most three available,
-syntax-ready commands. `after run` without arguments prepares the newest capture;
-when status identifies a rerun as the next action, its suggestion is the bare
-`after run` command. Explicit `--project` and `--config` values are retained in
-suggestions and shell-quoted when needed. Readable suggestions and diagnostics
-shorten full IDs to the shortest unique prefix of at least eight hex characters
-(never `--approve` digests); JSON keeps full IDs. A safe suggestion can be run as
-written; it does not authorize execution.
+Resolution checks only kinds valid at that position:
 
-## Grammar, help and diagnostics
+| Position                                             | Kinds                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| `run`, pair positions in `inspect`, `review`, `diff` | snapshots                                                     |
+| `compare`, pin creation, `pin --attach`              | receipts                                                      |
+| bare `pin ID`                                        | receipt or pin revision                                       |
+| pin decisions                                        | pin revisions; `--select` also takes a snapshot               |
+| `inspect` / `export`                                 | snapshots, receipts, comparisons, reports, artifacts or plans |
+| `review ID`                                          | snapshots, receipts, comparisons, reports or pins             |
+| trailing `review` IDs                                | comparisons, receipts, reports or pins                        |
+| `import --snapshot`                                  | snapshot                                                      |
 
-Snapshot pairs use `BASE CANDIDATE` in `inspect`, `review`, and `run`. `--base`
-is only a Git ref on `capture`; `--target` is optional and defaults to `HEAD`.
-Pin inspection and mutations all use `pin`: `pin PIN`, `pin PIN --accept`,
-`pin PIN --attach RECEIPT`, and `pin PIN --select SNAPSHOT [--mode MODE]`.
-Creation uses `pin RECEIPT --expectation TEXT` (or the terminal prompt below); scope defaults to
-`finite_example`, and reason is optional.
+A missing or ambiguous prefix exits 2; a missing-ID diagnostic names searched kinds and how to create a record. Ambiguity lists at most ten short IDs, kinds and sanitized one-line descriptions. Lookup fails rather than choosing from a partial namespace: at most 10,000 directory entries and 32 MiB of matching object data. A full valid digest with no record opens an `UNAVAILABLE` Card in `inspect`, preserving the exact ID.
 
-`after --help` and `after help` list only commands available in this build. Run
-`after COMMAND --help` for that command's usage and options. Global options are
-`--project`, `--config`, and `--json`; Docker and run-limit options appear only on
-`run`, and inspection paging/raw-diff options appear only on `inspect` and
-`export`. Printed run/inspection defaults come from the same configuration
-package as runtime defaults. Unknown commands and flags suggest a unique closest
-match within two edits. Removed forms such as `inspect CANDIDATE --base BASE` and
-`review PIN --accept` exit 2 with the replacement syntax. Diagnostics sanitize
-input and give a corrective action; missing arguments include a runnable example.
+Pin heads are calculated from immutable histories, including forks; there is no stored latest pointer. `pin OLD_REVISION` opens exactly that revision and names newer descendant heads without selecting one. Head lookup is bounded to 512 revisions and 16 MiB of pin records; when it exceeds those bounds, the pin remains viewable but heads are unavailable. `--approve` is never shortened in readable suggestions.
+
+## Pins and expectations
+
+Create a pin with `after pin [RECEIPT] --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`. Without a receipt it uses the newest run of the newest capture pair. Scope defaults to `finite_example`; a receipt that cannot support it suggests `human_intent`. Expectations are limited to 4096 bytes.
+
+On a terminal, `after pin RECEIPT` without `--expectation` shows the scope, basis receipt and snapshot pair, then numbered finite-case suggestions. Enter a number to choose one or type text verbatim. Empty line or EOF creates nothing. Without a terminal, it exits 2 without reading stdin and prints a runnable `--expectation` example. `--scope` and `--reason` override the defaults; reasons are stored verbatim.
+
+`after pin PIN` opens that revision read-only and names its selected original-base or last-inspected pair. Make one explicit decision at a time: `--select SNAPSHOT [--mode original_base|last_inspected]`, `--attach RECEIPT`, or `--accept`. Mode defaults to `original_base`; reason is optional. Default reasons are `Pinned from the command line`, `Selected from the command line`, `Attached from the command line` or `Accepted from the command line`; supplied reasons are stored verbatim. Expectations and reasons are each bounded to 4096 bytes. Each decision creates a new revision; use its ID next. Attaching a receipt does not accept the pin. Pins never execute code or grant run permission. See [REVIEW.md](REVIEW.md) for reuse rules and broader-intent limits.
+
+## Run and exact consent
+
+`after run` prepares the payment-specific frozen plan for the newest capture; an explicit `BASE CANDIDATE` pair also works. Preparation does not execute project code. The readable preview shows the resolved snapshots, exact consent summary, plan size and full authorization digest. A plan is stored immutably in `.after/` with mode `0600`; `inspect PLAN` shows its consent summary and sanitized plan, and JSON includes the exact bytes as base64.
+
+The runner supports only the offline payment fixture: captures must be complete, contain `go.mod` and `app/main.go`, exclude reserved `after-launch.go`, and fit 255 files / 8 MiB. Preparation fails with an actionable reason before saving a plan if they do not. `--plan-out FILE` creates another private `0600` file without overwriting; `--plan-file FILE` reconstructs it. Both paths rebuild from immutable snapshots and compare exact bytes. Each plan has a random request ID, so preparing again does not authorize an earlier plan.
+
+On a terminal, type `yes` to authorize exactly the displayed plan bytes. The consent summary is decoded from those bytes; if decoding fails, the error is shown but the digest still binds the exact plan. A non-TTY preview does not read stdin, reports `authorization_required` and exits 3. `--interactive false` disables the prompt but grants no authority. `--approve` accepts only the full digest from the exact preview; a mismatch exits 3. Approval is not a setting and cannot be a prefix.
+
+Only after approval may the runner contact an explicitly configured local Docker endpoint. Set both an absolute trusted CLI and a local Unix socket:
+
+```sh
+AFTER_DOCKER_BINARY=/usr/bin/docker \\
+AFTER_DOCKER_HOST=unix:///var/run/docker.sock \\
+./bin/after run --plan-file .after/approved-preview.json \\
+  --approve sha256:<full-digest> --project /work/payment
+```
+
+No help, config, capture, import, inspection, comparison, pin, review, preview or setup diagnostic runs project code, contacts Docker, builds the project on the host or pulls an image. There is no Docker-context or host-process fallback. Provision the pinned image separately; see [SANDBOX.md](SANDBOX.md) and [RUNNER.md](RUNNER.md). A TTY run reports elapsed time on stderr after one second, without a percentage.
+
+## Configuration
+
+Configuration is loaded only when needed. Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/whitespace strings and YAML `null` are unset; explicit `false` and zero remain values. An explicit `--config FILE` or `AFTER_CONFIG` must exist. Otherwise the optional file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Paths are relative to the invocation directory.
+
+| YAML key        | Environment           | Flag              | Default              | Bounds / meaning                                                              |
+| --------------- | --------------------- | ----------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `project`       | `AFTER_PROJECT`       | `--project`       | invocation directory | selected path inside a checkout; printed path hidden                          |
+| `repetitions`   | `AFTER_REPETITIONS`   | `--repetitions`   | 1                    | 1–5 paired repetitions                                                        |
+| `run_seconds`   | `AFTER_RUN_SECONDS`   | `--run-seconds`   | 180                  | 1–300 seconds per sandbox plan                                                |
+| `output_bytes`  | `AFTER_OUTPUT_BYTES`  | `--output-bytes`  | 65536                | 1–1048576 bytes per container                                                 |
+| `interactive`   | `AFTER_INTERACTIVE`   | `--interactive`   | true                 | allow a terminal prompt only; never authorizes execution                      |
+| `raw_diff`      | `AFTER_RAW_DIFF`      | `--raw-diff`      | true                 | include patch bytes in inspect/export                                         |
+| `diff_bytes`    | `AFTER_DIFF_BYTES`    | `--diff-bytes`    | 65536                | 0–65536 bytes per raw-diff page; 0 suppresses patch bytes but keeps inventory |
+| `docker_binary` | `AFTER_DOCKER_BINARY` | `--docker-binary` | unset                | absolute trusted CLI path                                                     |
+| `docker_host`   | `AFTER_DOCKER_HOST`   | `--docker-host`   | unset                | local `unix:///` socket                                                       |
+
+Docker CLI and socket must be configured together. There is no authorization setting. `after config` shows effective values and their source (`flag`, `env`, `file` or `default`), but hides project/config paths and Docker endpoint values. It only inspects configuration and filesystem metadata. If it finds a Docker CLI on `PATH` and exactly one existing local socket, it may offer a shell-quoted export line as a suggestion; it does not run or contact either.
+
+YAML is limited to 64 KiB, one mapping document, regular non-symlink files, scalar values and the keys in the table. Duplicate/unknown keys, anchors/aliases, malformed documents, invalid types/ranges and missing explicit files fail with a setting/source diagnostic.
+
+## Output, paging and exit status
+
+On a terminal, readable output uses the AFTER theme unless `NO_COLOR` is set or `TERM=dumb`; pipes never contain color. Untrusted paths, report text, expectations, producers, patch bytes and errors pass through the sanitizer. Terminal rows may clip; full IDs remain in the `IDs` section of inspect results. JSON escapes control characters, but consumers must still sanitize untrusted values when rendering them.
+
+`--json` emits one object with `schema_version: 1`, `kind` and `data`, capped at 16 MiB; existing capture and import shapes remain unchanged. Raw patch and artifact bytes are base64. Inventory, report cards and artifacts are paged. Inspect/export support `--diff-offset`, `--diff-size`, `--inventory-offset`, `--inventory-limit`, `--card-offset`, `--card-limit`, `--artifact-offset` and `--artifact-size`; page defaults are 0/65536 for byte offsets/sizes and 0/128 for lists, with list limits 1–256. Artifact pages are at most 65536 bytes and report `next`, `total` and `more`; complete valid JSON fitting one page also has a precision-preserving `document` field. Inspect Cards use the TUI's ordered evidence sections; unsupported shapes retain raw bytes and a limitation. General artifacts use a bounded text/hex viewer. Artifact bytes alone do not establish a producer; inspect the referring receipt for provenance. Imported passes/failures retain reported/importer/unknown-applicability/not-run/not-compared state.
+
+| Exit | Meaning                                                                             |
+| ---- | ----------------------------------------------------------------------------------- |
+| 0    | Command completed; a complete comparison was equal                                  |
+| 1    | Operational failure or incomplete/incomparable evidence                             |
+| 2    | Invalid command, arguments, configuration, IDs or input                             |
+| 3    | Run declined, lacks exact authorization or has a digest mismatch                    |
+| 4    | Comparison finding: `different` or `unstable`; not an automatic regression judgment |
+
+`run`, `compare`, `inspect` and `export` preserve JSON evidence on finding/incomplete outcomes. Capture/import that remain active for one second report elapsed time to terminal stderr; pipes receive no progress notice. `mise exec -- task test:cli` runs focused CLI/config/native-entry tests. `mise exec -- task cli:proof` runs the real subprocess payment proof and requires the pinned image plus explicit Docker settings; it executes the synthetic fixture.
 
 ## Shell completion
 
-`after completion [bash|zsh|fish]` prints a completion script for the selected shell;
-without an argument, AFTER uses the shell name in `$SHELL`. An unsupported name exits
-2 and lists the supported shells. Scripts complete commands, command flags, `--scope`
-and `--mode` values, and stored-ID arguments. ID candidates are the 50 newest
-records valid at that position, newest first, inserted as short IDs with sanitized
-one-line descriptions where the shell supports descriptions. Bash Readline displays
-candidate words but has no description API; Zsh and Fish show the descriptions. For
-legacy snapshots, plans, and generic artifacts without a persisted event time,
-candidates follow timestamped records in stable short-ID order; no file mtime is used.
+`after completion [bash|zsh|fish]` prints a script for the named shell; with no argument it uses the basename of `$SHELL`. Unsupported shells exit 2 and list the supported names. Scripts complete commands, flags, `--scope` and `--mode` values, and stored IDs valid at that argument position. They offer the 50 newest records, newest first, as short IDs with sanitized one-line descriptions where supported. Bash Readline shows words only; Zsh and Fish show descriptions.
 
-Install Bash completion in `~/.bashrc`:
+Legacy snapshots, plans and generic artifacts without event times follow timestamped records in stable short-ID order; file mtimes are not used. Completion opens `.after/` read-only, returns no ID candidates when no store exists, creates no storage and never captures, imports or runs code. Shell adapters pass words as arguments; descriptions are sanitized before crossing the shell interface.
+
+Install Bash in `~/.bashrc`:
 
 ```sh
 eval "$(after completion bash)"
 ```
 
-Install Zsh completion in a completion directory and add it to `fpath` before
-running `compinit` (for example, in `~/.zshrc`):
+Install Zsh before `compinit`:
 
 ```sh
 mkdir -p ~/.zfunc
@@ -168,177 +199,11 @@ fpath=(~/.zfunc $fpath)
 autoload -Uz compinit && compinit
 ```
 
-Install Fish completion in its completions directory:
+Install Fish:
 
 ```sh
 mkdir -p ~/.config/fish/completions
 after completion fish > ~/.config/fish/completions/after.fish
 ```
 
-The completion lookup opens `.after/` read-only and returns no ID candidates when
-there is no store. It never creates storage and never captures, imports, or runs
-project code. The shell adapters pass words as arguments rather than evaluating
-record descriptions; control characters and line breaks in descriptions are
-sanitized before they cross the shell completion interface.
-
-Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import accepts `FILE`, `-`, or omitted input when stdin is piped; omitted terminal input exits 2 without reading and shows the file and pipe forms. Empty input (for example a `go test` pipe that produced nothing) exits 2, takes no capture, stores nothing, and shows the `go test -json` pipe form. `--producer` is optional: when omitted, no producer claim is stored. A supplied producer and `--captured-at RFC3339` are caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using the `after capture` policy, writes a capture event, and binds the report to its candidate snapshot. Untracked files stay excluded; readable output warns that tests may have used excluded files. A binding is a caller claim, not proof the report's tests ran on that capture; if the default capture fails, import reports the capture reason and suggests `--snapshot ID`. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
-
-Each successful capture also writes an immutable capture event with its time, mode,
-snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
-snapshot IDs unchanged but records a new event. Readable snapshot inspection shows
-recorded capture times; legacy snapshots without an event say the time is unavailable.
-History lookup limits are shown when reached. No file modification time is used.
-The existing explicit `--json` snapshot and capture response shapes remain unchanged.
-
-## Short IDs and pin heads
-
-Every stored-ID argument accepts a unique prefix of at least four hex characters,
-with or without `sha256:`, in any case. For example, `after inspect A750186B` and
-`after inspect sha256:a750186b` select the same record when unique. JSON retains
-full IDs. Capture's `--base`/`--target` are Git references, not stored IDs.
-
-Resolution searches only kinds valid for that argument: run and positional
-inspect/review pairs search snapshots; compare and pin creation search receipts;
-`pin --attach` searches receipts; a bare ID after `pin` searches receipts and pins,
-while explicit pin decisions search pin
-revisions. Inspect/export search snapshots, receipts, comparisons, reports,
-artifacts and stored execution plans. Trailing review IDs search comparisons,
-receipts, reports and pins.
-Missing prefixes exit 2 naming the searched kinds; ambiguity exits 2 with at most
-ten short IDs, kinds and sanitized one-line summaries. Use more characters to
-disambiguate. A full, syntactically valid `sha256:` digest that has no stored
-record opens an `UNAVAILABLE` Card with the exact ID instead of guessing a type.
-Other no-match diagnostics tell you to verify the ID or create the record with
-an available capture, run, import or pin command.
-Lookup fails explicitly on unsafe storage or exceeded scan/read limits; it never
-chooses from a partial namespace (10,000 directory entries, 32 MiB of matching
-object data per lookup).
-
-Pin heads are computed from immutable histories, including every fork, without a
-stored latest pointer. `pin OLD_REVISION` opens exactly that revision; readable
-output names its newer descendant heads without selecting them. Head
-lookup is bounded to 512 revisions and 16 MiB of pin records. When unavailable,
-readable output says so while retaining the requested revision. JSON is unchanged.
-
-`--approve` is deliberately **not** a prefix: it requires the full lowercase
-`sha256:` digest with all 64 hex characters, copied from the exact preview.
-
-## Checkout root and private storage
-
-Project commands resolve the checkout root by checking for a `.git` directory or worktree `.git` file in the selected directory and its parents. The default selected directory is the invocation directory; `--project`, `AFTER_PROJECT`, or the YAML `project` setting can select another path inside a checkout. Resolution is filesystem-only and runs no Git command. It is shared by capture, import, inspect, compare, export, run, pin and review. The capture API itself still requires its caller to pass the resolved repository root explicitly.
-
-Outside a checkout, project commands exit 2 with exactly `after: not inside a Git repository — run AFTER in a checkout, or pass --project DIR` and create no `.after/` directory or lock file. `help`, `version` and `config` do not require a checkout; read-only project commands never create storage. Writable store opens create `.after/.gitignore` with `*` using the store's durable, no-overwrite publication path, including when an older store has no ignore file yet. This ignores only private store contents and does not edit the checkout's `.gitignore` or `.git/info/exclude`.
-
-Capture failures retain exit 1 and use fixed allowlisted reason/fix text, for example `after: capture failed: unmerged index is unsupported — resolve the index conflicts, then retry capture`. Repository content and absolute project paths are never interpolated into these diagnostics.
-
-Stored artifacts (including observer response/effect channels referenced by receipts) can also be inspected or exported by content ID. `--artifact-offset` and `--artifact-size` return exact base64 byte pages, up to 65536 bytes, with `next`, `total`, and `more`. A complete valid JSON artifact fitting one page also has a `document` field preserving numeric precision. Artifact content alone does not establish its producer or evidence state; inspect its referring receipt for provenance.
-
-## Review launch and resume
-
-`after review` requires a terminal on stdin and stderr. With no saved review it captures the working tree, then opens the pair. `--staged`, `--base REF [--target REF]`, and repeated `--include-untracked PATH` use the same safe Git capture policy as `after capture`. Untracked files remain excluded unless selected. With no saved review, an implicit capture that has no changed or unknown paths (apart from excluded untracked files) exits 0 without opening the TUI. It explains whether the working tree or index matches HEAD, or that a merge-base comparison has no changes. If HEAD is ahead, it suggests `after review --base REF` with the commit count; the default is resolved locally from `refs/remotes/origin/HEAD`, then `main`, then `master`, without fetching. Excluded untracked paths are sanitized, limited to three displayed names, and offered through `--include-untracked`. `after capture` still persists an empty capture and gives the same guidance in `Next`. Unknown or unsupported inventory remains reviewable rather than being treated as empty. A saved review still resumes normally, and `--new` still opens a new review even when its fresh capture is empty. These readable additions do not change the versioned JSON capture shape. `--import-file FILE [--producer TEXT]` configures the TUI's explicit `i` action to import that file into the selected review; producer provenance is optional, and omission makes no producer claim.
-
-A private, atomic `.after/session.json` stores the active snapshot pair, comparison mode, original baseline, selected pin revision IDs and capture flags; it contains no source bytes and is not evidence. A legacy original-base session safely infers its baseline from the saved pair. A later bare `after review` opens that exact pair and mode immediately and captures in the background. A differing capture stays pending until `u`; the TUI offers original-base (default) or last-inspected comparison and requires a reason. `c` reuses the saved flags. To move on to an unrelated change, run `after review --new` (optionally with `--staged`, `--base REF`, or other capture flags). It captures afresh, replaces only the saved UI session, and names the replaced pair on stderr. Old evidence and pins remain in the store and are still discovered. Changed capture flags also replace the saved review. Next blocks offer plain `after review` for the newest capture or saved pair, and explicit pairs for older captures; plain review always resumes an existing session rather than silently switching to the newest pair. Explicit `after review ID` or `after review BASE CANDIDATE [EVIDENCE ...]` opens stored records without reading or changing the saved review; an explicit pin revision stays on that revision. Terminal rendering and the saved-review message use stderr. Stdout is empty unless `--json`, which prints the versioned session object after the terminal is restored. Without a terminal, bare `after review` exits 2 and points to `after status --json`; explicit stored pairs can be inspected with `after inspect BASE CANDIDATE --json`.
-
-Evidence discovery loads pin heads (including forks), the selected pair's newest runs and comparisons, and reports bound to the candidate. It loads at most 32 records, prioritizing pins that need another look, and the browser reports the omitted count. `after log` provides the separate bounded history view.
-
-## Persistent expectations
-
-`pin RECEIPT_ID --expectation TEXT [--scope finite_example|human_intent] [--reason TEXT]`
-creates an immutable pin revision; `--scope` defaults to `finite_example`, and a
-receipt that cannot support it suggests `--scope human_intent`.
-
-On a terminal, `after pin RECEIPT_ID` without `--expectation` prints the scope,
-basis receipt and full snapshot pair on stderr, followed by the TUI's numbered
-finite-case expectations. Enter a number to choose one, or type expectation text
-verbatim (maximum 4096 bytes). An empty line or EOF creates nothing. A receipt
-without suggestions asks for text only. The scope and history reason use the
-same defaults as `--expectation`; `--scope` and `--reason` still override them.
-Without a terminal, it exits 2 without reading stdin and gives a runnable
-`--expectation` example. JSON output remains on stdout; the prompt uses stderr.
-
-`pin PIN_ID` opens a
-revision read-only using the TUI's shared Card renderer, followed by full IDs. Its
-readable view names the selected `original base` or `last inspected` pair from the
-latest immutable pin history event.
-Receipt, comparison and report inspection use the same ordered Card parts and
-bounded safe wrapping; `--json` retains the original record envelope. Decisions
-use exactly one of `--select SNAPSHOT_ID [--mode original_base|last_inspected]`,
-`--attach RECEIPT_ID`, or `--accept`; `--mode` defaults to `original_base`. `--reason` is optional; its command-line default is
-stored verbatim in history. Each decision returns a new revision ID; use that ID
-for the next operation. Selection reopens changed bindings without predicting
-results. Receipt attachment never accepts the pin; human acceptance is a separate
-action. No pin action executes code or grants run permission. See [the review workflow](REVIEW.md) for examples, exact
-reuse rules, broader-intent limits, historical revisions and rerun authorization.
-
-## Execution authorization
-
-Bare `after run` prepares the payment-specific frozen plan for the newest stored capture; an explicit `BASE CANDIDATE` pair still works. Preparation does not execute project code. The readable preview names the resolved capture, displays consent rows decoded from the exact plan bytes and its byte size, stores the immutable plan in `.after/` with mode 0600, and prints its full authorization digest and exact command. Pass `--json` when a script must parse the digest or resolved IDs. A capture the payment runner cannot use exits 2 before storing any plan and names the reason with a fix: no `go.mod` and `app/main.go` (an unsupported project), an incomplete capture, the reserved `after-launch.go` path, or the 255-file / 8 MiB sandbox budget.
-
-```sh
-./bin/after run --project "/work/payment"
-# Review the readable preview, then authorize only those stored bytes:
-./bin/after run --approve sha256:<full-64-hex-digest> --project "/work/payment"
-# The explicit external-file flow remains available:
-./bin/after run BASE_ID CANDIDATE_ID --plan-out "/work/payment/.after/approved-preview.json"
-./bin/after run --plan-file "/work/payment/.after/approved-preview.json" \
-  --approve sha256:... --project "/work/payment"
-```
-
-The non-TTY preview returns status `authorization_required` and exit 3; it never reads stdin for consent. A plan is stored immutably in `.after/` (0600, never overwritten), and `after inspect PLAN` shows the shared strict consent summary followed by the indented, sanitized plan; `--json` includes base64 of the exact stored bytes. On a terminal, AFTER shows the summary and size on stderr and requires typing `yes`; any other answer runs nothing. If strict summary decoding fails, that failure is shown while consent still binds the exact preview digest. `interactive: false` disables the prompt but grants no authority. `--approve` requires the full digest: `after run --approve DIGEST` loads the matching stored plan, and `--plan-file FILE --approve DIGEST` continues to work. `--plan-out FILE` still creates an additional private (0600) file without overwriting an existing one. Both flows reconstruct against current immutable snapshots and compare exact bytes before execution. Any changed or edited plan is rejected. Each plan has a new random request ID; re-preparing is not equivalent to approving an old preview.
-
-Only after exact approval may the runner contact the explicitly selected local Docker endpoint. Set both an absolute trusted CLI and a local Unix socket, for example:
-
-```sh
-AFTER_DOCKER_BINARY=/usr/bin/docker \
-AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-./bin/after run --plan-file "/work/payment/.after/approved-preview.json" \
-  --approve sha256:... --project "/work/payment"
-```
-
-No Docker context, image pull, host execution, build, or project command is used by help, config display, capture, import, inspect, export, comparison, pin, review, preview, or setup diagnostics. Provision the pinned image separately as documented in [SANDBOX.md](SANDBOX.md). Missing endpoints or isolation produce an actionable setup problem or incomplete operational result; they never select a host fallback. Approved runs show elapsed time on terminal stderr after one second, with no percentage.
-
-## Configuration
-
-AFTER reads configuration only when a command needs it. The explicit `--config FILE` or `AFTER_CONFIG` path must exist; otherwise the optional discovered file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Relative config/project paths are resolved from the invocation working directory. The discovered file may be absent. Configuration loading parses data only; it never runs repository code. `after config` reports effective values and each winning source (`flag`, `env`, `file`, or `default`), hides project/config paths and Docker endpoint values, and lists Docker setup problems with their configuration fixes. When it finds a Docker CLI on `PATH` and exactly one existing local socket, without running or contacting either, it shows them as labeled YAML suggestions and offers a shell-quoted `export AFTER_DOCKER_BINARY=… AFTER_DOCKER_HOST=…` line in Next that applies them to the current shell.
-
-Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/whitespace strings and YAML `null` are unset and allow a lower layer to win. Explicit booleans and integers are values: `false` is not a default, and zero is not silently discarded. `diff_bytes: 0` is supported and suppresses patch bytes while retaining the change inventory; `repetitions: 0` is invalid.
-
-| YAML key        | Environment           | Flag              | Type and default           | Bounds/meaning                                                         |
-| --------------- | --------------------- | ----------------- | -------------------------- | ---------------------------------------------------------------------- |
-| `project`       | `AFTER_PROJECT`       | `--project`       | path; invocation directory | selected checkout path; nearest `.git` ancestor is used; output hidden |
-| `repetitions`   | `AFTER_REPETITIONS`   | `--repetitions`   | integer; `1`               | 1–5 paired repetitions                                                 |
-| `run_seconds`   | `AFTER_RUN_SECONDS`   | `--run-seconds`   | integer; `180`             | 1–300 seconds per sandbox plan                                         |
-| `output_bytes`  | `AFTER_OUTPUT_BYTES`  | `--output-bytes`  | integer; `65536`           | 1–1048576 bytes per container                                          |
-| `interactive`   | `AFTER_INTERACTIVE`   | `--interactive`   | boolean; `true`            | permits a TTY prompt only; never authorizes execution                  |
-| `raw_diff`      | `AFTER_RAW_DIFF`      | `--raw-diff`      | boolean; `true`            | include patch bytes in inspection output                               |
-| `diff_bytes`    | `AFTER_DIFF_BYTES`    | `--diff-bytes`    | integer; `65536`           | 0–65536 bytes per raw-diff page                                        |
-| `docker_binary` | `AFTER_DOCKER_BINARY` | `--docker-binary` | string; unset              | must be an absolute trusted CLI path when set                          |
-| `docker_host`   | `AFTER_DOCKER_HOST`   | `--docker-host`   | string; unset              | must be a local `unix:///` socket when set                             |
-
-Docker binary and host must be configured together. There is deliberately no consent/authorization setting: permission is an interactive action or the specific `--approve` digest. Runtime values remain hidden in the configuration table; explicitly labeled Docker CLI/socket suggestions are candidates, not selected endpoints. Setup probes only inspect configuration and filesystem metadata—they never run Docker or contact an endpoint. YAML is limited to 64 KiB, one mapping document, regular non-symlink files, scalar values, and the listed keys. Duplicate/unknown keys, anchors/aliases, malformed documents, invalid types/ranges, and missing explicit files fail with a setting/source diagnostic.
-
-## Output and exit status
-
-Readable output uses a leading result sentence and aligned rows or lists. On terminals, the AFTER theme styles output unless `NO_COLOR` is set or `TERM=dumb`; pipes never contain color sequences. Untrusted paths, report text, expectations, producers and errors pass through the terminal sanitizer. Rows clip only on a terminal, with full IDs retained in the `IDs` section of inspect results. Receipts, comparisons, pins and imported reports use the TUI's shared evidence Cards and ordered artifact sections; an unsupported shape retains its raw bytes with a limitation. General artifact inspection uses the bounded text/hex content viewer; use `after inspect ID --json` for exact base64 pages and raw patch pages.
-
-Use `--json` on a command whose result a script consumes:
-
-```sh
-./bin/after capture --project /work/payment --json
-./bin/after inspect BASE_ID CANDIDATE_ID --project /work/payment --json
-./bin/after import report.jsonl --project /work/payment --json
-./bin/after run BASE_ID CANDIDATE_ID --project /work/payment --json
-./bin/after export COMPARISON_ID --project /work/payment # JSON is always emitted
-```
-
-The envelope is unchanged: one JSON object with `schema_version: 1`, a `kind`, and `data`, capped at 16 MiB. Raw patch bytes are base64; report and inventory results are paged. Imported test passes/failures retain producer `importer`, kind `reported`, unknown applicability, `not_run` execution, and `not_compared` state. They are never runner observations. A capture or import that remains active for one second on a terminal reports elapsed time on stderr; pipes receive no progress notice.
-
-| Status | Meaning                                                                               |
-| ------ | ------------------------------------------------------------------------------------- |
-| `0`    | command completed; a complete comparison was equal                                    |
-| `1`    | operational failure or incomplete/incomparable evidence                               |
-| `2`    | invalid command arguments, configuration, IDs, or input data                          |
-| `3`    | execution was declined, lacks exact authorization, or its digest mismatched           |
-| `4`    | comparison finding (`different` or `unstable`), not an automatic regression judgement |
-
-`run`, `compare`, `inspect`, and `export` distinguish findings from operational failures; JSON evidence remains available on finding/incomplete outcomes. Help/version are human-readable and do not inspect a project. `mise exec -- task test:cli` runs focused CLI/config/native-entry tests. `mise exec -- task cli:proof` runs the real subprocess payment proof and requires the separately provisioned pinned image plus explicit `AFTER_DOCKER_BINARY` and `AFTER_DOCKER_HOST`.
+For capture and storage contracts see [CAPTURE.md](CAPTURE.md) and [STORAGE.md](STORAGE.md); for the versioned records see [SCHEMA.md](SCHEMA.md).

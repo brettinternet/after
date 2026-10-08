@@ -1,118 +1,61 @@
 # Implementation contract
 
-This is the bounded engineering plan for the CLI/TUI proof of concept, not a claim that AFTER exists yet. [Backlog.md](../backlog/tasks) is the authoritative work queue. [Behavior and evidence](behavior-and-evidence.md) supplies the product rationale; this document narrows its first slice so agents can deliver without inventing a platform.
+This is the current scope and acceptance contract for AFTER's local CLI/TUI proof of concept. The [Backlog](../backlog/tasks) owns task status; [behavior and evidence](behavior-and-evidence.md) explains the product rationale.
 
-## Definition of a convincing POC
+## What the POC proves
 
-An engineer can capture a dirty local Git candidate, browse its complete change inventory and an imported report without executing project code, authorize a frozen HTTP experiment on two isolated versions, see identical responses but different independently captured provider-request counts, pin an expectation, accept a new snapshot, see the pin reopen without invented results, and explicitly rerun it. This works without accounts, models, GitHub, or an editor integration.
+A reviewer can capture a Git candidate, inspect its complete change inventory and an imported report without running project code, authorize a frozen experiment on two isolated versions, compare the responses and independently observed provider calls, pin an expectation, see it reopen when its basis changes, and explicitly rerun it. The payment fixture demonstrates the finite case: identical responses, 1→2 provider calls at twelve hours, and 1→1 at thirty seconds. Its fake provider records calls; it does not implement deduplication.
 
-The app, fake provider, clock, and HTTP driver must actually run. A seeded screenshot, a report's test name, or an expected-output file does not establish a payment effect. The shipped payment fixture has both a twelve-hour distinguishing case and an unchanged thirty-second control. The fake provider records calls; it does not supply the app's deduplication logic.
-
-Technical completion requires every M1/M2 acceptance criterion and the release gate. User benefit is a separate human study, not something an autonomous agent can certify.
+A test name, expected-output file, or seeded screenshot is not an observation. Technical completion requires the M1/M2 acceptance criteria and the [adversarial gate](POC-GATE.md). Human benefit is separate; no agent can certify it.
 
 ## Scope and defaults
 
-| Area                  | POC decision                                                                                                                                                                                                                                        |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language              | Go engine, CLI, and TUI; no JS runtime dependency for the shipped executable                                                                                                                                                                        |
-| Platforms             | macOS and Linux inspection; Docker Engine/compatible Docker CLI required for execution; no Windows execution promise                                                                                                                                |
-| Git                   | Installed Git CLI with explicit argv, NUL-safe paths, no external diff/textconv/filter execution; never change the user's index or working tree                                                                                                     |
-| Snapshot modes        | HEAD versus captured working tree by default; HEAD versus captured index; explicit merge-base branch comparison. No network fetch                                                                                                                   |
-| Untracked files       | Excluded by default and inventoried; explicitly selected non-ignored files may be included. Never silently capture ignored secrets                                                                                                                  |
-| Unsupported Git cases | Detect unmerged index, submodules, LFS-only content, missing objects, sparse/partial captures and non-regular files; show limitations or reject capture rather than pretend completeness                                                            |
-| First report adapter  | Stock `go test -json`, with a documented tested Go version/dialect; status and available output only, never inferred request inputs or effects                                                                                                      |
-| Fixture boundary      | Versioned HTTP/JSON request sequence plus observer-owned fake-payment request log; fixed clock and fresh state per version/case/repetition                                                                                                          |
-| Storage               | Versioned, bounded JSON manifests/receipts and content-addressed artifacts in private, ignored `.after/`; no database or plugin system initially                                                                                                    |
-| Invalidation          | Whole captured project footprint initially, including fixture, driver, observer, rules, toolchain, dependencies, and environment bindings; conservative unknown/stale when incomplete                                                               |
-| Execution             | Opt-in, digest-bound authorization. Builds and dependency preparation count as execution. No host-process fallback if isolation is unavailable                                                                                                      |
-| Sandbox               | Docker-based disposable isolation, non-root, no ambient credentials/host home/socket, read-only inputs, resource/time/output limits, and no external network. Exact topology/image digest is settled and attack-tested in AFTER-6 before the runner |
-| Dependencies          | Trusted, explicitly provisioned toolchain image pinned by digest; standard-library-only demo. No implicit package download/install scripts during a run                                                                                             |
-| TUI                   | Bubble Tea v1.3.10 selected by the [AFTER-12 terminal gate](TERMINAL.md); bounded safe-text viewport and background-job/PTY tests, with evidence browsing in AFTER-13                                                                               |
-| Models                | None in the POC. No model can grant permission, set an evidence badge, or accept a review                                                                                                                                                           |
+| Area                    | Decision                                                                                                                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product                 | Go engine, CLI, and TUI; no JavaScript runtime in the executable. No model, account, editor, GitHub, or browser-app dependency.                                                                                                                                            |
+| Platforms               | macOS and Linux inspection. Execution requires Docker Engine or a compatible Docker CLI on a local Linux daemon; no Windows execution promise.                                                                                                                             |
+| Git                     | Trusted `/usr/bin/git`; explicit argv, NUL-safe paths, no external diff/textconv/filter execution. Never change the user's index or working tree; never fetch.                                                                                                             |
+| Snapshots               | HEAD vs working tree by default, HEAD vs index with `--staged`, or explicit merge-base comparison. Non-ignored untracked paths are excluded unless selected exactly. Ignored files are not selectable.                                                                     |
+| Unsupported Git content | Unmerged indexes, submodules, LFS-only content, missing objects, sparse/partial captures, and non-regular files are inventoried or rejected; capture does not claim completeness.                                                                                          |
+| Report adapter          | Stock `go test -json`, dialect `go-test-json-v1` tested with Go 1.27.1. It reports status and available output only; it cannot infer test inputs or effects. See [GO-REPORTS.md](GO-REPORTS.md).                                                                           |
+| Scenario                | Frozen HTTP/JSON request sequence plus independently owned fake-payment observer; fixed clock and fresh state for each version, case, and repetition.                                                                                                                      |
+| Storage                 | Versioned JSON records and content-addressed artifacts in private, ignored `.after/`; no database or plugin system. See [SCHEMA.md](SCHEMA.md) and [STORAGE.md](STORAGE.md).                                                                                               |
+| Invalidation            | Conservatively bind the whole project footprint: fixture, driver, observer, rules, toolchain, dependencies, and environment. Incomplete bindings remain unknown or stale.                                                                                                  |
+| Execution               | Explicit digest-bound authorization. Builds and dependency preparation count as execution. No host-process fallback.                                                                                                                                                       |
+| Sandbox                 | Disposable Docker isolation, non-root workloads, read-only inputs, no host home/socket or ambient credentials, no external network, and resource/time/output limits. AFTER-6 established and attack-tested the topology and pinned image; see [SANDBOX.md](SANDBOX.md).    |
+| TUI                     | Bubble Tea v1.3.10, selected by the [terminal gate](TERMINAL.md); bounded safe-text viewport, background jobs, and PTY restoration tests. The TUI is a review client and test instrument, not a terminal-only commitment; capture/comparison stay separate from rendering. |
 
-Do not add universal adapters, a semantic dependency graph, GitHub synchronization, a browser application, production replay, arbitrary URL execution, autonomous repair, or a second agent runtime. Generated boundaries and reduction belong to the explicitly selected follow-up milestone.
+Do not add universal adapters, a semantic dependency graph, GitHub sync, a browser application, production replay, arbitrary URL execution, autonomous repair, or another agent runtime. Boundary generation and reduction are the separately gated M3 tasks AFTER-19/20.
 
-## Minimal records and trust boundaries
+## Records and trust
 
-AFTER-1 owns the first schema documentation and exported core types. Subsequent tasks extend those only for an exercised requirement; avoid adapter registries and framework interfaces.
+`internal/evidence` owns the version-1 records; [SCHEMA.md](SCHEMA.md) defines fields and validation. Snapshots bind captured source and limitations; scenarios freeze inputs, driver, observer, and rules separately from expectations; receipts bind execution and artifacts; comparisons retain exact witnesses; pins keep human expectations and append-only decisions. Capture uses consistent double reads but cannot claim an atomic filesystem snapshot.
 
-- **Snapshot:** immutable ID, source mode, resolved commit/merge-base identities where relevant, path/content/mode inventory, excluded/unsupported entries, capture completeness, ordinary diff identity. Hash content, not branch names or mtimes. A capture overlapping writes must retry within a bound or fail visibly; do not claim an atomic filesystem snapshot where Git/filesystem guarantees are weaker.
-- **Scenario:** ID and concrete frozen setup/actions/input digest, driver and observer identities, comparison policy, supported boundary, authorship and limits. Expectations remain separate. Candidate test/oracle edits are inventory items, not automatic replacements for a frozen scenario.
-- **Receipt:** schema version, producer/trust kind, snapshot pair, scenario/observer/rules digests, actual environment and toolchain identities on each side, argv, authorization identity, completion/timestamps, bounded artifact references, observation completeness/redaction and limits. References cannot escape owned storage.
-- **Comparison:** compatible channel-level witnesses with exact values/paths; JSON object key order is immaterial, array order is meaningful. Missing, redacted, truncated or incompatible channels cannot produce complete equality. Repetitions disagreeing are unstable, never cherry-picked.
-- **Pin:** specific scenario and expected result or explicitly broader human requirement, basis receipt/snapshot, persistent human decision and history. Reopening never rewrites the expectation or manufactures an observation.
+Producer/kind, applicability, execution, comparison, and human decision are independent. Imports are `reported` with unknown applicability; digests are not signatures. Only a completed runner creates observations, and completion does not mean behavior passed. Immutable storage rejects concurrent writers and newer unsupported schemas. Redaction, truncation, missing channels, and incomplete capture fail closed. Current observations/source stay out of Git by default; demo inputs are synthetic.
 
-Evidence kind/producer, applicability, execution/comparison outcome, and human decision are independent fields. CLI and TUI derive labels from these fields, never from repository prose, terminal text, test names, or imported booleans saying “observed”. Imported reports are reported evidence with unknown applicability unless explicit validated binding is supplied; digest binding is not a signature or proof of producer honesty.
+## Commands and consent
 
-Immutable records and atomic writes should survive crashes. One writer per review store is enough initially: reject concurrent mutation clearly instead of adding a multi-writer database. Reject unsupported newer schema versions without rewriting data. Current observations and private source captures stay out of Git by default. The distributed demo only contains deliberately synthetic, non-sensitive inputs.
+The CLI's current grammar is in [CLI.md](CLI.md); its broader redesign target is [CLI-DESIGN.md](CLI-DESIGN.md). Typical reads:
 
-## CLI and TUI behavior contract
-
-The implemented command syntax, configuration and exit semantics are documented in [CLI.md](CLI.md). It covers `capture`, `import`, positional-pair `inspect`, `compare`, `export`, `run`, `config`, [pin inspection and decisions](REVIEW.md), and `review BASE CANDIDATE`; the [TUI browser](TUI.md) supports stored evidence, raw inventory/source and explicit background capture/import. The TUI also supports finite-count pins, deliberate snapshot acceptance/reopening, and exact-plan consented reruns.
-
-```text
-after capture [--staged | --base REF [--target REF]]
-after import <go-test-json-file> --producer <caller-provenance> [--snapshot <id>]
-after inspect <record-id>
-after inspect <base-snapshot-id> <candidate-snapshot-id>
-after review <base-snapshot-id> <candidate-snapshot-id> [evidence-ids ...]
-after pin <receipt-id> --expectation TEXT [--scope finite_example|human_intent]
-after pin <pin-id> [--accept | --attach RECEIPT | --select SNAPSHOT]
-after compare <receipt-id>
-after export <comparison-id>
-after run <base-id> <candidate-id> --plan-out <private-file>
-after run --plan-file <private-file> --approve <exact-preview-digest>
-after config
+```sh
+after capture --project /work/payment
+go test -json ./... | after import --project /work/payment
+after inspect BASE CANDIDATE --project /work/payment
+after review BASE CANDIDATE --project /work/payment
 ```
 
-Every run requires a specific approved plan/digest or an interactive confirmation of the displayed exact plan, never a blanket “yes to all repository commands”. The preview shows images, commands, mounts, network policy, limits, inputs and selected snapshots. A saved plan is reconstructed and checked byte-for-byte before execution. Import, inspection, comparison, help, config and preview do not execute repository code; non-TTY commands never read from stdin for confirmation. Configuration cannot authorize a run.
+`capture`, import, inspection, comparison, help, configuration, and run preview do not execute repository code. A run must show and authorize the exact plan; non-TTY calls do not read stdin for consent. A saved plan is reconstructed and checked byte-for-byte before execution. Preview binds image, argv, mounts, network policy, limits, inputs, and snapshots. Configuration cannot authorize execution.
 
-The TUI needs only a list, inspector, ordinary diff, and explicit actions:
+The TUI offers an evidence list, inspector, raw diff, and explicit actions: Enter opens evidence; `d` shows the diff and unknown inventory; `p` pins an expectation; `r` requests a preview and exact consent. Snapshot acceptance is explicit; selection never runs an item. It sanitizes terminal controls, handles Unicode/tabs/long or empty lines/resizes, and runs Git/capture/execution jobs off the UI loop with snapshot/request IDs.
 
-- `Enter`: input, before/after outputs and effects, producer, bindings, limits and errors.
-- `d`: ordinary diff, including every unclassified/unsupported change.
-- `p`: pin an expectation, not an approval of the whole change.
-- `r`: request rerun, inspect its plan and confirm; no execution on selection.
-- Explicitly accept a new snapshot. A notification must not change the selected comparison underneath the user.
-- Help, cancel and quit with owned-process cleanup and terminal restoration.
+## Acceptance checks
 
-Sanitize terminal control sequences, including OSC clipboard/hyperlink sequences, on every untrusted surface. Render wide Unicode, tabs, long lines, empty results and narrow/resized terminals safely. Git/capture/execution jobs cannot block the UI event loop. Tag asynchronous results with their originating snapshot and request IDs.
+`task test:poc` is the opt-in Docker/PTY gate. It authorizes synthetic runs, rejects skips, requires named proofs, and kills two production-code mutants with their expected assertions. Its [ten design checks](POC-GATE.md) cover independent effects, frozen oracles, invalidation, late/failed/unstable results, missing evidence, no models, hostile content, and finite scope. It also tests interrupted writes, workload-crash cleanup, bounded output, descendant/container cancellation, environment contamination, permission denial, dirty/index/untracked Git behavior, and Unicode paths. It does not prove cleanup after host-supervisor SIGKILL, daemon failure, or power loss. Docker, its CLI, pinned image, host kernel, and AFTER are trusted.
 
-## Dependency order and stop conditions
+`mise exec -- task terminal:bench` measures generated medium (10 files/20,000 changed lines) and large (50 files/100,000 changed lines) diffs. The cache is warm from capture, not a cold-disk benchmark. Warm raw view ≤1s, cached inventory ≤2s, document preparation ≤1s/64 MiB, and input/render ≤100ms/256 KiB are evaluation budgets, not guarantees. Actual gate results and measurements are in [POC-GATE.md](POC-GATE.md).
 
-Backlog dependencies are the authority; this map explains milestones, not a second task-status database.
+## Milestones and human boundary
 
-- **M1 / AFTER-1–11:** foundation and schemas → capture/store/import/diff and execution-isolation work → real fixture and paired runner → comparator/headless workflow → pins and conservative invalidation.
-- **M2 / AFTER-12–17:** bounded TUI framework evaluation → inspectable TUI → follow-up review loop → adversarial acceptance gate → reproducible distribution/demo → evaluation kit.
-- **M2 / AFTER-21–33:** readable, guided review TUI per [TUI-DESIGN.md](TUI-DESIGN.md): content viewer → theme and badges → frame and key map → activity → overview → evidence cards, plus launch/resume, changes and diff, consent summary, confirmed mutations, search, computed diffs and comparison mode.
-- **M2 / AFTER-34–45 and AFTER-24:** ergonomic CLI per [CLI-DESIGN.md](CLI-DESIGN.md): checkout root and ignored store → readable output → short IDs and capture records → one grammar, help and errors → bare commands, status and log → plain `after review`, plus pipe import, readable run consent, `after diff`, completion, starting a new review, clean-tree guidance and the pin prompt. AFTER-18 waits for the high-priority TUI and CLI tasks.
-- **M3 / AFTER-18–20:** human study, then optional boundary generation/reduction after an explicit go decision. Do not auto-select M3 when finishing the POC.
+M1 tasks AFTER-1–11 establish records, capture, import, isolation, the real fixture/runner, comparison, CLI, and review pins. M2 includes the terminal/browser and gate work AFTER-12–17, TUI redesign tasks AFTER-21–33, and CLI redesign tasks AFTER-34–46 (with AFTER-24 in the TUI sequence). Backlog dependencies, not ID order, determine readiness.
 
-AFTER-1 is initially ready. Work on only tasks whose dependencies are Done; a lower ID alone does not imply readiness. All first-slice tasks are implementable without product research decisions from the user. Missing Docker or unsupported isolation is a real execution blocker: finish import/inspection and record an actionable setup request, never weaken the safety boundary. Framework/library versions and sandbox mechanics are bounded engineering decisions assigned to their gate tasks, not unspecified permission to redesign the product.
-
-## Evidence and release gates
-
-| Required design check                    | Owning tasks and observable check                                                                     |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 1. Same response, changed side effect    | AFTER-7/8/9/15: actual HTTP traffic; one versus two provider requests                                 |
-| 2. Implementation and oracle both change | AFTER-5/8/15: oracle diff visible; frozen driver unchanged                                            |
-| 3. Basis changes                         | AFTER-11/14/15: parameterized fixture/observer/runtime/dependency/rule changes reopen pins            |
-| 4. Late result                           | AFTER-8/14/15: barrier-controlled out-of-order completion retains old snapshot binding                |
-| 5. Start/driver failure                  | AFTER-8/9/13/15: incomplete/incomparable, never regression or equality                                |
-| 6. Unstable repetitions                  | AFTER-8/9/13/15: every repetition retained, explicit unstable state                                   |
-| 7. Missing adapter/artifact              | AFTER-4/5/13/15: not checked plus usable complete inventory/diff                                      |
-| 8. Models disabled                       | AFTER-10/14/15: no provider/account/API key needed                                                    |
-| 9. Hostile repository content            | AFTER-2/3/6/12/15: no implicit execution, terminal injection, traversal, credential or network access |
-| 10. Finite evidence scope                | AFTER-9/13/15: exact inputs and sequential fake-provider limits, no universal claims                  |
-
-The [adversarial POC gate](POC-GATE.md), `task test:poc`, runs these checks, actual Docker/PTY proofs and binding/observer negative controls without permitting skips. It additionally covers interrupted storage writes, workload-crash cleanup, bounded outputs, cancellation of descendants/containers, contaminated environment variables, permission denial, dirty/index/untracked Git semantics and Unicode paths. Uncatchable host-supervisor death and daemon failure remain explicit cleanup limitations, not tested recovery guarantees. Mutation testing of the demo must demonstrate that disabling deduplication changes the independent observer, not just its expected-output golden file.
-
-Use deterministic clocks/barriers rather than timing sleeps in correctness tests. Document a generated medium/large diff benchmark and its hardware/cache state; measure raw-view latency and input responsiveness while a fixture is active. Warm raw view within one second and cached list within two seconds are evaluation targets, not portable guarantees. Budget failures must be visible, with scoped limitations, rather than silently dropping changes.
-
-AFTER-16 adds the single documented demo/check command and CI jobs for the real engine. The current tooling CI does not test an unimplemented engine. M1/M2 completion must leave a clean checkout, runnable instructions, compatible checksums/builds for supported platforms, and actual receipt-backed demo evidence. Never fabricate results to complete a task.
-
-## Human evaluation boundary
-
-AFTER-17 produces a reproducible study kit with raw diff, a strong guided tour and AFTER conditions; unfamiliar changes, misleading tests, missing evidence and harmless edits; independent answer keys; randomized/counterbalanced ordering; and timing/correctness/trust scoring. AFTER-18 requires recruited humans and explicit scheduling authorization. It records anonymized actual observations, missed defects and unnecessary reruns. The proposed 12–16 participants and roughly 30% re-review improvement are targets from the proposal, not achieved metrics. No agent impersonates participants or calls an unrun study successful.
-
-Use the outcome to continue, narrow scope, integrate another tool, or stop. Keep GitHub and richer browser experiments deferred until the local loop earns expansion.
+AFTER-17 provides a reproducible evaluation kit. AFTER-18 is a human study and requires explicit authorization, 12–16 consenting unfamiliar engineers, a facilitator, a second scorer, and a 75-minute session plan. AFTER-19/20 explore bounded generation and reduction only after a separate go decision. The proposed ~30% re-review-time reduction is a target, not a measured result. See [EVALUATION.md](EVALUATION.md).
