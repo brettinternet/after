@@ -39,6 +39,7 @@ Only `after run` executes anything, and only after you approve the exact plan it
 - [CLI](docs/CLI.md) · [TUI](docs/TUI.md) · [Record schema](docs/SCHEMA.md)
 - [Evaluation kit](docs/EVALUATION.md)
 - [Proposal](docs/README.md) · [Interactive concept](docs/presentation.html) ([PDF](docs/presentation.pdf))
+- [Extension design](docs/EXTENSIONS.md) (proposal)
 - Contributing: [AGENTS.md](AGENTS.md), [handoff](docs/HANDOFF.md), [implementation contract](docs/IMPLEMENTATION.md), [backlog](backlog/tasks)
 
 ## Checks
