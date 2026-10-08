@@ -153,6 +153,9 @@ func TestPinDefaultsScopeModeAndVerbatimHistory(t *testing.T) {
 }
 
 func TestCommandLineDiagnosticsAndSuggestions(t *testing.T) {
+	// A fresh checkout, so the developer's own .after/ store cannot answer.
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
 	for _, tc := range []struct {
 		args []string
 		want string
@@ -161,7 +164,7 @@ func TestCommandLineDiagnosticsAndSuggestions(t *testing.T) {
 		{[]string{"capture", "--stagd"}, `after: unknown flag "--stagd" — did you mean --staged?`},
 		{[]string{"mystery"}, `after: unknown command "mystery" — run after --help to list available commands`},
 		{[]string{"capture", "--unrelated"}, `after: unknown flag "--unrelated" — run after capture --help to list this command's options`},
-		{[]string{"compare"}, `after: no stored capture is available — run after capture to create one`},
+		{[]string{"compare", "--project", project}, `after: no stored capture is available — run after capture to create one`},
 	} {
 		code, stdout, stderr := invoke(tc.args, false, "")
 		if code != ExitInvalid || stdout != "" || strings.TrimSuffix(stderr, "\n") != tc.want {
