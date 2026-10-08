@@ -146,6 +146,7 @@ func (m *Model) updateLoop(msg tea.Msg) (tea.Cmd, bool) {
 		m.recordActivity("plan prepared", "exact run preview prepared; nothing has run", []evidence.Digest{msg.pair.Base, msg.pair.Candidate, evidence.Digest(msg.digest)}, "")
 		return m.loadDocument(), true
 	case changed:
+		m.clearSearch()
 		m.actionBusy = false
 		if msg.err != nil {
 			m.status = "Action failed: " + msg.err.Error()
@@ -339,6 +340,7 @@ func (m *Model) dispatchLoop(action keyAction) (tea.Cmd, bool) {
 			m.recordActivity("session opened", "opened Activity; selected session references", []evidence.Digest{m.selected.Pair.Base, m.selected.Pair.Candidate}, detail)
 			m.sessionActivityDetail = detail
 		}
+		m.clearSearch()
 		m.request++
 		m.screen = "activity"
 		m.doc = nil

@@ -1,7 +1,7 @@
 # Review TUI design
 
-**Status: target design. AFTER-21–29 and AFTER-32 are implemented as documented
-in [TUI.md](TUI.md); AFTER-30–31 and AFTER-33 remain target behavior.**
+**Status: target design. AFTER-21–32, including search (AFTER-31), are
+implemented as documented in [TUI.md](TUI.md); AFTER-33 remains target behavior.**
 This is the design for backlog tasks AFTER-21 to AFTER-33 (milestone M2). The
 command line, including how `after review` launches, is designed in
 [CLI-DESIGN.md](CLI-DESIGN.md). The product
@@ -482,7 +482,14 @@ Activity details.
   shows the exact stored bytes, and no stored artifact changes.
 - Documents up to the `terminal.Document` limits (16 MiB, 250,000 lines) are
   indexed once, off the event loop, and scroll continuously. Past the line limit,
-  show a limitation; the hex view still reaches every byte.
+  show a limitation; the hex view still reaches every byte. Search uses a plain
+  substring over sanitized displayed text, case-insensitive unless the query has
+  an uppercase letter. `/` opens the bounded one-line query; Enter selects the
+  first match after the cursor, `n`/`N` wrap, and Esc clears the query. Matches use
+  fixed reverse-video styling, or visible delimiters without color; they never add
+  rows. Typed and pasted query text is sanitized and capped at 512 bytes, and paste
+  is data only. Document scans run in cancellable background jobs; query/view
+  changes discard late results.
 - Long lines clip with `…`. Horizontal pan reaches the first 4 KiB of a line; past
   that, the marker points to the hex view. Per-event work stays within the
   [TERMINAL.md](TERMINAL.md) budgets on the 100,000-line captured diff.
@@ -663,7 +670,8 @@ hint priority.
 
 While a text field has focus (a prompt's reason or the search query), printable
 keys and paste are text. Only Enter, Esc, Backspace, Ctrl-U (clear), and Ctrl-C
-act.
+act. Search accepts at most 512 sanitized bytes; bracketed paste never invokes
+navigation or review actions.
 
 ## Copy
 
@@ -722,9 +730,11 @@ These rules are non-negotiable. Each task keeps or extends their tests.
 - One color-mode test per view asserts that only theme SGR sequences appear.
 - Keep the hostile-content tests, and assert that hostile strings appear only in data
   columns or content rows.
-- `task test:terminal` (including the 100,000-line budget) and `task test:cli` PTY
-  flows stay green with updated expectations. PTY transcripts must still contain no
-  payload controls and must restore termios, the alternate screen, and the cursor.
+- `task test:terminal` (including the 100,000-line search/input budget and
+  cancellable search) and `task test:cli` PTY flows stay green with updated
+  expectations. Search is exercised in real PTYs at 80×24 and 120×40 with and
+  without `NO_COLOR`. PTY transcripts must still contain no payload controls and
+  must restore termios, the alternate screen, and the cursor.
 - The Docker-gated `task tui:proof`, `task cli:proof`, and `task test:poc` (which
   includes the TUI PTY proof) assert on screen text and must be updated with the
   screens. Run them when Docker settings are available; otherwise record the blocker.

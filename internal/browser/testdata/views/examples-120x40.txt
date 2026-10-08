@@ -37,4 +37,4 @@ CHANGES 6 paths · 1 captured hunk, all unclassified ·…│
                                                       │                                                                 
                                                       │                                                                 
 
-q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous
+q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view

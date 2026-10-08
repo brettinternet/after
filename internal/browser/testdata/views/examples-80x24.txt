@@ -13,4 +13,4 @@ AFTER · 001 · base 2d13fdbf (commit 4117af3) → candidate 3726afba (working t
   [REPORTED]    example                                  reported · pass
 CHANGES 6 paths · 1 captured hunk, all unclassified · 0 potential oracles · 2 s…
 
-q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff
+q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff

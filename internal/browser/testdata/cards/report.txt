@@ -22,4 +22,4 @@ data | Card
 ── Effects · 11 B ──
 19 │ unavailable
 
-q quit · ? help · Esc back · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page · PgUp page
+q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page

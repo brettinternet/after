@@ -25,6 +25,9 @@ type ActivityEvent struct {
 }
 
 func (m *Model) recordActivity(kind, summary string, ids []evidence.Digest, detail string) {
+	if m.screen == "activity" && m.searchQuery != "" {
+		m.clearSearch()
+	}
 	if m.now == nil {
 		m.now = time.Now
 	}

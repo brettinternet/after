@@ -34,6 +34,7 @@ type usePromptReady struct {
 }
 
 func (m *Model) openMutationPrompt(prompt mutationPrompt) {
+	m.clearSearch()
 	prompt.returnTo = m.screen
 	m.prompt = &prompt
 	m.screen = "prompt"

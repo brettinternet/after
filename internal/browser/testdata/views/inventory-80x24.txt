@@ -10,4 +10,4 @@ UNKNOWN — not fully captured 4
   ?  unknown  excluded: untracked; not selected
   ?  unsupported  unsupported: symlink or symlink parent unsupported
 
-q quit · ? help · Esc back · Enter open · 1 Overview · 2 Changes · 3 Diff
+q quit · ? help · Esc back · Enter open · / search · 1 Overview

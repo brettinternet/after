@@ -254,7 +254,7 @@ func TestConsentExactPlanViewerAndModalKeys(t *testing.T) {
 	if m.screen != "plan" || m.running {
 		t.Fatal("Enter left the consent modal")
 	}
-	if _, ok := keyBindingFor("/"); ok {
+	if _, ok := keyBindingForContext("/", "plan"); ok {
 		t.Fatal("search must not be available on consent")
 	}
 	for _, binding := range keyMap {

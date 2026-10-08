@@ -9,4 +9,4 @@ AFTER · 004 · base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (working t
 CHANGES 4 paths · 0 captured hunks, all unclassified · 0 potential oracles · 2 …
   computed from captured sources — not Git's patch · limited inventory
 
-q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff
+q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff

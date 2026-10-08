@@ -16,7 +16,7 @@ import (
 func TestEveryDispatchedKeyHasOneKeyMapEntry(t *testing.T) {
 	dispatched := []string{
 		"q", "ctrl+c", "x", "c", "i", "?", "esc", "d", "enter", "tab", "shift+tab",
-		"b", "right", "l", "left", "h", "j", "down", "k", "up", "pgdown", "pgup",
+		"b", "right", "l", "left", "h", "j", "down", "k", "up", "pgdown", "pgup", "/", "N",
 		"home", "end", "g", "G", "s", "p", "u", "r", "y", "n", "a", "1", "2", "3", "4", "]", "[", "}", "{",
 	}
 	seen := make(map[string]bool)

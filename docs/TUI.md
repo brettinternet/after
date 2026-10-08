@@ -1,9 +1,9 @@
 # Captured evidence review loop
 
 `after review` captures and opens a change, then resumes that review on the next launch. It does not build code, import a report, run project code or contact Docker on open. Pin inspection and decisions use `after pin PIN`.
-The responsive frame, contextual key map, review session, Activity view, and
-AFTER-26 grouped Overview and AFTER-27 evidence Cards are implemented; later
-redesign tasks are specified in [TUI-DESIGN.md](TUI-DESIGN.md).
+The responsive frame, contextual key map, review session, Activity view,
+grouped Overview, evidence Cards, Changes/Diff viewers and search are implemented
+as specified in [TUI-DESIGN.md](TUI-DESIGN.md).
 
 ```sh
 after review                         # capture HEAD vs working tree; open or resume
@@ -51,8 +51,9 @@ non-empty value) or `TERM=dumb` disables styling. The actions are:
 | `]` / `[`                                          | Next / previous indexed file in Diff                                                        |
 | `}` / `{`                                          | Next / previous indexed hunk in Diff                                                        |
 | `b`                                                | Toggle exact-byte hex view; NUL in the first 8,000 bytes opens hex automatically            |
+| `/`, `n`/`N`                                       | Search the current list/document; next/previous match with wraparound                       |
 | Left/right or `h`/`l`                              | Pan through the first 4 KiB of each line; `[b]` marks longer lines                          |
-| Esc                                                | Return from a detail, preview, or overlay; return to Overview from another top-level view   |
+| Esc                                                | Clear search first; otherwise return from a detail, preview, or overlay                     |
 | `?`                                                | Open grouped help with contextual disabled reasons                                          |
 | `c`                                                | Capture again with this review's saved flags (or HEAD versus working tree for explicit IDs) |
 | `i`                                                | Import the file configured at launch, if any                                                |
@@ -87,6 +88,24 @@ while earlier results become history. `a` is hinted only for a pin with a curren
 complete receipt on the selected pair; the review engine independently enforces
 that requirement and any rejection remains visible. An accepted row shows
 `[ACCEPTED]`.
+
+## Search
+
+`/` opens a one-line query on Overview, Changes, Activity, detail/source
+documents, and Diff. Matching is a plain substring over sanitized displayed
+text, case-insensitive unless the query contains an uppercase letter. Enter moves
+to the first match after the current cursor (wrapping when necessary); `n` and
+`N` cycle forward/backward, and the status line reports `match k of n` or
+`no matches`. Esc clears the search before it backs out of a detail. Matches use
+fixed reverse-video styling in color mode and visible `⟦…⟧` delimiters without
+color; highlighting never creates document rows. Document navigation pans to the
+first matching substring so hits on long lines are brought into view.
+
+Typed and pasted query text is sanitized and capped at 512 bytes. Paste is data,
+never a key action. Large document scans run in cancellable background work;
+changing the query or leaving the view cancels the request and late results are
+discarded. Consent is not searchable: `/` does nothing there and `n` still denies
+the exact plan.
 
 ## Changes and Diff
 
@@ -307,10 +326,10 @@ producer verifier: content-addressed records bind bytes, not producer honesty.
 - `mise exec -- task test:views`: deterministic consent Summary and Changes/Diff
   goldens at 120×40 and 80×24, alongside the existing Overview views through 40×12.
 - `mise exec -- task test:terminal`: real Git captures, full inventory, immutable
-  source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, Changes/Diff navigation and summaries, responsive cancellation and persisted denied-run receipts, plus terminal foundation tests. The 100,250-line captured patch is measured against the terminal per-event budgets.
-- `mise exec -- task test:terminal` also drives the browser through real PTYs at
-  80×24 and 120×40 with color and `NO_COLOR`, checking Changes, Diff, terminal
-  restoration, and safe styling.
+  source, exact-byte hex round trips, badge precedence, case-specific outcomes, safe theme SGR, stale documents, Changes/Diff navigation and summaries, smart-case list/document search, paste sanitization, cancellation, and 100,000-line input budgets, plus terminal foundation tests. The 100,250-line captured patch is measured against terminal per-event budgets.
+- `mise exec -- task test:terminal` also drives search in the browser through real
+  PTYs at 80×24 and 120×40 with color and `NO_COLOR`, checking Changes and Diff
+  matches, terminal restoration, and safe styling.
 - `mise exec -- task test:cli`: actual CLI capture/import followed by PTY browsing,
   inspector/diff/help, background capture/import, 32×8 resize and termios,
   alternate-screen and cursor restoration. Consent also runs in real PTYs at 120×40

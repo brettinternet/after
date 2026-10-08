@@ -80,6 +80,21 @@ func TestResponsiveFramePTY(t *testing.T) {
 				}()
 				var transcript strings.Builder
 				done := make(chan error, 1)
+				runFinished := false
+				defer func() {
+					if runFinished {
+						return
+					}
+					_, _ = master.Write([]byte("\x03"))
+					select {
+					case <-done:
+						return
+					case <-time.After(5 * time.Second):
+						_ = master.Close()
+						_ = slave.Close()
+						t.Error("PTY model did not stop after a failed assertion")
+					}
+				}()
 				go func() { done <- Run(m, slave, slave) }()
 				ready := false
 				deadline := time.After(10 * time.Second)
@@ -98,11 +113,13 @@ func TestResponsiveFramePTY(t *testing.T) {
 						t.Fatalf("missing responsive frame in PTY output: %q", stripCSI.ReplaceAllString(transcript.String(), ""))
 					}
 				}
-				waitFor := func(wants ...string) {
+				waitForSince := func(offset int, wants ...string) {
 					t.Helper()
 					deadline := time.After(5 * time.Second)
 					for {
-						plain := stripCSI.ReplaceAllString(transcript.String(), "")
+						raw := transcript.String()
+						offset = min(offset, len(raw))
+						plain := stripCSI.ReplaceAllString(raw[offset:], "")
 						found := true
 						for _, want := range wants {
 							found = found && strings.Contains(plain, want)
@@ -119,15 +136,35 @@ func TestResponsiveFramePTY(t *testing.T) {
 						case err := <-done:
 							t.Fatalf("TUI exited before requested view: %v", err)
 						case <-deadline:
-							t.Fatalf("missing requested PTY view %v: %q", wants, stripCSI.ReplaceAllString(transcript.String(), ""))
+							t.Fatalf("missing requested PTY view %v: %q", wants, plain)
 						}
 					}
 				}
+				waitFor := func(wants ...string) { waitForSince(0, wants...) }
 				overviewExcerpt := ptyExcerpt(stripCSI.ReplaceAllString(transcript.String(), ""), "NOT CHECKED")
 				if _, err := master.Write([]byte("2")); err != nil {
 					t.Fatal(err)
 				}
 				waitFor("CHANGED", "app/config.go")
+				if _, err := master.Write([]byte("/")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("Enter search")
+				if _, err := master.Write([]byte("config.go\r")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("match 1 of 1")
+				searchExcerpt := ptyExcerpt(stripCSI.ReplaceAllString(transcript.String(), ""), "match 1 of 1")
+				if noColor && !strings.Contains(stripCSI.ReplaceAllString(transcript.String(), ""), "⟦config.go⟧") {
+					t.Fatal("NO_COLOR PTY did not visibly delimit its list match")
+				}
+				if !noColor && !strings.Contains(transcript.String(), "\x1b[7mconfig.go\x1b[0m") {
+					t.Fatal("color PTY did not reverse-highlight its list match")
+				}
+				if _, err := master.Write([]byte("\x1b")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("Search cleared")
 				if _, err := master.Write([]byte("c")); err != nil {
 					t.Fatal(err)
 				}
@@ -149,6 +186,25 @@ func TestResponsiveFramePTY(t *testing.T) {
 					t.Fatal(err)
 				}
 				waitFor("app/config.go · file", "file 1 of", "@@ -", "retentionSeconds int64 = 45")
+				searchStart := transcript.Len()
+				if _, err := master.Write([]byte("/")); err != nil {
+					t.Fatal(err)
+				}
+				waitForSince(searchStart, "Enter search")
+				searchStart = transcript.Len()
+				if _, err := master.Write([]byte("retentionSeconds\r")); err != nil {
+					t.Fatal(err)
+				}
+				waitForSince(searchStart, "match 1 of")
+				diffSearchPlain := stripCSI.ReplaceAllString(transcript.String(), "")
+				if noColor && !strings.Contains(diffSearchPlain, "⟦retentionSeconds⟧") {
+					t.Fatalf("NO_COLOR PTY did not visibly delimit its Diff match: %q", diffSearchPlain)
+				}
+				diffSearchExcerpt := ptyExcerpt(diffSearchPlain, "match 1 of")
+				if _, err := master.Write([]byte("\x1b")); err != nil {
+					t.Fatal(err)
+				}
+				waitFor("Search cleared")
 				if _, err := master.Write([]byte("}")); err != nil {
 					t.Fatal(err)
 				}
@@ -162,6 +218,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 				}
 				select {
 				case err := <-done:
+					runFinished = true
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -199,7 +256,9 @@ func TestResponsiveFramePTY(t *testing.T) {
 				excerpt := strings.Join(lines[:min(2, len(lines))], "\n")
 				t.Logf("real PTY %dx%d %s excerpt:\n%s", size.width, size.height, name, excerpt)
 				t.Logf("real PTY Overview excerpt: %s", overviewExcerpt)
+				t.Logf("real PTY Search excerpt: %s", searchExcerpt)
 				t.Logf("real PTY Changes excerpt: %s", ptyExcerpt(changeExcerpt, "computed from captured sources — not Git's patch"))
+				t.Logf("real PTY Diff search excerpt: %s", diffSearchExcerpt)
 				t.Logf("real PTY Diff excerpt: %s", ptyExcerpt(plain, "computed from captured sources — not Git's patch"))
 				t.Logf("real PTY Activity excerpt: %s", ptyExcerpt(plain, "ACTIVITY"))
 			})

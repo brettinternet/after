@@ -37,4 +37,4 @@ data | Card
  33 │   "started_at": "2025-01-02T20:00:00Z",
  34 │   "finished_at": "2025-01-02T20:00:00Z",
 
-q quit · ? help · Esc back · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page · PgUp page
+q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page

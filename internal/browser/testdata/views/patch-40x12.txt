@@ -9,4 +9,4 @@ app/config.go · file 1 of 2 · captured …
             │ --- a/app/config.go
             │ +++ b/app/config.go
 
-q quit · ? help · Esc back
+q quit · ? help · Esc back · / search

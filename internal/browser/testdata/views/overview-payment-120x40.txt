@@ -37,4 +37,4 @@ CHANGES 4 paths · 0 captured hunks, all unclassified …│2d13fdbf → 8e9eef3
                                                       │                                                                 
                                                       │                                                                 
 
-q quit · ? help · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous
+q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view

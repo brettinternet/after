@@ -25,4 +25,4 @@ app/config.go · file 1 of 2 · captured patch · modified
             │ literal 3
             │ KcmZQzWC8#H2LJ>B
 
-q quit · ? help · Esc back · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view · Shift+Tab previous
+q quit · ? help · Esc back · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view

@@ -13,4 +13,4 @@ data | Card
 ── Current · 57 B ──
 10 │ receipt 9ff67f12 · completed · not_compared · complete
 
-q quit · ? help · Esc back · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page · PgUp page
+q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page

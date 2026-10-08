@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +70,7 @@ type Model struct {
 	cancel                               context.CancelFunc
 	workers                              sync.WaitGroup
 	jobCancel, captureCancel             context.CancelFunc
+	searchCancel                         context.CancelFunc
 	jobID, request, loadID               uint64
 	captureStarted                       time.Time
 	busy                                 bool
@@ -96,6 +98,11 @@ type Model struct {
 	dividerRows                          map[int]bool
 	hex                                  bool
 	status                               string
+	searchQuery                          string
+	searchEditing, searchPending         bool
+	searchRequest                        uint64
+	searchCurrent                        int
+	searchMatches                        []searchMatch
 	prompt                               *mutationPrompt
 	theme                                terminal.Theme
 	now                                  func() time.Time
@@ -249,6 +256,7 @@ func (m *Model) sections() []Section {
 	return entries[i].Sections
 }
 func (m *Model) loadDocument() tea.Cmd {
+	m.clearSearch()
 	m.request++
 	id := m.request
 	m.doc = nil
@@ -306,7 +314,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePromptKey(key)
 		}
 		m.status = ""
+		if cmd, consumed := m.updateSearchKey(key); consumed {
+			return m, cmd
+		}
 		if key.Paste {
+			return m, nil
+		}
+		if key.String() == "esc" && m.searchQuery != "" {
+			m.clearSearch()
+			m.status = "Search cleared"
 			return m, nil
 		}
 		if key.String() == "ctrl+c" {
@@ -326,7 +342,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		binding, found := keyBindingFor(key.String())
+		binding, found := keyBindingForContext(key.String(), m.screen)
 		if !found {
 			return m, nil
 		}
@@ -363,6 +379,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectFirstOverviewRow()
 			return m, m.startOverviewPreview()
 		}
+	case searchReady:
+		if msg.request != m.searchRequest || msg.docRequest != m.request || msg.screen != m.screen || msg.query != m.searchQuery {
+			return m, nil
+		}
+		if m.searchCancel != nil {
+			m.searchCancel()
+			m.searchCancel = nil
+		}
+		m.searchPending = false
+		if msg.err != nil {
+			m.searchMatches = nil
+			m.searchCurrent = -1
+			m.status = "Search cancelled or unavailable"
+			return m, nil
+		}
+		m.searchMatches = msg.matches
+		if len(m.searchMatches) == 0 {
+			m.searchCurrent = -1
+			m.status = "no matches"
+			return m, nil
+		}
+		m.searchCurrent = sort.Search(len(m.searchMatches), func(i int) bool { return m.searchMatches[i].order > msg.cursor })
+		if m.searchCurrent >= len(m.searchMatches) {
+			m.searchCurrent = 0
+		}
+		return m, m.applySearchMatch(m.searchCurrent)
 	case previewReady:
 		if msg.request != m.previewRequest || msg.key != m.previewKey {
 			return m, nil
@@ -462,6 +504,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recordActivity("import load failed", "stored report cards could not be loaded", []evidence.Digest{msg.selection.Pair.Candidate}, msg.err.Error())
 			return m, nil
 		}
+		m.clearSearch()
 		m.selected, m.data = msg.data.Selection, msg.data
 		m.index = max(len(m.data.Entries)-1, 0)
 		m.positionOverviewEntry(m.index)
@@ -506,6 +549,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		m.quitNow()
 		return tea.Quit
 	case keyHelp:
+		m.clearSearch()
 		m.request++
 		if m.screen == "help" {
 			m.screen, m.helpFrom = m.helpFrom, ""
@@ -514,6 +558,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		}
 		m.top = 0
 	case keyBack:
+		m.clearSearch()
 		m.request++
 		m.top = 0
 		if m.screen == "help" {
@@ -526,6 +571,12 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 		if m.screen == "examples" {
 			return m.startOverviewPreview()
 		}
+	case keySearch:
+		m.openSearch()
+	case keyNextMatch:
+		return m.moveSearch(1)
+	case keyPreviousMatch:
+		return m.moveSearch(-1)
 	case keyOverview:
 		return m.switchView(0)
 	case keyChanges:
@@ -576,6 +627,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 				return nil
 			}
 			if row.kind == overviewGroupHeader {
+				m.clearSearch()
 				m.toggleOverviewGroup()
 				return m.startOverviewPreview()
 			}
@@ -599,6 +651,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 			m.left = max(m.left-16, 0)
 		}
 	case keyHex:
+		m.clearSearch()
 		m.hex = !m.hex
 		m.top, m.left = 0, 0
 	case keyDown, keyUp, keyPageDown, keyPageUp, keyStart, keyEnd:
@@ -614,6 +667,7 @@ func (m *Model) dispatch(binding keyBinding) tea.Cmd {
 }
 
 func (m *Model) switchView(view int) tea.Cmd {
+	m.clearSearch()
 	m.request++
 	m.doc = nil
 	m.top = 0
@@ -988,6 +1042,9 @@ func (m *Model) statusLine() string {
 	if m.screen == "plan" {
 		return "Nothing has run. y runs this exact plan once · n denies"
 	}
+	if searchStatus := m.searchStatus(); searchStatus != "" {
+		return searchStatus
+	}
 	if m.running {
 		return "Running the approved plan · " + elapsed(m.now().Sub(m.runStarted)) + " · x cancels (the incomplete result is kept)"
 	}
@@ -1062,7 +1119,11 @@ func (m *Model) View() string {
 		} else {
 			top := max(0, m.activityIndex-m.activityRows()+1)
 			for index := top; index < min(len(m.activity), top+m.activityRows()); index++ {
-				body = append(body, m.activityLine(index, index == m.activityIndex))
+				line := m.activityLine(index, index == m.activityIndex)
+				if m.searchMatchesRow(index) {
+					line = m.theme.Highlight(line, m.searchQuery, m.width)
+				}
+				body = append(body, line)
 			}
 		}
 	case "examples":
@@ -1075,14 +1136,22 @@ func (m *Model) View() string {
 			for offset := 0; offset < m.rows(); offset++ {
 				left := strings.Repeat(" ", listWidth)
 				if index := top + offset; index < len(rows) {
-					left = padStyledLine(m.overviewRowTextWidth(rows[index], index == position, listWidth), listWidth)
+					left = m.overviewRowTextWidth(rows[index], index == position, listWidth)
+					if m.searchMatchesRow(index) {
+						left = m.theme.Highlight(left, m.searchQuery, listWidth)
+					}
+					left = padStyledLine(left, listWidth)
 				}
 				right := padStyledLine(m.overviewPreviewLine(offset, previewWidth), previewWidth)
 				body = append(body, left+"│"+right)
 			}
 		} else {
 			for n := top; n < min(len(rows), top+m.rows()); n++ {
-				body = append(body, m.overviewRowText(rows[n], n == position))
+				line := m.overviewRowText(rows[n], n == position)
+				if m.searchMatchesRow(n) {
+					line = m.theme.Highlight(line, m.searchQuery, m.width)
+				}
+				body = append(body, line)
 			}
 		}
 	case "inventory":
@@ -1119,11 +1188,19 @@ func (m *Model) View() string {
 					count := m.documentRows()
 					for n := m.top; n < min(m.top+m.contentRows(), count); n++ {
 						if m.hex {
-							add(m.doc.HexLine(n))
+							line := m.doc.HexLine(n)
+							if m.searchMatchesRow(n) {
+								line = m.theme.Highlight(line, m.searchQuery, m.width)
+							}
+							add(line)
 							continue
 						}
 						if m.dividerRows[n] {
-							body = append(body, m.theme.Render(m.doc.LineAt(n, m.left, m.width), m.width, terminal.Strong, false))
+							line := m.theme.Render(m.doc.LineAt(n, m.left, m.width), m.width, terminal.Strong, false)
+							if m.searchMatchesRow(n) {
+								line = m.theme.Highlight(line, m.searchQuery, m.width)
+							}
+							body = append(body, line)
 							continue
 						}
 						if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
@@ -1144,7 +1221,12 @@ func (m *Model) View() string {
 							available -= len(marker)
 						}
 						row := m.doc.LineAt(n, m.left, available) + marker
-						body = append(body, gutter+row)
+						if m.searchMatchesRow(n) {
+							row = m.theme.Highlight(row, m.searchQuery, available)
+							body = append(body, gutter+row)
+						} else {
+							body = append(body, gutter+row)
+						}
 					}
 				}
 			}

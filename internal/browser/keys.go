@@ -42,6 +42,9 @@ const (
 	keyActivity
 	keySession
 	keyCancel
+	keySearch
+	keyNextMatch
+	keyPreviousMatch
 )
 
 type keyContext string
@@ -61,6 +64,7 @@ var listKeyContexts = []keyContext{contextOverview, contextChanges, contextActiv
 var topKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextActivity}
 var documentKeyContexts = []keyContext{contextInspector, contextPlan}
 var browseKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextInspector}
+var searchKeyContexts = []keyContext{contextOverview, contextChanges, contextDiff, contextActivity, contextInspector}
 
 type keyBinding struct {
 	keys     []string
@@ -78,6 +82,9 @@ var keyMap = []keyBinding{
 	{keys: []string{"q", "ctrl+c"}, hint: "q quit", label: "Quit (q confirms during a run; Ctrl-C quits now)", group: "Session", action: keyQuit, contexts: allKeyContexts, priority: 0},
 	{keys: []string{"?"}, hint: "? help", label: "Open grouped key help", group: "Session", action: keyHelp, contexts: allKeyContexts, priority: 1},
 	{keys: []string{"esc"}, hint: "Esc back", label: "Return to the previous view", group: "Navigation", action: keyBack, contexts: allKeyContexts, priority: 2, disabled: canGoBack},
+	{keys: []string{"/"}, hint: "/ search", label: "Search displayed text", group: "Search", action: keySearch, contexts: searchKeyContexts, priority: 3, disabled: canSearch},
+	{keys: []string{"n"}, hint: "n next match", label: "Go to the next search match", group: "Search", action: keyNextMatch, contexts: searchKeyContexts, priority: 4, disabled: canSearchNext},
+	{keys: []string{"N"}, hint: "N previous match", label: "Go to the previous search match", group: "Search", action: keyPreviousMatch, contexts: searchKeyContexts, priority: 4, disabled: canSearchNext},
 	{keys: []string{"1"}, hint: "1 Overview", label: "Switch to Overview", group: "Views", action: keyOverview, contexts: topKeyContexts, priority: 3},
 	{keys: []string{"2"}, hint: "2 Changes", label: "Switch to Changes", group: "Views", action: keyChanges, contexts: topKeyContexts, priority: 3, disabled: needsData},
 	{keys: []string{"3"}, hint: "3 Diff", label: "Switch to Diff", group: "Views", action: keyDiff, contexts: topKeyContexts, priority: 3, disabled: needsData},
@@ -113,6 +120,21 @@ var keyMap = []keyBinding{
 
 func keyBindingFor(key string) (keyBinding, bool) {
 	for _, binding := range keyMap {
+		for _, candidate := range binding.keys {
+			if candidate == key {
+				return binding, true
+			}
+		}
+	}
+	return keyBinding{}, false
+}
+
+func keyBindingForContext(key, screen string) (keyBinding, bool) {
+	context := contextForScreen(screen)
+	for _, binding := range keyMap {
+		if !containsContext(binding.contexts, context) {
+			continue
+		}
 		for _, candidate := range binding.keys {
 			if candidate == key {
 				return binding, true
@@ -414,6 +436,9 @@ func canCancel(m *Model) string {
 func (m *Model) keyHints() string {
 	if m.screen == "prompt" {
 		return "Enter confirm · Esc cancel · Ctrl-U clear · Ctrl-C quit"
+	}
+	if m.searchEditing {
+		return "Enter search · Esc clear · Backspace erase · Ctrl-U clear · Ctrl-C quit"
 	}
 	if m.height < 7 {
 		return "? help · q quit"

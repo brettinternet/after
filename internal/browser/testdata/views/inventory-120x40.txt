@@ -10,4 +10,4 @@ UNKNOWN — not fully captured 4                         │ LINES +1 −4
   ?  unknown  excluded: untracked; not selected        │ --- a/app/config.go
   ?  unsupported  unsupported: symlink or symlink par… │ +++ b/app/config.go
 
-q quit · ? help · Esc back · Enter open · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view
+q quit · ? help · Esc back · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity

@@ -98,6 +98,9 @@ func (m *Model) inventoryBody() []string {
 		} else {
 			left = m.changeEntryLine(m.data.Inventory[row.EntryIndex], row.EntryIndex == selected, listWidth)
 		}
+		if m.searchMatchesRow(rowIndex) {
+			left = m.theme.Highlight(left, m.searchQuery, listWidth)
+		}
 		if previewWidth == 0 {
 			out = append(out, left)
 			continue
@@ -195,7 +198,11 @@ func (m *Model) diffDocumentRow(rowIndex int) string {
 	}
 	row := m.data.Diff.Rows[rowIndex]
 	if row.Summary != "" {
-		return m.theme.Render(row.Summary, m.width, terminal.Muted, false)
+		line := m.theme.Render(terminal.LineAt(row.Summary, m.left, m.width), m.width, terminal.Muted, false)
+		if m.searchMatchesRow(rowIndex) {
+			line = m.theme.Highlight(line, m.searchQuery, m.width)
+		}
+		return line
 	}
 	gutter := strings.Repeat(" ", 12) + "│ "
 	if row.HasGutter {
@@ -218,11 +225,14 @@ func (m *Model) diffDocumentRow(rowIndex int) string {
 		marker = "[b]"
 		available -= len(marker)
 	}
-	content := m.doc.LineAt(row.RawLine, m.left, available)
+	content := m.theme.Render(m.doc.LineAt(row.RawLine, m.left, available), available, row.Style, false)
+	if m.searchMatchesRow(rowIndex) {
+		content = m.theme.Highlight(content, m.searchQuery, available)
+	}
 	if content == "" && marker == "" {
 		gutter = strings.TrimSuffix(gutter, " ")
 	}
-	return gutter + m.theme.Render(content, available, row.Style, false) + marker
+	return gutter + content + marker
 }
 
 func (m *Model) navigateFile(delta int) {
