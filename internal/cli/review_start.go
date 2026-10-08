@@ -40,13 +40,12 @@ func startOrResumeReview(state *invocation, ctx *ucli.Context, requested capture
 		return err
 	}
 	if !found && !ctx.Bool("new") {
-		hasChanges, err := capturedPairHasChanges(cfg.Project, pair)
+		guidance, empty, err := emptyCaptureGuidanceForProject(state.ctx, cfg.Project, pair, requested)
 		if err != nil {
 			return operational("cannot inspect the captured change")
 		}
-		if !hasChanges {
-			_, _ = fmt.Fprintln(state.stderr, "Nothing to review: the capture has no changed or unknown paths.")
-			return nil
+		if empty {
+			return writeReadableTo(state, "review_empty", emptyReviewOutput{Guidance: *guidance}, state.stderr, state.stderrTTY)
 		}
 	}
 	session := browser.NewReviewSession(pair, requested)

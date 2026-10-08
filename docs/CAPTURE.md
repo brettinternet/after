@@ -27,6 +27,18 @@ output, repository-controlled text and absolute project paths are never included
   field, not a fabricated all-zero commit. Its index and working tree can still
   be captured.
 
+An empty implicit `after review` capture, when no review is saved, exits 0 without
+opening the TUI. It says the working tree or index matches HEAD (or that the
+merge-base comparison has no changes), suggests a default-branch comparison when
+HEAD has commits ahead, and names up to three sanitized excluded untracked paths
+with `--include-untracked` suggestions. `after capture` persists the empty capture
+and shows the same guidance in `Next`. Excluded untracked entries alone do not
+suppress the guidance; unknown or unsupported entries still require review. The
+branch check uses the hardened, network-disabled Git runner to read
+`refs/remotes/origin/HEAD`, then local `main`, then `master`; it executes no project
+code and does not fetch. Saved reviews and `after review --new` retain their normal
+resume/start-over behavior, and the JSON capture envelope is unchanged.
+
 Content-addressed private storage retains source bytes and Git executable modes.
 Capture IDs include the selection inventory, limitations, diff and index binding;
 mtimes are not identities. No user index, refs or files are changed. The only

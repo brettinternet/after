@@ -11,7 +11,6 @@ import (
 	"github.com/brettinternet/after/internal/config"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
-	"github.com/brettinternet/after/internal/rawdiff"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
 	ucli "github.com/urfave/cli/v2"
@@ -99,25 +98,4 @@ func captureForReview(state *invocation, project string, options capture.Options
 		return evidence.SnapshotPair{}, captureFailure(err)
 	}
 	return evidence.SnapshotPair{Base: result.Base.ID, Candidate: result.Candidate.ID}, nil
-}
-
-func capturedPairHasChanges(project string, pair evidence.SnapshotPair) (bool, error) {
-	s, err := store.Open(project, false, nil)
-	if err != nil {
-		return false, err
-	}
-	defer s.Close()
-	base, err := store.Get[evidence.Snapshot](s, pair.Base)
-	if err != nil {
-		return false, err
-	}
-	candidate, err := store.Get[evidence.Snapshot](s, pair.Candidate)
-	if err != nil {
-		return false, err
-	}
-	diff, err := rawdiff.Open(s, base, candidate)
-	if err != nil {
-		return false, err
-	}
-	return len(diff.Inventory()) > 0, nil
 }

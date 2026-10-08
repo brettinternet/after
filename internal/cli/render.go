@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -213,28 +214,35 @@ func (s *invocation) safeLine(value string, style terminal.Style) string {
 }
 
 func writeReadable(state *invocation, kind string, data any) error {
+	return writeReadableTo(state, kind, data, state.stdout, state.stdoutTTY)
+}
+
+func writeReadableTo(state *invocation, kind string, data any, target io.Writer, targetTTY bool) error {
 	encoded, err := json.Marshal(data)
 	if err != nil || len(encoded) > MaxCLIOutput {
 		return operational("readable response exceeds output limit")
 	}
-	lines, err := readableLines(state, kind, encoded, data)
+	renderState := *state
+	renderState.stdout = target
+	renderState.stdoutTTY = targetTTY
+	lines, err := readableLines(&renderState, kind, encoded, data)
 	if err != nil {
 		return operational("cannot render readable result")
 	}
-	lines = appendNextLines(state, kind, encoded, data, lines)
+	lines = appendNextLines(&renderState, kind, encoded, data, lines)
 	var output bytes.Buffer
 	for _, line := range lines {
 		if line.full {
 			output.WriteString(terminal.Sanitize(line.text))
 		} else {
-			output.WriteString(state.safeLine(line.text, line.style))
+			output.WriteString(renderState.safeLine(line.text, line.style))
 		}
 		output.WriteByte('\n')
 		if output.Len() > MaxCLIOutput {
 			return operational("readable response exceeds output limit")
 		}
 	}
-	n, err := state.stdout.Write(output.Bytes())
+	n, err := target.Write(output.Bytes())
 	if err != nil || n != output.Len() {
 		return operational("cannot write readable response")
 	}
@@ -293,7 +301,16 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		if result.Index != nil {
 			lines = appendSnapshotSummary(lines, "Index", *result.Index)
 		}
+		if output, ok := original.(captureOutput); ok && output.Guidance != nil {
+			lines = append(lines, emptyGuidanceLines(*output.Guidance)...)
+		}
 		return lines, nil
+	case "review_empty":
+		output, ok := original.(emptyReviewOutput)
+		if !ok {
+			return nil, fmt.Errorf("empty review guidance is unavailable")
+		}
+		return emptyGuidanceLines(output.Guidance), nil
 	case "import", "inspection":
 		if reference, ok := original.(inspectionCardReference); ok {
 			if lines, ok := cardInspectionLines(state, reference.ID); ok {
@@ -557,12 +574,22 @@ func usingRunLine(ids resolvedIDs) readableLine {
 	return textLine(fmt.Sprintf("Using the newest run of base %s → candidate %s", shortID(ids.Base), shortID(ids.Candidate)), terminal.Muted)
 }
 
+type nextBlockProvider interface {
+	nextBlock() ([]nextCommand, bool)
+}
+
 func appendNextLines(state *invocation, kind string, raw []byte, original any, lines []readableLine) []readableLine {
 	var data struct {
 		Next []nextCommand `json:"next"`
 	}
 	_ = json.Unmarshal(raw, &data)
-	if len(data.Next) == 0 {
+	hasNext := len(data.Next) > 0
+	if !hasNext {
+		if provider, ok := original.(nextBlockProvider); ok {
+			data.Next, hasNext = provider.nextBlock()
+		}
+	}
+	if !hasNext {
 		data.Next = suggestedNext(state, kind, raw, original)
 	}
 	lines = append(lines, textLine("Next", terminal.Strong))

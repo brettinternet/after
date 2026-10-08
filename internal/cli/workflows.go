@@ -249,11 +249,16 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		value := summary(*result.Index)
 		index = &value
 	}
-	return writeResult(state, "capture", struct {
-		Base      snapshotSummary  `json:"base_snapshot"`
-		Candidate snapshotSummary  `json:"candidate_snapshot"`
-		Index     *snapshotSummary `json:"index_snapshot,omitempty"`
-	}{summary(result.Base), summary(result.Candidate), index})
+	pair := evidence.SnapshotPair{Base: result.Base.ID, Candidate: result.Candidate.ID}
+	guidance, empty, err := buildEmptyCaptureGuidance(state.ctx, cfg.Project, pair, options, s)
+	if err != nil {
+		return operational("cannot inspect the captured change")
+	}
+	response := captureOutput{Base: summary(result.Base), Candidate: summary(result.Candidate), Index: index}
+	if empty {
+		response.Guidance = guidance
+	}
+	return writeResult(state, "capture", response)
 }
 
 func captureOptionsFromFlags(ctx *ucli.Context, command string) (capture.Options, error) {
