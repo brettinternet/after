@@ -1,8 +1,11 @@
-# Same responses, different behavior: a one-line retention change passes review
-# by diff, but AFTER observes a duplicate provider charge. Needs Docker.
+# README hero and example 05: a one-line change with identical HTTP responses,
+# and the duplicate charge AFTER observes when it runs both versions. Needs Docker.
 
 Output examples/demos/payment.gif
 Source examples/demos/style.tape
+Set Width 1200
+Set Height 640
+Source examples/demos/prelude.tape
 Require docker
 
 Type `export AFTER_DOCKER_BINARY="$(command -v docker)" AFTER_DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"`
@@ -12,7 +15,7 @@ Enter
 Wait
 Show
 
-Type "# A one-line change to a payment service. Looks harmless?"
+Type "# One line of a payment service changed. Tests pass. Ship it?"
 Sleep 500ms
 Enter
 Type "after diff"
@@ -25,32 +28,22 @@ Hide
 Type "clear"
 Enter
 Show
-Type "after capture"
+Type "# Capture both versions, then run them in AFTER's offline sandbox:"
 Sleep 500ms
 Enter
-Wait
-Sleep 2s
-
-Hide
-Type "clear"
-Enter
-Show
-Type "# Run base and candidate in the offline sandbox: POST, then retry the same key"
+Type "after capture && after run"
 Sleep 500ms
 Enter
-Type "after run"
-Sleep 500ms
-Enter
-Wait+Screen /Type yes/
-Sleep 3s
+# Wait+Screen does not follow scrolling; the consent prompt appears within a second.
+Sleep 5s
 Type "yes"
 Sleep 500ms
 Enter
-Sleep 2s
+Sleep 1s
 # Skip the sandbox run time.
 Hide
 Wait
 Show
 Sleep 3s
-Type "# Identical responses, but a retry after 12h now charges the card twice."
-Sleep 6s
+Type "# Same responses, but a retry after 12h now charges the card twice."
+Sleep 7s

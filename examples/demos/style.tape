@@ -1,5 +1,5 @@
-# Shared look and hidden shell setup for the demo tapes. Regenerate every GIF
-# from the repository root with: task demo:gifs (see examples/README.md).
+# Shared look for the demo tapes. Regenerate every GIF from the repository
+# root with: task demo:gifs (see examples/README.md).
 
 Require ttyd
 Require git
@@ -20,7 +20,3 @@ Set TypingSpeed 40ms
 Set Framerate 20
 Set WaitPattern /^\$\s*$/
 Set WaitTimeout 3m
-
-Hide
-Type `export PATH="$PWD/bin:$PATH" PS1='\[\e[1;32m\]$\[\e[0m\] ' GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`
-Enter

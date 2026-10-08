@@ -3,6 +3,7 @@
 
 Output examples/demos/review.gif
 Source examples/demos/style.tape
+Source examples/demos/prelude.tape
 
 Type `cd "$(examples/demos/setup.sh review 2>/dev/null)" && export XDG_CONFIG_HOME="$PWD/../config" && clear`
 Enter
