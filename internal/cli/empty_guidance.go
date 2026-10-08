@@ -142,7 +142,7 @@ func buildEmptyCaptureGuidance(ctx context.Context, project string, pair evidenc
 			name := terminal.Sanitize(branch.Name)
 			guidance.Details = append(guidance.Details, fmt.Sprintf("HEAD is %d %s ahead of %s.", branch.Ahead, plural(branch.Ahead, "commit"), name))
 			if printableArgument(branch.Name) && printableArgument(branch.Reference) {
-				guidance.Next = append(guidance.Next, next("after review --base "+shellQuote(branch.Reference), fmt.Sprintf("review the %d commits ahead of %s", branch.Ahead, name)))
+				guidance.Next = append(guidance.Next, next("after review --base "+shellQuote(branch.Reference), fmt.Sprintf("review the %d %s ahead of %s", branch.Ahead, plural(branch.Ahead, "commit"), name)))
 			}
 		} else {
 			guidance.Details = append(guidance.Details, fmt.Sprintf("HEAD has no commits ahead of %s.", terminal.Sanitize(branch.Name)))
