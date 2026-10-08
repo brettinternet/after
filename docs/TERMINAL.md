@@ -5,9 +5,9 @@ AFTER uses **Bubble Tea v1.3.10** for its local TUI. The evaluated v1 model/upda
 Run the existing gates:
 
 ```sh
-mise exec -- task test:terminal
-mise exec -- task terminal:bench
-mise exec -- task terminal:fuzz
+task test:terminal
+task terminal:bench
+task terminal:fuzz
 ```
 
 ## Text and event-loop boundary

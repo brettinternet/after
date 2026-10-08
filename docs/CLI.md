@@ -4,7 +4,7 @@
 
 `after` is a Go CLI over local capture, private storage, Go test report import, diff, the frozen payment runner, comparison and pins. It has no model, account, GitHub or editor dependency. Help, version and configuration display do not run repository code. Data commands print readable text by default; `--json` requests the version-1 `schema_version` / `kind` / `data` envelope, while `export` always emits JSON. Diagnostics go to stderr. See [DEMO.md](DEMO.md) for packaging and a prepared-checkout walkthrough.
 
-Build with `mise exec -- task build`. These commands show the usual capture-to-review path:
+Build with `task build`. These commands show the usual capture-to-review path:
 
 ```sh
 ./bin/after capture --project /work/payment
@@ -176,7 +176,7 @@ On a terminal, readable output uses the AFTER theme unless `NO_COLOR` is set or 
 | 3    | Run declined, lacks exact authorization or has a digest mismatch                    |
 | 4    | Comparison finding: `different` or `unstable`; not an automatic regression judgment |
 
-`run`, `compare`, `inspect` and `export` preserve JSON evidence on finding/incomplete outcomes. Capture/import that remain active for one second report elapsed time to terminal stderr; pipes receive no progress notice. `mise exec -- task test:cli` runs focused CLI/config/native-entry tests. `mise exec -- task cli:proof` runs the real subprocess payment proof and requires the pinned image plus explicit Docker settings; it executes the synthetic fixture.
+`run`, `compare`, `inspect` and `export` preserve JSON evidence on finding/incomplete outcomes. Capture/import that remain active for one second report elapsed time to terminal stderr; pipes receive no progress notice. `task test:cli` runs focused CLI/config/native-entry tests. `task cli:proof` runs the real subprocess payment proof and requires the pinned image plus explicit Docker settings; it executes the synthetic fixture.
 
 ## Shell completion
 

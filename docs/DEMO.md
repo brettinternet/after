@@ -9,10 +9,10 @@ From a fresh checkout:
 ```sh
 mise trust
 mise install
-mise exec -- task init
-mise exec -- task build
+task init
+task build
 ./bin/after --help
-mise exec -- task package
+task package
 ```
 
 Go and modules are pinned in `mise.toml`, `go.mod` and `go.sum`. Tool/module setup may use the network; it is separate from offline project execution. `task package` uses the local Go toolchain, read-only module resolution, `CGO_ENABLED=0` and trimmed paths. It creates a unique ignored `dist/0.1.0-dev.<commit>[.dirty]-<suffix>/` directory with four executables, `SHA256SUMS` and `BUILD.txt`; it does not sign, archive, install, upload or publish a release.
@@ -36,9 +36,9 @@ Checksums detect corruption, not publisher authenticity. Unsigned development bi
 ## Inspect without Docker
 
 ```sh
-mise exec -- task demo:inspect
+task demo:inspect
 # Keep the private workspace and JSON steps for inspection:
-mise exec -- task demo:inspect -- --keep
+task demo:inspect -- --keep
 ```
 
 The demo creates its own temporary Git repository from four allowlisted synthetic payment files, commits a base, changes retention, captures the candidate, inspects the diff and imports a checked-in Go report. It does not run the imported tests, the payment app, or Docker; the report is labeled `reported / unknown / not_run`. It copies no caller project, ignored files, credentials or production services. JSON steps live outside the fixture repository. Use captured IDs with `after inspect` or `after review BASE CANDIDATE --project WORKSPACE/payment`.
@@ -60,7 +60,7 @@ Example for Linux:
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
 AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-mise exec -- task demo -- --keep
+task demo -- --keep
 ```
 
 On macOS, use the absolute CLI path and local socket from `docker context inspect colima`; the sandbox does not inherit Docker contexts or credentials. The demo shows the exact plan and requires its digest. EOF or a different digest stops before execution. Builds and processes run offline in isolation and may take several minutes.

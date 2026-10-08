@@ -15,7 +15,7 @@ With a trusted local Linux Docker daemon and explicitly chosen CLI/socket:
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
 AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-mise exec -- task fixtures:payment
+task fixtures:payment
 ```
 
 On macOS, substitute the absolute installed Docker CLI path and the Colima Unix
@@ -40,7 +40,7 @@ appends each received request without consulting any expected count or doing
 its own deduplication. Assertions outside the sandbox check the actual records.
 The counts below are **expected checks**, not data fed into the observer.
 
-Ordinary `mise exec -- task test` checks snapshot generation and frozen inputs
+Ordinary `task test` checks snapshot generation and frozen inputs
 without contacting Docker, building the fixture, or executing a captured app.
 The opt-in command is required for behavioral evidence. Each sandbox has a
 180-second total limit and 64 KiB combined output limit; it builds offline inside

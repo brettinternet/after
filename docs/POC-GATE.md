@@ -1,6 +1,6 @@
 # Adversarial POC gate
 
-`mise exec -- task test:poc` explicitly authorizes synthetic offline Docker experiments, hostile workloads, resource probes, and real terminal sessions. It is not an inspection-only check. Set `AFTER_DOCKER_BINARY` to a trusted absolute Docker CLI and `AFTER_DOCKER_HOST` to its local Unix socket; provision the [pinned image and isolation capabilities](SANDBOX.md) separately. The gate never pulls an image or falls back to host execution.
+`task test:poc` explicitly authorizes synthetic offline Docker experiments, hostile workloads, resource probes, and real terminal sessions. It is not an inspection-only check. Set `AFTER_DOCKER_BINARY` to a trusted absolute Docker CLI and `AFTER_DOCKER_HOST` to its local Unix socket; provision the [pinned image and isolation capabilities](SANDBOX.md) separately. The gate never pulls an image or falls back to host execution.
 
 ## What the gate runs
 
@@ -29,7 +29,7 @@ These named tests run through the gate along with the full suite. Synthetic faul
 
 ## Performance reproduction
 
-`mise exec -- task terminal:bench` creates fresh Git repos with medium (10 files, 20,000 changed lines) and large (50 files, 100,000 changed lines) inputs. It records capture, first and warm raw view, cached inventory, document preparation, allocations, input/resize rendering, and quit latency; it asserts all expected paths and unclassified hunks. The OS cache is warm from capture, not a cold-disk benchmark. `BenchmarkCapturedViewport` separately measures the large warm viewport.
+`task terminal:bench` creates fresh Git repos with medium (10 files, 20,000 changed lines) and large (50 files, 100,000 changed lines) inputs. It records capture, first and warm raw view, cached inventory, document preparation, allocations, input/resize rendering, and quit latency; it asserts all expected paths and unclassified hunks. The OS cache is warm from capture, not a cold-disk benchmark. `BenchmarkCapturedViewport` separately measures the large warm viewport.
 
 | Author measurement      |      Medium |        Large |
 | ----------------------- | ----------: | -----------: |
@@ -55,7 +55,7 @@ Imported provenance is not a signature. Repository text cannot grant execution o
 
 ## Verification record
 
-Author run: `mise exec -- task test:poc` exited 0 on macOS arm64 (Apple M5 Max, 18 logical CPUs, 64 GiB) with a local Linux/cgroup-v2 Docker daemon. All required proofs passed without skips. The snapshot-binding mutant failed `TestInvalidationMatrix` with `bad reopening`; the observer mutant failed `TestRunnerProof` with `got 1 calls want 2`. The final gate success line followed both expected failures. No owned sandbox containers or derived images remained. `mise exec -- task check` also passed. These are author results; no remote CI result is claimed.
+Author run: `task test:poc` exited 0 on macOS arm64 (Apple M5 Max, 18 logical CPUs, 64 GiB) with a local Linux/cgroup-v2 Docker daemon. All required proofs passed without skips. The snapshot-binding mutant failed `TestInvalidationMatrix` with `bad reopening`; the observer mutant failed `TestRunnerProof` with `got 1 calls want 2`. The final gate success line followed both expected failures. No owned sandbox containers or derived images remained. `task check` also passed. These are author results; no remote CI result is claimed.
 
 An independent check found no item-scoped defect in gate guards, CI wiring, or performance coverage. It passed `task test:terminal`, `task terminal:bench`, and `git diff --check`; the large warm viewport measured 29,727 ns/op, 16,185 B/op, and 285 allocations/op. It did not rerun Docker or independently certify the full gate log.
 

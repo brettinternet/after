@@ -46,14 +46,14 @@ This experiment is two sequential same-key requests at 12 hours and 30 seconds. 
 
 ## Checks and live proof
 
-`mise exec -- task check:go` covers deterministic JSON, exact numbers and Unicode, missing/new channels, failures, malicious rules, repetitions, redaction and artifact/inventory links. `mise exec -- task comparison:fuzz` fuzzes bounded JSON determinism and reflexivity.
+`task check:go` covers deterministic JSON, exact numbers and Unicode, missing/new channels, failures, malicious rules, repetitions, redaction and artifact/inventory links. `task comparison:fuzz` fuzzes bounded JSON determinism and reflexivity.
 
 The opt-in live proof requires the pinned image and explicit local Docker CLI/socket:
 
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
 AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-mise exec -- task comparison:proof
+task comparison:proof
 ```
 
 It authorizes only synthetic payment runs and checks identical responses, 12-hour counts 1 vs 2, 30-second counts 1 vs 1, two repetitions and 16 artifact-linked witnesses. It uses the same Docker settings as [the runner proof](RUNNER.md). Unit tests do not run Docker or project code. The existing live validation was macOS with a Colima Linux aarch64 daemon; it does not certify other host/daemon combinations.

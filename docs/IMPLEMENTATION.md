@@ -52,7 +52,7 @@ The TUI offers an evidence list, inspector, raw diff, and explicit actions: Ente
 
 `task test:poc` is the opt-in Docker/PTY gate. It authorizes synthetic runs, rejects skips, requires named proofs, and kills two production-code mutants with their expected assertions. Its [ten design checks](POC-GATE.md) cover independent effects, frozen oracles, invalidation, late/failed/unstable results, missing evidence, no models, hostile content, and finite scope. It also tests interrupted writes, workload-crash cleanup, bounded output, descendant/container cancellation, environment contamination, permission denial, dirty/index/untracked Git behavior, and Unicode paths. It does not prove cleanup after host-supervisor SIGKILL, daemon failure, or power loss. Docker, its CLI, pinned image, host kernel, and AFTER are trusted.
 
-`mise exec -- task terminal:bench` measures generated medium (10 files/20,000 changed lines) and large (50 files/100,000 changed lines) diffs. The cache is warm from capture, not a cold-disk benchmark. Warm raw view ≤1s, cached inventory ≤2s, document preparation ≤1s/64 MiB, and input/render ≤100ms/256 KiB are evaluation budgets, not guarantees. Actual gate results and measurements are in [POC-GATE.md](POC-GATE.md).
+`task terminal:bench` measures generated medium (10 files/20,000 changed lines) and large (50 files/100,000 changed lines) diffs. The cache is warm from capture, not a cold-disk benchmark. Warm raw view ≤1s, cached inventory ≤2s, document preparation ≤1s/64 MiB, and input/render ≤100ms/256 KiB are evaluation budgets, not guarantees. Actual gate results and measurements are in [POC-GATE.md](POC-GATE.md).
 
 ## Milestones and human boundary
 

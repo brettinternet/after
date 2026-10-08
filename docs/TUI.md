@@ -133,7 +133,7 @@ Initial record loading, capture, import, run preparation, whole-document reads, 
 
 ## Verification
 
-- `mise exec -- task test:views`: deterministic consent and Changes/Diff views at 120×40 and 80×24, plus Overview down to 40×12.
-- `mise exec -- task test:terminal`: capture inventory, immutable sources, hex, badges, outcomes, navigation, search, paste safety, cancellation and large-input budgets.
-- `mise exec -- task test:cli`: CLI capture/import, PTY browsing, background actions, resizing and terminal restoration.
-- `mise exec -- task tui:proof`, `task cli:proof` and `task test:poc` are Docker-gated synthetic execution proofs. They require explicit plan authorization; they are not ordinary documentation checks.
+- `task test:views`: deterministic consent and Changes/Diff views at 120×40 and 80×24, plus Overview down to 40×12.
+- `task test:terminal`: capture inventory, immutable sources, hex, badges, outcomes, navigation, search, paste safety, cancellation and large-input budgets.
+- `task test:cli`: CLI capture/import, PTY browsing, background actions, resizing and terminal restoration.
+- `task tui:proof`, `task cli:proof` and `task test:poc` are Docker-gated synthetic execution proofs. They require explicit plan authorization; they are not ordinary documentation checks.

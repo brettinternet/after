@@ -50,11 +50,11 @@ With the separately provisioned image and explicitly configured local daemon:
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
 AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-mise exec -- task runner:proof
+task runner:proof
 ```
 
 This opt-in proof authorizes generated synthetic captures/lifecycle probes only; it does not pull the image. It checks real observations across two repetitions: identical responses, 12-hour provider counts 1/2, 30-second counts 1/1, candidate-test/driver edits and forged stdout/scratch output. Lifecycle probes cover namespace isolation, startup failure, output overflow, ready descendants at deadline/cancel, cleanup and an unrelated sentinel container. Premature app exit with a serving descendant and refused upstream connections must remain incomplete; app-generated 502 responses remain observable. Proxy transport failures abort rather than invent responses. Ordinary checks skip live Docker.
 
-`mise exec -- task check:go` runs race tests for consent, immutable previews, late selection, unstable repetitions, failure states, redaction, cleanup refusal and cancellable concurrency. Existing live validation is macOS with a Colima Linux aarch64 daemon; Linux workstation, Docker Desktop and amd64 are not independently certified.
+`task check:go` runs race tests for consent, immutable previews, late selection, unstable repetitions, failure states, redaction, cleanup refusal and cancellable concurrency. Existing live validation is macOS with a Colima Linux aarch64 daemon; Linux workstation, Docker Desktop and amd64 are not independently certified.
 
 The daemon/CLI, image, host kernel and shipped observer are trusted. This is not a malware VM. Candidate traffic can disrupt or impersonate its own app endpoint; payloads are untrusted. The app cannot rewrite observer memory, files or output through shared networking. Port conflicts, flooding and malformed responses fail closed. Results cover finite sequential traffic, not later background effects, durable billing, real payments or all inputs. The launcher/proxy is app-side infrastructure, not a trusted source of provider counts. The complete raw diff remains independently usable.

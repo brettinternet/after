@@ -7,10 +7,10 @@ This is a runnable technical kit, not a completed human study. Generated runs ar
 Use a prepared checkout and the [demo prerequisites](DEMO.md), including separately provisioned pinned Docker image. Use only the kit's synthetic payment files, never a participant's repository or credentials.
 
 ```sh
-mise exec -- task study:check
-mise exec -- task study:assign -- --assign-seed cohort-01 --participants 12
+task study:check
+task study:assign -- --assign-seed cohort-01 --participants 12
 # Set AFTER_DOCKER_BINARY and AFTER_DOCKER_HOST as described in DEMO.md.
-mise exec -- task study:proof -- --keep
+task study:proof -- --keep
 ```
 
 `study:proof` explicitly authorizes six synthetic offline runs and validates the independently observed keys. It fails on incomplete runs, wrong responses/call counts, missing controls, cleanup failures, or failure to reopen stale/missing evidence. `--keep` retains the private kit; omit it for automatic cleanup. `study:check` needs no Docker: it checks assignment consistency and captures the three initial cases, including changed-oracle inventory, but does not validate observed keys. For interactive per-plan consent, use `task demo -- --study --keep`. No silent pull or host-execution fallback is allowed. Do not distribute an incomplete generation without all three facilitator keys.

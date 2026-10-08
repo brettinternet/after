@@ -49,7 +49,7 @@ On macOS, prepare a Linux Colima VM with at least 2 GiB RAM and Docker/cgroup v2
 ```sh
 AFTER_DOCKER_BINARY=/usr/bin/docker \
 AFTER_DOCKER_HOST=unix:///var/run/docker.sock \
-mise exec -- task sandbox:proof
+task sandbox:proof
 ```
 
 On macOS, set the absolute CLI path and Unix socket reported by `docker context inspect colima`. The opt-in target authorizes synthetic test plans only and logs each plan/digest. It is not blanket permission to run captured projects. It never pulls. Missing image or capabilities fail; they do not skip. Without the target's opt-in setting, normal Go tests skip Docker probes.

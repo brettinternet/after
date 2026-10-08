@@ -28,7 +28,7 @@ A reported `pass`, `fail` or `skip` stays separate from AFTER execution. Test na
 The importer accepts dialect `go-test-json-v1` (report schema 1), tested with Go 1.27.1 on macOS/arm64. Checked-in synthetic JSONL fixtures live in `internal/gotestreport/testdata/`; their sources are nested so deliberately failing fixtures stay outside product tests/builds. Regenerate only with:
 
 ```sh
-mise exec -- task fixtures:go-report
+task fixtures:go-report
 ```
 
 That developer target runs synthetic tests with module networking disabled; import and normal tests never invoke it. Fixtures cover passing/failing/skipped and nested/parallel tests, duplicate names in separate packages, package/build failure, no tests, and an invalid-timeout command with empty output.

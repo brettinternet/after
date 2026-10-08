@@ -24,8 +24,8 @@ Start implementation from [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEME
 ```sh
 mise trust
 mise install
-mise exec -- task init
-mise exec -- task build
+task init
+task build
 ./bin/after --help
 ```
 
@@ -38,7 +38,7 @@ Captured candidate e7070067 (working tree) against base 8e750e49 (commit)
   Limit        two matching reads; not an atomic filesystem snapshot
 ```
 
-Use `mise exec -- task check:go` for build, race tests, vet, and Go formatting; `task test` also checks local links and backlog integrity. Before a commit, stage only intended files and run `mise exec -- task check:staged`. Presentation changes need `task docs:check`; `task docs:render` also updates the PDF and preview.
+Use `task check:go` for build, race tests, vet, and Go formatting; `task test` also checks local links and backlog integrity. Before a commit, stage only intended files and run `task check:staged`. Presentation changes need `task docs:check`; `task docs:render` also updates the PDF and preview.
 
 ## Scope boundary
 

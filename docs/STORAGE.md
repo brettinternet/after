@@ -49,4 +49,4 @@ This is explicit redaction, not secret discovery. Supply safe inputs and known s
 
 The caller's project path is trusted. Storage does not defend against another process running as the same user that actively replaces directories or lock inodes. Use a local filesystem with advisory locks, hard links and `fsync` support.
 
-`mise exec -- task check:go` and `mise exec -- task test` cover immutable records, reopen, damaged references, publication fault points, ENOSPC/EACCES, permissions, path/link/FIFO rejection, budgets, decoded-field and overlapping redaction, and a killed writer followed by lock recovery without deleting unrelated files. They do not simulate a physical drive losing acknowledged writes.
+`task check:go` and `task test` cover immutable records, reopen, damaged references, publication fault points, ENOSPC/EACCES, permissions, path/link/FIFO rejection, budgets, decoded-field and overlapping redaction, and a killed writer followed by lock recovery without deleting unrelated files. They do not simulate a physical drive losing acknowledged writes.

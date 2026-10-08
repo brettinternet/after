@@ -5,13 +5,13 @@ Each script builds a small throwaway Git project, runs the real `bin/after`, and
 explains what it shows. Read a script top to bottom to learn the commands it runs.
 
 ```sh
-mise exec -- task build
-mise exec -- examples/cli/01-working-tree.sh
+task build
+examples/cli/01-working-tree.sh
 ```
 
-`mise exec --` puts the pinned Go and jq on `PATH`. Workspaces are kept under
+Install Go and jq and ensure they are on `PATH`. Workspaces are kept under
 `$TMPDIR/after-example-*` so you can explore them afterwards; move them to Trash
-when done. `mise exec -- task examples` runs every example that needs no Docker
+when done. `task examples` runs every example that needs no Docker
 as a smoke test (TUI setup only, not interactive key presses). These report examples
 explicitly run their synthetic Go tests on the host; AFTER only imports the output.
 

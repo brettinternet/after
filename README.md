@@ -20,12 +20,15 @@ A retry after 12 hours now charges the customer twice. Pin "one charge per retry
 
 ## Try it
 
+Commands assume the tools are on `PATH`, through mise shell activation or another
+installation method. `mise install` installs the pinned versions in `mise.toml`.
+
 ```sh
-mise trust && mise install && mise exec -- task init
-mise exec -- task build
-mise exec -- task demo:inspect                      # no Docker
-mise exec -- examples/cli/01-working-tree.sh        # capture and inspect a change
-mise exec -- examples/cli/05-payment-experiment.sh  # the run above (Docker)
+mise trust && mise install && task init
+task build
+task demo:inspect                      # no Docker
+examples/cli/01-working-tree.sh        # capture and inspect a change
+examples/cli/05-payment-experiment.sh  # the run above (Docker)
 ```
 
 Reading a change never runs project code:
@@ -53,9 +56,9 @@ Only `after run` executes anything, and only after you approve the exact plan it
 ## Checks
 
 ```sh
-mise exec -- task check:staged  # before each commit
-mise exec -- task check:go      # build, race tests, vet, gofmt
-mise exec -- task test          # Go tests, links, backlog
-mise exec -- task docs:check    # presentation checks in Chromium
-mise exec -- task check         # everything
+task check:staged  # before each commit
+task check:go      # build, race tests, vet, gofmt
+task test          # Go tests, links, backlog
+task docs:check    # presentation checks in Chromium
+task check         # everything
 ```
