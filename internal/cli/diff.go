@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -125,7 +126,12 @@ func liveDiff(state *invocation, ctx *cli.Context, project string) error {
 	view := rawdiff.Unstored(current.Base, current.Candidate, current.Patch)
 	entries := view.Inventory()
 	selection := liveSelection(current.Base, current.Candidate)
-	if err := writeDiffReport(state, selection, liveOrigin, entries, nil); err != nil {
+	// Omit the read's routine capture caveats, but keep completeness and patch
+	// index limits.
+	limits := slices.DeleteFunc(view.Limits(), func(limit string) bool {
+		return slices.Contains(current.Base.Limits, limit) || slices.Contains(current.Candidate.Limits, limit)
+	})
+	if err := writeDiffReport(state, selection, liveOrigin, entries, limits); err != nil {
 		return operational("cannot write diff diagnostics")
 	}
 	return writePatch(state, ctx, bytes.NewReader(current.Patch), view.Files(), entries)

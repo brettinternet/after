@@ -400,8 +400,10 @@ func (v *View) index(diff evidence.Digest) {
 		case bytes.HasPrefix(line, []byte("@@ ")):
 			finish(start)
 			if len(v.hunks) == MaxHunks {
+				// Only hunk bookkeeping stops; file sections stay indexed so
+				// later files are never attributed to this one.
 				limited("hunk index limit reached; remaining raw bytes retained")
-				return
+				break
 			}
 			p := ""
 			if entry >= 0 {

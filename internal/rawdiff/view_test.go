@@ -315,11 +315,16 @@ func TestBoundsLargePatchAndPartialIndex(t *testing.T) {
 	if err != nil || p.More || len(p.Bytes) != 0 {
 		t.Fatal(p, err)
 	}
-	many := []byte("diff --git a/file b/file\n" + strings.Repeat("@@ -0,0 +1 @@\n+x\n", MaxHunks+1))
+	first := "diff --git a/file b/file\n" + strings.Repeat("@@ -0,0 +1 @@\n+x\n", MaxHunks+1)
+	many := []byte(first + "diff --git a/later b/later\n@@ -0,0 +1 @@\n+y\n")
 	v, _, _, _ = synthetic(t, many, []byte("x"), nil)
 	c, err := v.Count(nil, nil)
 	if err != nil || c.Total != MaxHunks || c.Complete || len(v.Limits()) == 0 {
 		t.Fatal(c, err)
+	}
+	// Files after the hunk cap keep their own sections (diff --stat relies on them).
+	if files := v.Files(); len(files) != 2 || files[0].End != len(first) || files[1].Start != len(first) || files[1].End != len(many) {
+		t.Fatalf("file sections after the hunk cap: %+v", files)
 	}
 	if !bytes.Equal(allRaw(t, v, MaxPageBytes), many) {
 		t.Fatal("index cap discarded raw bytes")
