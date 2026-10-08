@@ -29,13 +29,55 @@ type captureOutput struct {
 	Candidate snapshotSummary     `json:"candidate_snapshot"`
 	Index     *snapshotSummary    `json:"index_snapshot,omitempty"`
 	Guidance  *emptyCaptureAdvice `json:"-"`
+	Next      []nextCommand       `json:"-"`
 }
 
 func (output captureOutput) nextBlock() ([]nextCommand, bool) {
-	if output.Guidance == nil {
-		return nil, false
+	if output.Guidance != nil {
+		return output.Guidance.Next, true
 	}
-	return output.Guidance.Next, true
+	return output.Next, len(output.Next) > 0
+}
+
+// captureReviewNext names the review command that opens this capture: a plain
+// review recaptures with the same flags, and --new replaces a different saved
+// review instead of silently resuming it.
+func captureReviewNext(project string, pair evidence.SnapshotPair, options capture.Options) nextCommand {
+	flags := captureFlagArgs(options)
+	saved, found, _, err := readReviewSession(project)
+	switch {
+	case err == nil && found && saved.Pair == pair:
+		return next("after review", "resume the saved review of this change")
+	case err == nil && found:
+		return next("after review --new"+flags, "replace the saved review with this change")
+	default:
+		return next("after review"+flags, "open a review of this change")
+	}
+}
+
+func captureFlagArgs(options capture.Options) string {
+	var args []string
+	switch options.Mode {
+	case evidence.Index:
+		args = append(args, "--staged")
+	case evidence.MergeBase:
+		if !printableArgument(options.Base) || !printableArgument(options.Target) {
+			return ""
+		}
+		args = append(args, "--base "+shellQuote(options.Base))
+		if options.Target != "HEAD" {
+			args = append(args, "--target "+shellQuote(options.Target))
+		}
+	}
+	for _, path := range options.IncludeUntracked {
+		if printableArgument(path) {
+			args = append(args, "--include-untracked="+shellQuote(path))
+		}
+	}
+	if len(args) == 0 {
+		return ""
+	}
+	return " " + strings.Join(args, " ")
 }
 
 type emptyReviewOutput struct{ Guidance emptyCaptureAdvice }

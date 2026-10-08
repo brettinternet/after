@@ -1,5 +1,6 @@
-Checkout · base aaaaaaaa (commit aaaaaaa) → candidate bbbbbbbb (working tree)
+Stored capture · aaaaaaaa (commit aaaaaaa) → bbbbbbbb (working tree)
   Captured     12:30:00 · 1 path changed · untracked paths excluded
+  Checkout     changed since capture · results below are for the stored pair
   Behavior     run dddddddd · failed · different
   12h responses          [EQUAL]
   12h provider requests  [DIFFERENT] · 1 → 2

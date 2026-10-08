@@ -2,9 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +41,7 @@ func TestBareDefaultsAreStoredOnlyAndNameResolvedRecords(t *testing.T) {
 	}
 	for _, args := range [][]string{{"inspect", "--project", project}, {"compare", "--project", project}, {"export", "--project", project}, {"pin", "--project", project, "--expectation", "test", "--scope", "human_intent"}} {
 		code, _, diagnostic := invoke(args, false, "")
-		if code != ExitInvalid || !strings.Contains(diagnostic, "no stored capture") || !strings.Contains(diagnostic, "after capture") {
+		if code != ExitInvalid || !strings.Contains(diagnostic, "no stored capture") || !strings.Contains(diagnostic, "after capture") && !strings.Contains(diagnostic, "after review") {
 			t.Fatalf("missing capture default was not actionable: %v: %d %q", args, code, diagnostic)
 		}
 	}
@@ -90,10 +93,13 @@ func TestBareDefaultsAreStoredOnlyAndNameResolvedRecords(t *testing.T) {
 	if !strings.Contains(statusJSON, string(status.Data.Capture.ID)) || !strings.Contains(statusJSON, string(candidate)) {
 		t.Fatalf("status did not retain full record IDs: %s", statusJSON)
 	}
+	if status.Data.Freshness == nil || *status.Data.Freshness != (freshness{State: freshMatches, Scope: evidence.WorkingTree}) {
+		t.Fatalf("an unchanged checkout must match its capture: %+v", status.Data.Freshness)
+	}
 	for _, args := range [][]string{{"compare", "--project", project}, {"export", "--project", project}, {"pin", "--project", project, "--expectation", "test", "--scope", "human_intent"}} {
 		code, _, diagnostic := invoke(args, false, "")
-		if code != ExitInvalid || !strings.Contains(diagnostic, "no stored run receipt") || !strings.Contains(diagnostic, "after run "+string(base)+" "+string(candidate)) {
-			t.Fatalf("missing run default did not name exact pair: %v: %d %q", args, code, diagnostic)
+		if code != ExitInvalid || !strings.Contains(diagnostic, "no stored run receipt") || !strings.Contains(diagnostic, "run after run to prepare one for the newest capture") {
+			t.Fatalf("missing run default did not suggest bare run: %v: %d %q", args, code, diagnostic)
 		}
 	}
 	code, statusText, stderr := invoke([]string{"status", "--project", project}, false, "")
@@ -308,6 +314,97 @@ func TestLatestComparisonUsesCompletionThenComparisonID(t *testing.T) {
 	}
 }
 
+// Bare diff must show edits made after the newest capture, and bare status
+// must not present that capture as current, without storing anything.
+func TestLiveDiffAndFreshnessNeverReuseOrStoreStaleCaptures(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() {}\n// first edit\n")
+	code, live, stderr := invoke([]string{"diff", "--raw", "--project", project}, false, "")
+	if code != ExitOK || !strings.Contains(live, "+// first edit") || !strings.Contains(stderr, "not stored") {
+		t.Fatalf("live diff without a store: %d %q %q", code, live, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".after")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("live diff created the store: %v", err)
+	}
+	if code, _, stderr := invoke([]string{"capture", "--project", project}, false, ""); code != ExitOK {
+		t.Fatalf("capture: %d %q", code, stderr)
+	}
+	stored := storeListing(t, project)
+
+	// A same-size edit with the original timestamp is still a change.
+	path := filepath.Join(project, "app/main.go")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() {}\n// later edit\n")
+	if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	code, live, _ = invoke([]string{"diff", "--raw", "--project", project}, false, "")
+	if code != ExitOK || !strings.Contains(live, "+// later edit") || strings.Contains(live, "first edit") {
+		t.Fatalf("bare diff did not show the current checkout: %d %q", code, live)
+	}
+	code, old, _ := invoke([]string{"diff", "--stored", "--raw", "--project", project}, false, "")
+	if code != ExitOK || !strings.Contains(old, "+// first edit") || strings.Contains(old, "later edit") {
+		t.Fatalf("diff --stored did not print the stored capture: %d %q", code, old)
+	}
+	for _, args := range [][]string{{"status"}, {"inspect"}} {
+		code, output, stderr := invoke(append(args, "--project", project, "--json"), false, "")
+		var result struct {
+			Data struct {
+				Freshness *freshness    `json:"freshness"`
+				Next      []nextCommand `json:"next"`
+			} `json:"data"`
+		}
+		if code != ExitOK || stderr != "" || json.Unmarshal([]byte(output), &result) != nil || result.Data.Freshness == nil || result.Data.Freshness.State != freshChanged {
+			t.Fatalf("%v presented a stale capture as current: %d %q %q", args, code, output, stderr)
+		}
+		if args[0] == "status" && (len(result.Data.Next) == 0 || !strings.HasPrefix(result.Data.Next[0].Command, "after diff --project")) {
+			t.Fatalf("stale status must lead with the current change: %+v", result.Data.Next)
+		}
+	}
+	code, output, _ := invoke([]string{"status", "--stored", "--project", project, "--json"}, false, "")
+	if code != ExitOK || !strings.Contains(output, `"freshness":{"state":"not_checked","scope":"working_tree","reason":"stored_requested"}`) {
+		t.Fatalf("--stored must skip the checkout check: %d %q", code, output)
+	}
+
+	// An unreadable checkout prints no patch and never claims freshness.
+	gitRun(t, project, "config", "core.sparseCheckout", "true")
+	code, live, stderr = invoke([]string{"diff", "--project", project}, false, "")
+	if code != ExitOperational || live != "" || !strings.Contains(stderr, "no patch was printed") || !strings.Contains(stderr, "after diff --stored") {
+		t.Fatalf("failed live read fell back or was silent: %d %q %q", code, live, stderr)
+	}
+	code, output, stderr = invoke([]string{"status", "--project", project}, false, "")
+	if code != ExitOperational || !strings.Contains(output, "Stored capture") || !strings.Contains(output, "not verified") || !strings.Contains(stderr, "after status --stored") {
+		t.Fatalf("failed freshness check must keep the labeled stored summary and fail: %d %q %q", code, output, stderr)
+	}
+	if after := storeListing(t, project); !slices.Equal(after, stored) {
+		t.Fatalf("read commands changed the store:\nbefore %v\nafter  %v", stored, after)
+	}
+}
+
+func storeListing(t *testing.T, project string) []string {
+	t.Helper()
+	var names []string
+	err := filepath.WalkDir(filepath.Join(project, ".after"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		names = append(names, fmt.Sprintf("%s %d %s", path, info.Size(), info.ModTime()))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
+}
+
 func TestNoCheckoutBareAfterShowsHelpAndProjectSuggestionsExecuteInShell(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(root, "outside")
@@ -332,8 +429,11 @@ func TestNoCheckoutBareAfterShowsHelpAndProjectSuggestionsExecuteInShell(t *test
 	if code != ExitOK || stderr != "" {
 		t.Fatalf("bare status: %d %q %q", code, stdout, stderr)
 	}
-	command := firstNextCommand(t, stdout)
-	if !strings.HasPrefix(command, "after capture ") || !strings.Contains(command, "--project "+shellQuote(project)) || !strings.Contains(command, "--config "+shellQuote(configFile)) {
+	if first := firstNextCommand(t, stdout); !strings.HasPrefix(first, "after review ") {
+		t.Fatalf("an empty checkout must suggest the review flow first: %q", first)
+	}
+	command := nextCommandWith(t, stdout, "after capture ")
+	if !strings.Contains(command, "--project "+shellQuote(project)) || !strings.Contains(command, "--config "+shellQuote(configFile)) {
 		t.Fatalf("suggestion omitted or failed to quote selected globals: %q", command)
 	}
 	code, output, err := runShellSuggestion(t, outside, command)
@@ -353,13 +453,18 @@ func TestNoCheckoutBareAfterShowsHelpAndProjectSuggestionsExecuteInShell(t *test
 
 func firstNextCommand(t *testing.T, output string) string {
 	t.Helper()
+	return nextCommandWith(t, output, "after ")
+}
+
+func nextCommandWith(t *testing.T, output, prefix string) string {
+	t.Helper()
 	for _, line := range strings.Split(output, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "after ") {
+		if strings.HasPrefix(trimmed, prefix) {
 			return trimmed
 		}
 	}
-	t.Fatalf("no Next command in output: %q", output)
+	t.Fatalf("no %q Next command in output: %q", prefix, output)
 	return ""
 }
 

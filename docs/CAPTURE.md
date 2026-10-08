@@ -82,6 +82,14 @@ Each attempt performs two full reads of selected content, modes, index inventory
 untracked selection and resolved refs. Only identical reads are persisted. A
 changed read retries up to three attempts; repeated change fails with
 `ErrInconsistent`. A file changing size or mtime while open fails immediately.
+
+`ReadLive` (bare `after diff`) and `Unchanged` (the status/inspect freshness check)
+perform the same consistent read without writing evidence. `ReadLive` returns
+unstored snapshots whose file and diff identities are SHA-256 digests of the bytes
+read, plus the generated patch. `Unchanged` compares a stored working-tree or index
+capture's commit, file content identities, excluded and unsupported inventory, and
+index snapshot with the current read; it never uses timestamps and accepts only
+complete stored snapshots.
 The tests use a deterministic between-read barrier, not timing sleeps.
 
 This is **not an atomic filesystem snapshot**. Coordinated ABA edits (changing and
@@ -95,7 +103,12 @@ Git receives a fresh environment without ambient Git overrides, loader settings,
 traces, credentials or proxies. System/global config and attributes are disabled;
 local fsmonitor, hooks, automatic maintenance, protocols and external attributes
 are overridden. Source access uses only read-only plumbing (`ls-tree`, `ls-files`,
-`cat-file`, ref/config queries). No source-repository diff, textconv, clean/smudge,
+`cat-file`, ref/config queries). Blobs are read in batches: one `cat-file
+--batch-check` for identities and sizes, then `cat-file --batch` chunks kept under
+the 16 MiB process-output ceiling. Replies must match each requested object's ID,
+type and size, and the capture byte budget is charged before payloads are read.
+Patch generation hashes each distinct frozen payload once, in one private
+`hash-object --stdin-paths` process with generated file names. No source-repository diff, textconv, clean/smudge,
 checkout, hook, credential or network command is requested. Lazy fetch is disabled
 and all transport protocols are denied. Supported macOS/Linux hosts must provide trusted Git at `/usr/bin/git`; capture
 never searches ambient `PATH`. That system executable and the operator-selected

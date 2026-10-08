@@ -54,7 +54,7 @@ modified and one untracked file, then with typical arguments.
 | `after`, `after status` | Summarize this checkout's review and suggest the next command  | —                                                                                                      |
 | `after review`          | Capture the working tree, then open or resume the review       | `--new`, `--staged`, `--base REF [--target REF]`, `--include-untracked PATH`; stored `ID…` or a pair   |
 | `after capture`         | Capture HEAD versus the working tree (unchanged)               | `--staged`, `--base REF [--target REF]`, `--include-untracked PATH`                                    |
-| `after diff`            | Print the newest capture's patch                               | `BASE CANDIDATE`, `--stat`, `--raw`                                                                    |
+| `after diff`            | Print the current change without storing it                    | `--stored`, `BASE CANDIDATE`, capture flags, `--stat`, `--raw`                                         |
 | `after log`             | List the 20 newest captures, runs, reports, and pin events     | `-n N`                                                                                                 |
 | `after inspect`         | Summarize the newest capture                                   | `ID` (any record or plan), `BASE CANDIDATE`                                                            |
 | `after import`          | Read `go test -json` from a file, pipe, or stdin               | `[FILE]`, `-`, or omitted; optional `--producer TEXT`, `--snapshot ID`                                 |
@@ -168,14 +168,17 @@ Next  after review                  compare the reopened pin with its current re
       after pin 57c25a3c --accept   accept it against its current result
 ```
 
-Status reads stored records only; it never captures. When the saved review is on
-another pair, a `Saved review` row names it. The first matching rule picks the
-Next block:
+Status summarizes stored records and never captures or stores anything. It
+rereads the checkout to say whether it still matches the stored capture
+(`Checkout` row, JSON `freshness`); `--stored` skips that check. When the saved
+review is on another pair, a `Saved review` row names it. The first matching rule
+picks the Next block:
 
 | State                                                    | Next                                                              |
 | -------------------------------------------------------- | ----------------------------------------------------------------- |
 | No capture                                               | `after review` — capture this checkout and open it                |
 | The saved review is on another pair                      | `after review` — resume it, `after review --new` — start over     |
+| The checkout changed since the capture                   | `after diff`, then `after review` (`--new` if a review is saved)  |
 | A pin needs another look                                 | `after review`, plus `after pin <id> --accept` when it can accept |
 | The pair has no run, but earlier pairs in the project do | `after run` — prepare a rerun (asks before running)               |
 | Otherwise                                                | `after review`, `after diff`                                      |
@@ -220,7 +223,7 @@ Captured candidate 784eb013 (working tree) against base a750186b (commit 3f2a1c9
 Untracked files aren't captured. Include one with: after capture --include-untracked notes.txt
 
 Next  after review   open this change
-      after diff     print the captured patch
+      after diff --stored   print the captured patch
 ```
 
 An unchanged tree says `Unchanged since the capture at 19:50:58 (same snapshots)`.
@@ -393,23 +396,29 @@ diff --git a/app/config.go b/app/config.go
  const printedCount = "1"
 ```
 
-- With no arguments, the pair is the newest capture. `after diff BASE CANDIDATE`
-  takes any two snapshots. Pairs without a shared captured patch use the
+- With no arguments, it reads the checkout's current change (HEAD versus the
+  working tree, or the capture flags given) like `after capture`, but stores
+  nothing. A failed read prints no patch and suggests `--stored`; it never falls
+  back to an older capture.
+- `--stored` prints the newest capture's patch. `after diff BASE CANDIDATE` takes
+  any two snapshots. Pairs without a shared captured patch use the
   [computed diff](TUI-DESIGN.md#computed-diffs-after-32).
-- Stdout carries only the patch. Stderr names the pair and the diff's origin
-  (`captured patch` or `computed from captured sources`), then lists the paths the
-  patch doesn't cover: excluded, unsupported, and unknown paths.
+- Stdout carries only the patch. Stderr names what was compared and the diff's
+  origin (`current checkout; not stored`, `captured patch` or `computed from
+captured sources`), then lists the paths the patch doesn't cover: excluded,
+  unsupported, and unknown paths.
 - Lines are sanitized, and colored on a terminal like the TUI's Diff view. Tabs
   are kept in a pipe. When sanitizing changes any byte, stderr says so. `--raw`
   writes the exact bytes and is refused when stdout is a terminal.
-- `--stat` prints the capture summary rows instead of the patch.
+- `--stat` prints per-file changed-line counts and a total, like `git diff --stat`.
 - There is no pager. `after review` is the interactive viewer.
 
 ## config
 
 `after config` lists every setting with its value and source, as today; configured
 paths and endpoints stay hidden. Below the table, it lists setup problems with the
-exact fix, such as the Docker settings `after run` needs.
+exact fix, such as the Docker settings `after run` needs. When one Docker CLI and
+one socket are detected, Next offers an `export` line that applies them.
 
 ## Errors and help
 
@@ -457,7 +466,7 @@ runs unless you approve an exact plan.
 Everyday
   after              what to do next in this checkout
   after review       capture your change and review it
-  after diff         print the captured patch
+  after diff         print the current change (not stored)
   after log          recent captures, runs, reports, and pin events
 
 Evidence

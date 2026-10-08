@@ -84,26 +84,37 @@ Options
   --limit N         report cards to return (default: 128; range: 1–256)
 ` + global
 	case "status":
-		body = `Summarize stored capture and review state without capture or execution.
+		body = `Summarize the newest stored capture and its review state, and say whether the
+checkout still matches it. Nothing is captured, stored, or executed.
 
 Usage
   after status
+  after status --stored
 
 Options
-  No command-specific options.
+  --stored   skip the checkout check; show only stored state
 ` + global
 	case "diff":
-		body = `Print the newest captured patch or compare any two stored snapshots.
+		body = `Print the checkout's current change (HEAD versus the working tree) without
+storing it, the newest stored capture, or any two stored snapshots.
 
 Usage
   after diff
+  after diff --staged
+  after diff --base main [--target HEAD]
+  after diff --stored
   after diff BASE CANDIDATE
-  after diff --stat [BASE CANDIDATE]
-  after diff --raw [BASE CANDIDATE]
+  after diff --stat
+  after diff --raw > change.patch
 
 Options
-  --stat   print capture summary rows instead of the patch
-  --raw    write exact patch bytes; stdout must not be a terminal
+  --staged                   read HEAD versus the index
+  --base REF                 read the merge base with a Git ref
+  --target REF               other side of a --base diff (default: HEAD)
+  --include-untracked PATH   include one non-ignored untracked file (repeatable)
+  --stored                   print the newest stored capture's patch
+  --stat                     print per-file changed line counts instead
+  --raw                      write exact patch bytes to a file or pipe
 ` + global
 	case "log":
 		body = `List recent stored captures, runs, imported reports, and pin events.
@@ -125,6 +136,7 @@ Usage
   after inspect BASE CANDIDATE
 
 Options
+  --stored                 bare inspect: skip the checkout check
   --raw-diff               include a bounded captured patch (default: ` + fmt.Sprint(defaults.RawDiff) + `)
   --diff-bytes N           maximum raw patch bytes (default: ` + fmt.Sprint(defaults.DiffBytes) + `)
   --diff-offset N          raw diff byte offset (default: 0)
@@ -277,11 +289,11 @@ func topLevelHelp() string {
 you approve an exact plan.
 
 Everyday
-  after                         show this checkout's stored review status
+  after                         show this checkout's review status
   after status                  show the same status explicitly
   after review                  capture a change and open or resume its review
   after capture                 capture a local Git comparison
-  after diff                    print the newest captured patch
+  after diff                    print the current change (not stored)
   after log                     list recent stored events
   after inspect                 inspect the newest capture or a stored record
 

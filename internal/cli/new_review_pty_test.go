@@ -96,7 +96,8 @@ func TestNewReviewPTYAndSuggestions(t *testing.T) {
 			if code != 0 {
 				t.Fatal(diagnostic)
 			}
-			if firstNextCommand(t, captureText) != "after review --project "+project {
+			// A different saved review is replaced explicitly, never resumed by surprise.
+			if firstNextCommand(t, captureText) != "after review --new --project "+project {
 				t.Fatal(captureText)
 			}
 			s, err = store.Open(project, false, nil)
@@ -144,7 +145,7 @@ func TestNewReviewPTYAndSuggestions(t *testing.T) {
 				command := firstNextCommand(t, out)
 				want := "after review"
 				if pair == first {
-					want += " " + string(pair.Base) + " " + string(pair.Candidate)
+					want += " " + shortID(pair.Base) + " " + shortID(pair.Candidate)
 				}
 				want += " --project " + project
 				if command != want {

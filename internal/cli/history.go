@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/brettinternet/after/internal/browser"
+	"github.com/brettinternet/after/internal/capture"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
@@ -30,6 +32,53 @@ type nextCommand struct {
 
 func next(command, description string) nextCommand {
 	return nextCommand{Command: command, Description: description}
+}
+
+var fullIDPattern = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
+
+// shortenCommandIDs replaces full stored IDs in a readable suggestion with
+// their shortest unique prefix of at least eight hex characters. --approve keeps
+// the full digest because consent never accepts a prefix. JSON keeps full IDs.
+func shortenCommandIDs(project, command string) string {
+	if project == "" || !fullIDPattern.MatchString(command) {
+		return command
+	}
+	s, err := store.Open(project, false, nil)
+	if err != nil {
+		return command
+	}
+	defer s.Close()
+	entries, err := s.List("snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob", "artifact", "plan")
+	if err != nil {
+		return command
+	}
+	fields := strings.Split(command, " ")
+	for i, field := range fields {
+		if !fullIDPattern.MatchString(field) || len(field) != len("sha256:")+64 || (i > 0 && fields[i-1] == "--approve") {
+			continue
+		}
+		fields[i] = uniquePrefix(entries, evidence.Digest(field))
+	}
+	return strings.Join(fields, " ")
+}
+
+// uniquePrefix compares against every stored ID, regardless of kind, so the
+// prefix stays unambiguous for any argument position that accepts it.
+func uniquePrefix(entries []store.Entry, id evidence.Digest) string {
+	hex := strings.TrimPrefix(string(id), "sha256:")
+	length := 8
+	for _, entry := range entries {
+		other := strings.TrimPrefix(string(entry.ID), "sha256:")
+		if other == hex {
+			continue
+		}
+		shared := 0
+		for shared < len(hex) && shared < len(other) && hex[shared] == other[shared] {
+			shared++
+		}
+		length = max(length, shared+1)
+	}
+	return hex[:min(length, len(hex))]
 }
 
 func suggestionFlags(ctx *cli.Context) string {
@@ -62,7 +111,7 @@ func printableArgument(value string) bool {
 }
 
 func shellQuote(value string) string {
-	if value != "" && strings.Trim(value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-") == "" {
+	if value != "" && strings.Trim(value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+,=-") == "" {
 		return value
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
@@ -314,8 +363,7 @@ func newestReceiptForStore(s *store.Store, pair evidence.SnapshotPair) (evidence
 	}
 	receipt, ok := newestReceipt(records, pair)
 	if !ok {
-		fix := fmt.Sprintf("run after run %s %s to create a receipt", pair.Base, pair.Candidate)
-		return evidence.Receipt{}, missingStoredRecord("run receipt for newest capture", fix)
+		return evidence.Receipt{}, missingStoredRecord("run receipt for newest capture", "run after run to prepare one for the newest capture")
 	}
 	return receipt, nil
 }
@@ -352,7 +400,7 @@ func inspectNewestCommand(state *invocation, ctx *cli.Context, exporting bool) e
 	s, err := store.Open(cfg.Project, false, nil)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return missingStoredRecord("capture", "run after capture to create one")
+			return missingStoredRecord("capture", "run after review to capture and review this checkout, or after diff to print its current change")
 		}
 		return operational("cannot open private evidence store for reading")
 	}
@@ -375,10 +423,9 @@ func inspectNewestCommand(state *invocation, ctx *cli.Context, exporting bool) e
 		comparison, receipt, ok := latestComparison(storedHistory{receipts: receipts, comparisons: comparisonRecords}, pair)
 		if !ok {
 			if _, hasRun := newestReceipt(receipts, pair); !hasRun {
-				return missingStoredRecord("run receipt for newest capture", fmt.Sprintf("run after run %s %s to create a receipt", pair.Base, pair.Candidate))
+				return missingStoredRecord("run receipt for newest capture", "run after run to prepare one for the newest capture")
 			}
-			newest, _ := newestReceipt(receipts, pair)
-			return missingStoredRecord("comparison for newest capture", "run after compare "+string(newest.ID)+" to create one")
+			return missingStoredRecord("comparison for newest capture", "run after compare to compare its newest run")
 		}
 		using.Receipt, using.Comparison = receipt.ID, comparison.ID
 		return writeStoredComparison(state, s, comparison, receipt, options, true, using)
@@ -388,6 +435,8 @@ func inspectNewestCommand(state *invocation, ctx *cli.Context, exporting bool) e
 		return operational("newest capture inventory or diff is unavailable")
 	}
 	view.Using = using
+	checked := checkoutFreshness(state, cfg.Project, s, capture, view.BaseRecord, view.CandidateRecord, ctx.Bool("stored"))
+	view.Freshness = &checked
 	return writeResult(state, "snapshot", view)
 }
 
@@ -434,13 +483,16 @@ type pinListView struct {
 }
 
 func listPinHeads(state *invocation, project string) error {
+	state.project = project
 	s, err := store.Open(project, false, nil)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return operational("cannot open private evidence store for reading")
 		}
-		view := pinListView{Pins: []review.View{}, Next: []nextCommand{next("after status", "show stored review state")}}
-		view.Next[0].Command += state.suggestionFlags
+		view := pinListView{Pins: []review.View{}, Next: firstReviewNext()}
+		for i := range view.Next {
+			view.Next[i].Command += state.suggestionFlags
+		}
 		return writeResult(state, "pins", view)
 	}
 	defer s.Close()
@@ -461,7 +513,8 @@ func listPinHeads(state *invocation, project string) error {
 	if err != nil {
 		return err
 	}
-	if capture, ok := newestCapture(history.captures); ok {
+	capture, captured := newestCapture(history.captures)
+	if captured {
 		if receipt, ok := newestReceipt(history.receipts, evidence.SnapshotPair{Base: capture.Base, Candidate: capture.Candidate}); ok {
 			suggestions, err := browser.PinSuggestions(s, receipt)
 			if err != nil {
@@ -482,10 +535,13 @@ func listPinHeads(state *invocation, project string) error {
 			}
 		}
 	}
-	if len(pins) > 0 {
+	switch {
+	case len(pins) > 0:
 		nexts = append(nexts, next("after status", "show the current capture and review state"))
-	} else {
-		nexts = append(nexts, next("after capture", "capture this checkout without running project code"))
+	case captured:
+		nexts = append(nexts, next("after review", "open the review; pin expectations from its run results"))
+	default:
+		nexts = append(nexts, firstReviewNext()...)
 	}
 	for i := range nexts {
 		nexts[i].Command += state.suggestionFlags
@@ -493,7 +549,8 @@ func listPinHeads(state *invocation, project string) error {
 	return writeResult(state, "pins", pinListView{Pins: pins, Next: nexts})
 }
 
-func statusCommand(state *invocation, project string) error {
+func statusCommand(state *invocation, project string, stored bool) error {
+	state.project = project
 	s, history, err := historyForProject(project)
 	if err != nil {
 		return err
@@ -501,7 +558,9 @@ func statusCommand(state *invocation, project string) error {
 	if s != nil {
 		defer s.Close()
 	}
-	view, err := buildStatus(s, history)
+	view, err := buildStatus(s, history, func(record evidence.Capture, base, candidate evidence.Snapshot) freshness {
+		return checkoutFreshness(state, project, s, record, base, candidate, stored)
+	})
 	if err != nil {
 		return err
 	}
@@ -530,12 +589,90 @@ type statusSnapshot struct {
 	Unsupported  int                   `json:"unsupported"`
 }
 
+// freshness says whether the checkout still holds a stored capture's content
+// within its recorded scope. It never changes what the stored records mean.
+type freshness struct {
+	State  string              `json:"state"` // matches, changed, unknown, or not_checked
+	Scope  evidence.SourceMode `json:"scope,omitempty"`
+	Reason string              `json:"reason,omitempty"`
+}
+
+const (
+	freshMatches    = "matches"
+	freshChanged    = "changed"
+	freshUnknown    = "unknown"
+	freshNotChecked = "not_checked"
+)
+
+// checkoutFreshness rereads the checkout for a working-tree or index capture
+// and compares content hashes, never timestamps. It writes nothing. A failed
+// read keeps the stored summary but makes the command exit 1.
+func checkoutFreshness(state *invocation, project string, s *store.Store, record evidence.Capture, base, candidate evidence.Snapshot, stored bool) freshness {
+	result := freshness{Scope: record.Mode}
+	switch {
+	case stored:
+		result.State, result.Reason = freshNotChecked, "stored_requested"
+		return result
+	case record.Mode == evidence.MergeBase:
+		result.State, result.Reason = freshNotChecked, "immutable_comparison"
+		return result
+	}
+	var index *evidence.Snapshot
+	if record.Index != "" {
+		snapshot, err := store.Get[evidence.Snapshot](s, record.Index)
+		if err != nil {
+			result.State, result.Reason = freshUnknown, "stored_index_unavailable"
+			return result
+		}
+		index = &snapshot
+	}
+	for _, snapshot := range []*evidence.Snapshot{&base, &candidate, index} {
+		if snapshot != nil && snapshot.Completeness != evidence.Complete {
+			result.State, result.Reason = freshUnknown, "incomplete_capture"
+			return result
+		}
+	}
+	stopNotice := startElapsedNotice(state, "checkout check", time.Second)
+	unchanged, err := capture.Unchanged(state.ctx, project, record, base, candidate, index)
+	stopNotice()
+	switch {
+	case err != nil:
+		failure := captureFailureFor(err, captureFailureInfo{reason: "the checkout could not be read", fix: "check the checkout, then retry"})
+		state.exit = ExitOperational
+		state.diagnostic = fmt.Sprintf("after: cannot tell whether the checkout still matches the stored capture: %s — %s; after status --stored skips this check", failure.reason, failure.fix)
+		result.State, result.Reason = freshUnknown, "checkout_unreadable"
+	case unchanged:
+		result.State = freshMatches
+	default:
+		result.State = freshChanged
+	}
+	return result
+}
+
+// staleOrUnreadable means stored results must not be offered as though they
+// describe the current checkout.
+func (f *freshness) staleOrUnreadable() bool {
+	return f != nil && (f.State == freshChanged || f.Reason == "checkout_unreadable")
+}
+
+// freshnessNext offers the current change. A plain review would resume a
+// saved review, so --new is needed to capture the current change instead.
+func freshnessNext(savedReview bool) []nextCommand {
+	review := next("after review", "capture the current change and review it")
+	if savedReview {
+		review = next("after review --new", "capture the current change and replace the saved review")
+	}
+	return []nextCommand{next("after diff", "show the current change without storing it"), review}
+}
+
 type statusView struct {
+	Freshness         *freshness             `json:"freshness"`
 	SavedReview       *evidence.SnapshotPair `json:"saved_review,omitempty"`
 	Capture           *statusCapture         `json:"capture,omitempty"`
 	Base              *statusSnapshot        `json:"base_snapshot,omitempty"`
 	Candidate         *statusSnapshot        `json:"candidate_snapshot,omitempty"`
 	ChangedPaths      int                    `json:"changed_paths,omitempty"`
+	ExcludedPaths     int                    `json:"excluded_paths,omitempty"`
 	UntrackedExcluded bool                   `json:"untracked_excluded,omitempty"`
 	Receipt           *evidence.Receipt      `json:"receipt,omitempty"`
 	Comparison        *evidence.Comparison   `json:"comparison,omitempty"`
@@ -565,11 +702,11 @@ type statusReport struct {
 	Skip     int             `json:"skip"`
 }
 
-func buildStatus(s *store.Store, history storedHistory) (statusView, error) {
-	view := statusView{Pins: []statusPin{}, Reports: []statusReport{}, Limits: []string{}}
+func buildStatus(s *store.Store, history storedHistory, check func(evidence.Capture, evidence.Snapshot, evidence.Snapshot) freshness) (statusView, error) {
+	view := statusView{Pins: []statusPin{}, Reports: []statusReport{}, Limits: []string{}, Freshness: &freshness{State: freshNotChecked, Reason: "no_capture"}}
 	capture, ok := newestCapture(history.captures)
 	if !ok {
-		view.Next = []nextCommand{next("after capture", "capture this checkout without running project code")}
+		view.Next = firstReviewNext()
 		return view, nil
 	}
 	view.Capture = &statusCapture{ID: capture.ID, CapturedAt: capture.CapturedAt, Mode: capture.Mode, Base: capture.Base, Candidate: capture.Candidate, SelectedUntracked: len(capture.SelectedUntracked)}
@@ -583,11 +720,20 @@ func buildStatus(s *store.Store, history storedHistory) (statusView, error) {
 	}
 	view.Base = &statusSnapshot{ID: base.ID, Source: base.Source, Commit: base.Commit, Completeness: base.Completeness, Files: len(base.Files), Excluded: len(base.Excluded), Unsupported: len(base.Unsupported)}
 	view.Candidate = &statusSnapshot{ID: candidate.ID, Source: candidate.Source, Commit: candidate.Commit, Completeness: candidate.Completeness, Files: len(candidate.Files), Excluded: len(candidate.Excluded), Unsupported: len(candidate.Unsupported)}
+	if check != nil {
+		checked := check(capture, base, candidate)
+		view.Freshness = &checked
+	}
 	diff, err := rawdiff.Open(s, base, candidate)
 	if err != nil {
 		return statusView{}, operational("newest capture inventory is corrupt or unavailable")
 	}
 	view.ChangedPaths = len(diff.Inventory())
+	for _, entry := range diff.Inventory() {
+		if excludedUntracked(entry) {
+			view.ExcludedPaths++
+		}
+	}
 	view.Limits = append(view.Limits, diff.Limits()...)
 	for _, excluded := range candidate.Excluded {
 		if strings.Contains(strings.ToLower(excluded.Reason), "untracked") {
@@ -692,7 +838,7 @@ func reviewSuggestion(project string, pair evidence.SnapshotPair) string {
 
 func statusNext(view statusView, history storedHistory) []nextCommand {
 	if view.Capture == nil {
-		return []nextCommand{next("after capture", "capture this checkout without running project code")}
+		return firstReviewNext()
 	}
 	if view.SavedReview != nil && *view.SavedReview != (evidence.SnapshotPair{Base: view.Capture.Base, Candidate: view.Capture.Candidate}) {
 		return []nextCommand{
@@ -700,9 +846,16 @@ func statusNext(view statusView, history storedHistory) []nextCommand {
 			next("after review --new", "capture and start a new review"),
 		}
 	}
+	if view.Freshness.staleOrUnreadable() {
+		return freshnessNext(view.SavedReview != nil)
+	}
+	review := next("after review", "open a review of this capture")
+	if view.SavedReview != nil {
+		review = next("after review", "resume the saved review")
+	}
 	for _, pin := range view.Pins {
 		if pin.Decision == evidence.Reopened || pin.Applicability != evidence.Current || pin.MissingCurrentResult {
-			commands := []nextCommand{next("after review", "open or resume the review")}
+			commands := []nextCommand{review}
 			if pin.CanAccept {
 				commands = append(commands, next("after pin "+string(pin.ID)+" --accept", "accept this explicitly selected current result"))
 			}
@@ -714,14 +867,14 @@ func statusNext(view statusView, history storedHistory) []nextCommand {
 	}
 	if view.Receipt != nil && view.Comparison == nil {
 		return []nextCommand{
-			next("after compare "+string(view.Receipt.ID), "compare the stored run without executing project code"),
-			next("after review", "open or resume the review"),
-			next("after diff", "print this captured patch"),
+			next("after compare", "compare the newest run without executing project code"),
+			review,
+			next("after diff --stored", "print this captured patch"),
 		}
 	}
 	commands := []nextCommand{
-		next("after review", "open or resume the review"),
-		next("after diff", "print this captured patch"),
+		review,
+		next("after diff --stored", "print this captured patch"),
 	}
 	if view.Comparison != nil {
 		commands = append(commands, next("after inspect "+string(view.Comparison.ID), "inspect the stored comparison"))
@@ -771,6 +924,7 @@ type logRow struct {
 	Receipt     evidence.Digest            `json:"receipt,omitempty"`
 	Mode        evidence.SourceMode        `json:"mode,omitempty"`
 	Paths       int                        `json:"paths"`
+	Excluded    int                        `json:"excluded_paths,omitempty"`
 	Outcome     evidence.ComparisonOutcome `json:"outcome,omitempty"`
 	Summary     string                     `json:"summary,omitempty"`
 	Decision    evidence.HumanDecision     `json:"decision,omitempty"`
@@ -861,6 +1015,11 @@ func buildLog(s *store.Store, history storedHistory, limit int) (logView, error)
 			return logView{}, operational("capture inventory is corrupt or unavailable")
 		}
 		rows[i].Paths = len(view.Inventory())
+		for _, entry := range view.Inventory() {
+			if excludedUntracked(entry) {
+				rows[i].Excluded++
+			}
+		}
 	}
 	return logView{Rows: rows, Total: total, Shown: len(rows), Next: []nextCommand{}}, nil
 }
@@ -906,7 +1065,15 @@ func logNext(view logView) []nextCommand {
 	if view.Total > 0 {
 		return []nextCommand{next("after status", "show the current capture and review state")}
 	}
-	return []nextCommand{next("after capture", "capture this checkout without running project code")}
+	return firstReviewNext()
+}
+
+// firstReviewNext starts the main workflow in a checkout with no capture.
+func firstReviewNext() []nextCommand {
+	return []nextCommand{
+		next("after review", "capture this checkout and open a review"),
+		next("after capture", "capture without opening a review"),
+	}
 }
 
 func reportCounts(report gotestreport.Report) (int, int, int) {

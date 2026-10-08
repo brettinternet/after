@@ -3,9 +3,11 @@ Effective AFTER configuration
   docker_host  not configured (value hidden) · default
 Docker setup
   Docker execution is not configured; set docker_binary and docker_host as a pa…
-  Suggested config (not selected):
-    docker_binary: "/absolute/path/to/docker"
-    docker_host: "unix:///absolute/path/to/local/docker.sock"
+  Suggested settings for the AFTER config file (not selected):
+    docker_binary: "/usr/local/bin/docker"  # found on PATH; not executed
+    docker_host: "unix:///var/run/docker.sock"  # existing socket; not contacted
 Next
-  after --help
-    see available commands
+  export AFTER_DOCKER_BINARY=/usr/local/bin/docker AFTER_DOCKER_HOST=unix:///var/run/docker.sock
+    use the detected Docker CLI and socket in this shell
+  after config
+    check the settings again

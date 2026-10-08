@@ -36,5 +36,5 @@ sha256:36bea88d66d213f528cef2db58027a618128d373b66feff585b409dc26de4d39
 sha256:e8c3e4faa6b27058ee06d25eabe8643618863a992a216ed57d9f6a58021e01c4
 sha256:518f3b7f7e87f0a7d10aa6a2ce0728c818ae95876d1aa0ed907258509089194a
 Next
-  after inspect sha256:518f3b7f7e87f0a7d10aa6a2ce0728c818ae95876d1aa0ed907258509089194a --project <project>
+  after inspect 518f3b7f --project <project>
     inspect the stored comparison

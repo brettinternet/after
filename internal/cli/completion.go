@@ -141,7 +141,7 @@ func complete(words []string) ([]completionCandidate, error) {
 	command, commandIndex := completionCommandFor(words, allCommands)
 	if command == nil {
 		if len(words) > 0 && strings.HasPrefix(words[len(words)-1], "-") {
-			return completeFlags(&ucli.Command{Name: "after", Flags: globalFlags()}, words[len(words)-1]), nil
+			return completeFlags(&ucli.Command{Name: "after", Flags: append(globalFlags(), storedFlag())}, words[len(words)-1]), nil
 		}
 		return completeCommands(words, allCommands), nil
 	}

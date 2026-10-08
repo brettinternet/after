@@ -16,15 +16,15 @@ type captureFailureInfo struct {
 var captureFailureReasons = map[string]captureFailureInfo{
 	"unmerged index is unsupported": {
 		reason: "unmerged index is unsupported",
-		fix:    "resolve the index conflicts, then retry capture",
+		fix:    "resolve the index conflicts, then retry",
 	},
 	"shallow repositories are unsupported": {
 		reason: "shallow repositories are unsupported",
-		fix:    "use a complete local clone, then retry capture",
+		fix:    "use a complete local clone, then retry",
 	},
 	"sparse or partial repositories are unsupported": {
 		reason: "sparse or partial repositories are unsupported",
-		fix:    "use a complete local checkout, then retry capture",
+		fix:    "use a complete local checkout, then retry",
 	},
 	"sparse/skip-worktree or assume-unchanged index is unsupported": {
 		reason: "sparse/skip-worktree or assume-unchanged index is unsupported",
@@ -32,11 +32,11 @@ var captureFailureReasons = map[string]captureFailureInfo{
 	},
 	"comparison needs exactly one merge base": {
 		reason: "comparison needs exactly one merge base",
-		fix:    "choose refs with one merge base, then retry capture",
+		fix:    "choose refs with one merge base, then retry",
 	},
 	"unsupported path encoding": {
 		reason: "unsupported path encoding",
-		fix:    "rename unsupported paths, then retry capture",
+		fix:    "rename unsupported paths, then retry",
 	},
 	"invalid or private untracked selection": {
 		reason: "invalid or private untracked selection",
@@ -48,31 +48,48 @@ var captureFailureReasons = map[string]captureFailureInfo{
 	},
 	"Git plumbing failed (unsupported repository, missing object or output budget)": {
 		reason: "Git plumbing failed (unsupported repository, missing object or output budget)",
-		fix:    "check the local checkout and retry capture",
+		fix:    "check the local checkout, then retry",
 	},
 }
 
 func captureFailure(err error) error {
-	failure := captureFailureInfo{
+	failure := captureFailureFor(err, captureFailureInfo{
 		reason: "capture could not read or persist a supported snapshot",
-		fix:    "check the checkout and private store, then retry capture",
+		fix:    "check the checkout and private store, then retry",
+	})
+	return &exitError{
+		code:       ExitOperational,
+		diagnostic: fmt.Sprintf("after: capture failed: %s — %s", failure.reason, failure.fix),
 	}
+}
+
+// liveDiffFailure reports a failed checkout read. No stored patch is printed in
+// its place; the stored capture remains one explicit flag away.
+func liveDiffFailure(err error) error {
+	failure := captureFailureFor(err, captureFailureInfo{
+		reason: "the checkout could not be read as a supported change",
+		fix:    "check the checkout, then retry",
+	})
+	return &exitError{
+		code:       ExitOperational,
+		diagnostic: fmt.Sprintf("after: diff could not read the checkout: %s — %s; no patch was printed (after diff --stored prints the newest stored capture)", failure.reason, failure.fix),
+	}
+}
+
+func captureFailureFor(err error, failure captureFailureInfo) captureFailureInfo {
 	switch {
 	case errors.Is(err, capture.ErrBudget):
 		failure = captureFailureInfo{"capture budget exceeded", "reduce the captured file count or size, then retry"}
 	case errors.Is(err, capture.ErrInconsistent):
 		failure = captureFailureInfo{"repository changed during capture; retry when writers are idle", "stop edits while capturing, then retry"}
 	case errors.Is(err, context.DeadlineExceeded):
-		failure = captureFailureInfo{"Git operation timed out", "retry capture when the local checkout is responsive"}
+		failure = captureFailureInfo{"Git operation timed out", "retry when the local checkout is responsive"}
 	case errors.Is(err, context.Canceled):
-		failure = captureFailureInfo{"capture was interrupted", "retry capture when ready"}
+		failure = captureFailureInfo{"interrupted", "retry when ready"}
 	default:
 		if known, ok := captureFailureReasons[err.Error()]; ok {
 			failure = known
 		}
 	}
-	return &exitError{
-		code:       ExitOperational,
-		diagnostic: fmt.Sprintf("after: capture failed: %s — %s", failure.reason, failure.fix),
-	}
+	return failure
 }

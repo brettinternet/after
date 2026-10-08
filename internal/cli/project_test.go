@@ -236,7 +236,7 @@ func TestCaptureErrorsAreFixedAndActionable(t *testing.T) {
 	}{
 		{
 			name: "unmerged index", reason: "unmerged index is unsupported",
-			fix: "resolve the index conflicts, then retry capture",
+			fix: "resolve the index conflicts, then retry",
 			setup: func(t *testing.T, project string) []string {
 				makeProject(t, project)
 				writeProjectFile(t, project, "conflict.txt", "base\n")
@@ -261,7 +261,7 @@ func TestCaptureErrorsAreFixedAndActionable(t *testing.T) {
 		},
 		{
 			name: "shallow repository", reason: "shallow repositories are unsupported",
-			fix: "use a complete local clone, then retry capture",
+			fix: "use a complete local clone, then retry",
 			setup: func(t *testing.T, project string) []string {
 				makeProject(t, project)
 				head := strings.TrimSpace(gitRun(t, project, "rev-parse", "HEAD"))
@@ -271,7 +271,7 @@ func TestCaptureErrorsAreFixedAndActionable(t *testing.T) {
 		},
 		{
 			name: "sparse repository", reason: "sparse or partial repositories are unsupported",
-			fix: "use a complete local checkout, then retry capture",
+			fix: "use a complete local checkout, then retry",
 			setup: func(t *testing.T, project string) []string {
 				makeProject(t, project)
 				gitRun(t, project, "config", "core.sparseCheckout", "true")
@@ -280,7 +280,7 @@ func TestCaptureErrorsAreFixedAndActionable(t *testing.T) {
 		},
 		{
 			name: "ambiguous merge base", reason: "comparison needs exactly one merge base",
-			fix: "choose refs with one merge base, then retry capture",
+			fix: "choose refs with one merge base, then retry",
 			setup: func(t *testing.T, project string) []string {
 				base, _ := makeProject(t, project)
 				gitRun(t, project, "checkout", "-qb", "left", base)

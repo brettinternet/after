@@ -245,6 +245,27 @@ func TestCaptureRecordsRepeatWithoutChangingSnapshotIdentity(t *testing.T) {
 	}
 }
 
+// Batched object reads are split to stay under Git's output ceiling; every
+// payload must still land on its own path across chunk boundaries.
+func TestBatchedObjectsSpanOutputChunks(t *testing.T) {
+	d := repo(t)
+	want := map[string][]byte{}
+	for _, p := range []string{"a", "b", "c"} {
+		data := bytes.Repeat([]byte(p+"\n"), 3<<20) // 6 MiB each; 18 MiB exceeds one chunk
+		data = append(data, "blob 1\n"...)
+		want[p] = data
+		put(t, d, p, data)
+	}
+	commit(t, d)
+	s := openStore(t, d)
+	r := take(t, d, s, Options{})
+	for p, data := range want {
+		if !bytes.Equal(content(t, s, r.Base, p), data) {
+			t.Fatalf("%s payload was misframed", p)
+		}
+	}
+}
+
 func TestMergeBaseAndUnborn(t *testing.T) {
 	t.Run("unborn", func(t *testing.T) {
 		d := repo(t)

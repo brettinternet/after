@@ -98,9 +98,10 @@ func readableGoldenCases() []struct {
 		Base:         &statusSnapshot{ID: idA, Source: evidence.Commit, Commit: strings.Repeat("a", 40), Completeness: evidence.Complete, Files: 1},
 		Candidate:    &statusSnapshot{ID: idB, Source: evidence.WorkingTree, Commit: strings.Repeat("1", 40), Completeness: evidence.Complete, Files: 1, Excluded: 1},
 		ChangedPaths: 1, UntrackedExcluded: true, Receipt: &receipt, Comparison: &comparison, Details: &details,
-		Pins:    []statusPin{{ID: idD, Decision: evidence.Reopened, Applicability: evidence.Stale, Expectation: pin.Expectation, MissingCurrentResult: true}},
-		Reports: []statusReport{{ID: idE, Imported: time.Date(2026, time.January, 2, 10, 31, 0, 0, time.UTC), Producer: "fixture report", Pass: 2, Fail: 1}},
-		Next:    []nextCommand{next("after review "+string(idA)+" "+string(idB), "review this capture")},
+		Freshness: &freshness{State: freshChanged, Scope: evidence.WorkingTree},
+		Pins:      []statusPin{{ID: idD, Decision: evidence.Reopened, Applicability: evidence.Stale, Expectation: pin.Expectation, MissingCurrentResult: true}},
+		Reports:   []statusReport{{ID: idE, Imported: time.Date(2026, time.January, 2, 10, 31, 0, 0, time.UTC), Producer: "fixture report", Pass: 2, Fail: 1}},
+		Next:      []nextCommand{next("after review "+string(idA)+" "+string(idB), "review this capture")},
 	}
 	log := logView{Total: 4, Shown: 4, Rows: []logRow{
 		{Kind: "pin", ID: idD, At: time.Date(2026, time.January, 2, 11, 0, 0, 0, time.UTC), Base: idA, Candidate: idB, Receipt: idD, Decision: evidence.Reopened, Action: "attach", Expectation: pin.Expectation},
@@ -132,26 +133,19 @@ func readableGoldenCases() []struct {
 		{"status", "status", status},
 		{"log", "log", log},
 		{"pin-heads", "pins", pinHeads},
-		{"config", "configuration", struct {
-			Settings []struct {
-				Name   string `json:"name"`
-				Value  any    `json:"value"`
-				Source string `json:"source"`
-			} `json:"settings"`
-			Setup dockerSetup `json:"docker_setup"`
-		}{[]struct {
-			Name   string `json:"name"`
-			Value  any    `json:"value"`
-			Source string `json:"source"`
-		}{{"repetitions", float64(2), "default"}, {"docker_host", "not configured (value hidden)", "default"}}, dockerSetup{
-			Problems:    []string{"Docker execution is not configured; set docker_binary and docker_host as a pair."},
-			Suggestions: []string{`docker_binary: "/absolute/path/to/docker"`, `docker_host: "unix:///absolute/path/to/local/docker.sock"`},
-		}}},
-		{"capture", "capture", struct {
-			Base      snapshotSummary  `json:"base_snapshot"`
-			Candidate snapshotSummary  `json:"candidate_snapshot"`
-			Index     *snapshotSummary `json:"index_snapshot,omitempty"`
-		}{snapshotSummary{ID: idA, Source: evidence.Commit, Completeness: evidence.Complete, Files: 3}, snapshotSummary{ID: idB, Source: evidence.WorkingTree, Completeness: evidence.Complete, Files: 4, Excluded: 1}, nil}},
+		{"config", "configuration", configurationResult{
+			Settings: []configSetting{{"repetitions", float64(2), "default"}, {"docker_host", "not configured (value hidden)", "default"}},
+			Setup: dockerSetup{
+				Problems:    []string{"Docker execution is not configured; set docker_binary and docker_host as a pair."},
+				Suggestions: []string{`docker_binary: "/usr/local/bin/docker"  # found on PATH; not executed`, `docker_host: "unix:///var/run/docker.sock"  # existing socket; not contacted`},
+				Apply:       "export AFTER_DOCKER_BINARY=/usr/local/bin/docker AFTER_DOCKER_HOST=unix:///var/run/docker.sock",
+			}}},
+		{"capture", "capture", captureOutput{
+			Base:      snapshotSummary{ID: idA, Source: evidence.Commit, Completeness: evidence.Complete, Files: 3, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}},
+			Candidate: snapshotSummary{ID: idB, Source: evidence.WorkingTree, Completeness: evidence.Complete, Files: 4, Excluded: 1, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}},
+			Index:     &snapshotSummary{ID: idC, Source: evidence.Index, Completeness: evidence.Complete, Files: 3},
+			Next:      []nextCommand{next("after review", "open a review of this change"), next("after diff --stored", "print this captured patch")},
+		}},
 		{"import", "import", reportView},
 		{"import-default-binding", "import", defaultBindingView},
 		{"inspect-pair", "snapshot", pair},
@@ -256,7 +250,8 @@ func TestReadableOutputGoldens(t *testing.T) {
 				t.Fatalf("readable output differs: %s; regenerate explicitly with -update\n%s", path, got)
 			}
 			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
-				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 && !strings.HasPrefix(line, "  after ") {
+				// Copyable Next commands are never clipped.
+				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 && !strings.HasPrefix(line, "  after ") && !strings.HasPrefix(line, "  export ") {
 					t.Errorf("golden exceeds 80 columns: %q", line)
 				}
 			}

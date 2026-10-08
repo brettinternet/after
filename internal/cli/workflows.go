@@ -56,8 +56,8 @@ func commands(state *invocation) []*ucli.Command {
 	return []*ucli.Command{
 		pinCommand(state), reviewCommand(state),
 		{
-			Name: "status", Usage: "summarize stored review state without capture or execution",
-			Before: outputBefore(state), Flags: globalFlags(),
+			Name: "status", Usage: "summarize stored review state and whether the checkout still matches it",
+			Before: outputBefore(state), Flags: append(globalFlags(), storedFlag()),
 			Action: func(ctx *ucli.Context) error {
 				if err := requireArgs(ctx, 0); err != nil {
 					return err
@@ -66,14 +66,19 @@ func commands(state *invocation) []*ucli.Command {
 				if err != nil {
 					return err
 				}
-				return statusCommand(state, cfg.Project)
+				return statusCommand(state, cfg.Project, ctx.Bool("stored"))
 			},
 		},
 		{
-			Name: "diff", Usage: "print the newest captured patch or any snapshot pair",
-			Before: outputBefore(state), ArgsUsage: "[BASE CANDIDATE]", Flags: append(globalFlags(),
-				&ucli.BoolFlag{Name: "stat", Usage: "print capture summary rows instead of the patch"},
+			Name: "diff", Usage: "print the checkout's current change without storing it, or a stored patch",
+			Before: outputBefore(state), ArgsUsage: "[--staged | --base REF [--target REF]] | --stored | BASE CANDIDATE", Flags: append(globalFlags(),
+				&ucli.BoolFlag{Name: "stat", Usage: "print per-file changed line counts instead of the patch"},
 				&ucli.BoolFlag{Name: "raw", Usage: "write exact patch bytes; stdout must not be a terminal"},
+				&ucli.BoolFlag{Name: "stored", Usage: "print the newest stored capture's patch instead of reading the checkout"},
+				&ucli.BoolFlag{Name: "staged", Usage: "read HEAD versus the index"},
+				&ucli.StringFlag{Name: "base", Usage: "base commit for a merge-base comparison"},
+				&ucli.StringFlag{Name: "target", Usage: "target commit for a merge-base comparison"},
+				&ucli.StringSliceFlag{Name: "include-untracked", Usage: "include an exact non-ignored untracked file (repeatable)"},
 			), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return diffCommand(state, ctx) },
 		},
 		{
@@ -105,7 +110,7 @@ func commands(state *invocation) []*ucli.Command {
 		{
 			Name: "inspect", Usage: "inspect a snapshot, receipt, comparison, report, or artifact by stable ID",
 			Before:    outputBefore(state),
-			ArgsUsage: "<stable-id> OR <base-snapshot-id> <candidate-snapshot-id>", Flags: append(globalFlags(), inspectionFlags()...),
+			ArgsUsage: "<stable-id> OR <base-snapshot-id> <candidate-snapshot-id>", Flags: append(append(globalFlags(), inspectionFlags()...), storedFlag()),
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, false) },
 		},
 		{
@@ -151,6 +156,11 @@ func commands(state *invocation) []*ucli.Command {
 	}
 }
 
+// storedFlag skips the checkout freshness check of a bare stored summary.
+func storedFlag() ucli.Flag {
+	return &ucli.BoolFlag{Name: "stored", Usage: "show the stored summary without checking whether the checkout still matches"}
+}
+
 func inspectionFlags() []ucli.Flag {
 	defaults := config.Defaults()
 	return []ucli.Flag{
@@ -181,11 +191,6 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 		problem := fmt.Sprintf("invalid configuration setting %s (%s): %s", dockerConfigErr.Setting, dockerConfigErr.Source, dockerConfigErr.Reason)
 		state.diagnostic = formatDiagnostic(problem, dockerConfigFix())
 	}
-	type setting struct {
-		Name   string `json:"name"`
-		Value  any    `json:"value"`
-		Source string `json:"source"`
-	}
 	configValue := "not selected"
 	if cfg.ConfigPath != "" {
 		configValue = "selected path hidden"
@@ -197,7 +202,7 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 	if cfg.DockerHost != "" {
 		dockerHost = "configured (value hidden)"
 	}
-	settings := []setting{
+	settings := []configSetting{
 		{"config_path", configValue, cfg.Sources["config_path"]},
 		{"project", "selected path hidden", cfg.Sources["project"]},
 		{"repetitions", cfg.Repetitions, cfg.Sources["repetitions"]},
@@ -213,10 +218,28 @@ func configCommand(state *invocation, ctx *ucli.Context) error {
 	if dockerConfigErr != nil {
 		setup.Problems = append([]string{fmt.Sprintf("Invalid Docker configuration: %s.", dockerConfigErr.Reason)}, setup.Problems...)
 	}
-	return writeResult(state, "configuration", struct {
-		Settings []setting   `json:"settings"`
-		Setup    dockerSetup `json:"docker_setup"`
-	}{settings, setup})
+	return writeResult(state, "configuration", configurationResult{Settings: settings, Setup: setup})
+}
+
+type configSetting struct {
+	Name   string `json:"name"`
+	Value  any    `json:"value"`
+	Source string `json:"source"`
+}
+
+type configurationResult struct {
+	Settings []configSetting `json:"settings"`
+	Setup    dockerSetup     `json:"docker_setup"`
+}
+
+func (result configurationResult) nextBlock() ([]nextCommand, bool) {
+	if result.Setup.Apply != "" {
+		return []nextCommand{
+			next(result.Setup.Apply, "use the detected Docker CLI and socket in this shell"),
+			next("after config", "check the settings again"),
+		}, true
+	}
+	return []nextCommand{next("after status", "show this checkout's review state")}, true
 }
 
 func captureCommand(state *invocation, ctx *ucli.Context) error {
@@ -227,6 +250,7 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	options, err := captureOptionsFromFlags(ctx, "capture")
 	if err != nil {
 		return err
@@ -258,6 +282,8 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 	response := captureOutput{Base: summary(result.Base), Candidate: summary(result.Candidate), Index: index}
 	if empty {
 		response.Guidance = guidance
+	} else {
+		response.Next = []nextCommand{captureReviewNext(cfg.Project, pair, options), next("after diff --stored", "print this captured patch")}
 	}
 	return writeResult(state, "capture", response)
 }
@@ -316,6 +342,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	offset, limit, err := pageArgs(ctx, "offset", "limit", reportPageSize, maxReportPageSize)
 	if err != nil {
 		return err
@@ -333,6 +360,24 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		defer inputFile.Close()
 		input = inputFile
 	}
+	stopNotice := startElapsedNotice(state, "import", time.Second)
+	defer stopNotice()
+	importedAt := time.Now().UTC()
+	if state.now != nil {
+		importedAt = state.now().UTC()
+	}
+	// Parse before opening storage so empty or unrelated input changes nothing.
+	report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, ImportedAt: importedAt})
+	if err != nil {
+		return invalid("report is invalid or exceeds the 8 MiB input limit")
+	}
+	if len(report.Cards) == 0 {
+		problem := "the input contains no go test -json events; nothing was imported"
+		if report.OriginalBytes == 0 {
+			problem = "the report input is empty; nothing was imported"
+		}
+		return invalidWithFix(problem, "pass -json to go test, for example: go test -json ./... | after import")
+	}
 	s, err := store.Open(cfg.Project, true, nil)
 	if err != nil {
 		return operational("cannot open private evidence store")
@@ -343,16 +388,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		if err != nil {
 			return err
 		}
-	}
-	stopNotice := startElapsedNotice(state, "import", time.Second)
-	defer stopNotice()
-	importedAt := time.Now().UTC()
-	if state.now != nil {
-		importedAt = state.now().UTC()
-	}
-	report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, Snapshot: snapshot, ImportedAt: importedAt})
-	if err != nil {
-		return invalid("report is invalid or exceeds the 8 MiB input limit")
+		report.Metadata.Snapshot = snapshot
 	}
 	var binding *reportBindingView
 	if ctx.IsSet("snapshot") {
@@ -689,6 +725,7 @@ type snapshotView struct {
 	Base                    evidence.Digest        `json:"base_snapshot"`
 	Candidate               evidence.Digest        `json:"candidate_snapshot"`
 	Using                   *resolvedIDs           `json:"using,omitempty"`
+	Freshness               *freshness             `json:"freshness,omitempty"`
 	BaseRecord              evidence.Snapshot      `json:"-"`
 	CandidateRecord         evidence.Snapshot      `json:"-"`
 	BaseCaptureHistory      snapshotCaptureHistory `json:"-"`
@@ -863,6 +900,7 @@ func compareCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	var id evidence.Digest
 	var using *resolvedIDs
 	if ctx.NArg() == 0 {
@@ -996,6 +1034,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil {
 		return err
 	}
+	state.project = cfg.Project
 	planPath := strings.TrimSpace(ctx.String("plan-file"))
 	planOut := strings.TrimSpace(ctx.String("plan-out"))
 	approvalSet := ctx.IsSet("approve") && strings.TrimSpace(ctx.String("approve")) != ""
@@ -1069,7 +1108,7 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		}
 		plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
 		if err != nil {
-			return operational("cannot prepare the bounded payment execution plan")
+			return preparationFailure(err)
 		}
 	}
 	preview, digest := plan.Preview()
@@ -1153,6 +1192,22 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		state.exit = comparisonExit(comparisonRecord.Outcome)
 	}
 	return writeResult(state, "run", response)
+}
+
+// preparationFailure names the snapshot property that blocked a plan. Nothing
+// has run, so these are invalid inputs rather than operational failures.
+func preparationFailure(err error) error {
+	switch {
+	case errors.Is(err, runner.ErrUnsupportedProject):
+		return invalidWithFix("this capture has no go.mod and app/main.go; after run supports only the offline payment experiment", "use after review to inspect this change without running it")
+	case errors.Is(err, runner.ErrReservedPath):
+		return invalidWithFix("the capture contains after-launch.go, a path the payment runner reserves", "rename after-launch.go, capture again, then retry after run")
+	case errors.Is(err, runner.ErrIncompleteSnapshot):
+		return invalidWithFix("the capture is incomplete, so it cannot execute", "run after inspect to see unsupported paths, then capture a complete change")
+	case errors.Is(err, runner.ErrSnapshotBudget):
+		return invalidWithFix("the capture exceeds the sandbox budget of 255 files and 8 MiB", "run the payment experiment on a smaller checkout")
+	}
+	return operational("cannot prepare the bounded payment execution plan")
 }
 
 func ensureReceipt(receipt evidence.Receipt) error {

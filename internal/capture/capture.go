@@ -4,6 +4,8 @@ package capture
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +35,7 @@ const (
 var (
 	ErrBudget       = errors.New("capture budget exceeded")
 	ErrInconsistent = errors.New("repository changed during capture; retry when writers are idle")
+	errSelection    = errors.New("selected path is not a non-ignored untracked file")
 )
 
 type Options struct {
@@ -74,7 +78,20 @@ func Capture(ctx context.Context, dir string, s *store.Store, opts Options) (Res
 	return capture(ctx, dir, s, opts, nil)
 }
 func capture(ctx context.Context, dir string, s *store.Store, opts Options, between func(int)) (Result, error) {
-	var zero Result
+	if opts.Mode == "" {
+		opts.Mode = evidence.WorkingTree
+	}
+	frozen, err := consistentScan(ctx, dir, opts, between)
+	if err != nil {
+		return Result{}, err
+	}
+	return persist(ctx, s, frozen, opts)
+}
+
+// consistentScan returns the first of two identical full reads, with at most
+// three attempts. It writes nothing.
+func consistentScan(ctx context.Context, dir string, opts Options, between func(int)) (scan, error) {
+	var zero scan
 	if opts.Mode == "" {
 		opts.Mode = evidence.WorkingTree
 	}
@@ -116,7 +133,7 @@ func capture(ctx context.Context, dir string, s *store.Store, opts Options, betw
 		if !reflect.DeepEqual(first, second) {
 			continue
 		}
-		return persist(ctx, s, first, opts)
+		return first, nil
 	}
 	return zero, ErrInconsistent
 }
@@ -249,12 +266,9 @@ func (r *reader) scan(o Options) (scan, error) {
 		}
 	}
 	out.Index = image{Source: evidence.Index, Commit: head, Unborn: unborn}
-	for _, e := range entries {
-		e, err = r.object(e)
-		if err != nil {
-			return out, err
-		}
-		out.Index.Entries = append(out.Index.Entries, e)
+	out.Index.Entries, err = r.objects(append([]entry(nil), entries...))
+	if err != nil {
+		return out, err
 	}
 	out.HasIndex = true
 	// Private storage must not enumerate its own artifacts or change identities
@@ -327,7 +341,7 @@ func (r *reader) scan(o Options) (scan, error) {
 		out.Candidate.Entries = append(out.Candidate.Entries, e)
 	}
 	if len(selected) != 0 {
-		return out, errors.New("selected path is not a non-ignored untracked file")
+		return out, errSelection
 	}
 	sort.Slice(out.Candidate.Entries, func(i, j int) bool { return out.Candidate.Entries[i].Path < out.Candidate.Entries[j].Path })
 	if len(out.Candidate.Entries) > MaxFiles {
@@ -380,44 +394,116 @@ func (r *reader) tree(commit string) (image, error) {
 	if err != nil {
 		return out, err
 	}
-	for _, e := range es {
-		e, err = r.object(e)
-		if err != nil {
-			return out, err
-		}
-		out.Entries = append(out.Entries, e)
-	}
-	return out, nil
+	out.Entries, err = r.objects(es)
+	return out, err
 }
-func (r *reader) object(e entry) (entry, error) {
-	if privatePath(e.Path) {
-		e.Excluded = "private AFTER/Git storage"
-		return e, nil
+
+// objects reads every regular blob with one cat-file --batch-check and one
+// cat-file --batch per output-sized chunk, instead of two processes per file.
+// Only validated OIDs are sent; replies must match in count, order, identity,
+// type and exact length, and payloads are framed by size, never split by line.
+func (r *reader) objects(es []entry) ([]entry, error) {
+	var wanted []int
+	var request bytes.Buffer
+	for i := range es {
+		switch {
+		case privatePath(es[i].Path):
+			es[i].Excluded = "private AFTER/Git storage"
+		case es[i].Mode != "100644" && es[i].Mode != "100755":
+			es[i].Reason = "unsupported Git mode " + es[i].Mode
+		case !validOID(es[i].OID):
+			return es, errors.New("invalid Git object identity")
+		default:
+			wanted = append(wanted, i)
+			request.WriteString(es[i].OID + "\n")
+		}
 	}
-	if e.Mode != "100644" && e.Mode != "100755" {
-		e.Reason = "unsupported Git mode " + e.Mode
-		return e, nil
+	if len(wanted) == 0 {
+		return es, nil
 	}
-	size, err := r.run("cat-file", "-s", e.OID)
+	checked, err := r.batch(request.Bytes(), "--batch-check")
 	if err != nil {
-		return e, err
+		return es, err
 	}
-	n, err := strconv.ParseInt(strings.TrimSpace(string(size)), 10, 64)
-	if err != nil || n < 0 {
-		return e, errors.New("invalid object size")
+	sizes := map[int]int{}
+	var read []int
+	for _, i := range wanted {
+		n, rest, err := objectHeader(checked, es[i].OID)
+		if err != nil {
+			return es, err
+		}
+		checked = rest
+		if n > MaxFileBytes {
+			es[i].Reason = "file exceeds capture byte limit"
+			continue
+		}
+		// Charge the budget before any payload is read.
+		if err := r.charge(n); err != nil {
+			return es, err
+		}
+		sizes[i] = n
+		read = append(read, i)
 	}
-	if n > MaxFileBytes {
-		e.Reason = "file exceeds capture byte limit"
-		return e, nil
+	if len(checked) != 0 {
+		return es, errors.New("unexpected Git object reply")
 	}
-	e.Data, err = r.run("cat-file", "blob", e.OID)
-	if err != nil {
-		return e, err
+	for start := 0; start < len(read); {
+		// Each reply is "<oid> blob <size>\n<payload>\n"; keep a chunk's framed
+		// output below the hardened runner's output ceiling.
+		request.Reset()
+		end, framed := start, 0
+		for end < len(read) {
+			cost := sizes[read[end]] + len(es[read[end]].OID) + 32
+			if end > start && framed+cost > maxOutput {
+				break
+			}
+			framed += cost
+			request.WriteString(es[read[end]].OID + "\n")
+			end++
+		}
+		out, err := r.batch(request.Bytes(), "--batch")
+		if err != nil {
+			return es, err
+		}
+		for _, i := range read[start:end] {
+			n, rest, err := objectHeader(out, es[i].OID)
+			if err != nil {
+				return es, err
+			}
+			if n != sizes[i] || len(rest) < n+1 || rest[n] != '\n' {
+				return es, ErrInconsistent
+			}
+			es[i].Data, out = rest[:n:n], rest[n+1:]
+		}
+		if len(out) != 0 {
+			return es, errors.New("unexpected Git object reply")
+		}
+		start = end
 	}
-	if int64(len(e.Data)) != n {
-		return e, ErrInconsistent
+	for _, i := range read {
+		es[i] = lfsPointer(es[i])
 	}
-	return r.account(e)
+	return es, nil
+}
+func (r *reader) batch(request []byte, mode string) ([]byte, error) {
+	return git(r.ctx, r.dir, request, "cat-file", mode)
+}
+
+// objectHeader parses one "<oid> blob <size>" reply line for the expected OID.
+func objectHeader(reply []byte, oid string) (int, []byte, error) {
+	line, rest, ok := bytes.Cut(reply, []byte{'\n'})
+	if !ok {
+		return 0, nil, errors.New("truncated Git object reply")
+	}
+	fields := strings.Split(string(line), " ")
+	if len(fields) != 3 || fields[0] != oid || fields[1] != "blob" {
+		return 0, nil, errors.New("Git object is missing or not a file")
+	}
+	n, err := strconv.Atoi(fields[2])
+	if err != nil || n < 0 || strconv.Itoa(n) != fields[2] {
+		return 0, nil, errors.New("invalid object size")
+	}
+	return n, rest, nil
 }
 func (r *reader) file(e entry) (entry, bool, error) {
 	if privatePath(e.Path) {
@@ -478,15 +564,24 @@ func (r *reader) file(e entry) (entry, bool, error) {
 	return e, true, err
 }
 func (r *reader) account(e entry) (entry, error) {
-	r.total += len(e.Data)
-	if r.total > MaxCaptureBytes {
-		return e, ErrBudget
+	if err := r.charge(len(e.Data)); err != nil {
+		return e, err
 	}
+	return lfsPointer(e), nil
+}
+func (r *reader) charge(n int) error {
+	r.total += n
+	if r.total > MaxCaptureBytes {
+		return ErrBudget
+	}
+	return nil
+}
+func lfsPointer(e entry) entry {
 	if bytes.HasPrefix(e.Data, []byte("version https://git-lfs.github.com/spec/v1\n")) {
 		e.Data = nil
 		e.Reason = "LFS pointer; payload not captured"
 	}
-	return e, nil
+	return e
 }
 
 func persist(ctx context.Context, s *store.Store, scan scan, opts Options) (Result, error) {
@@ -504,33 +599,11 @@ func persist(ctx context.Context, s *store.Store, scan scan, opts Options) (Resu
 		return out, err
 	}
 	save := func(im image, index evidence.Digest, a evidence.Artifact) (evidence.Snapshot, error) {
-		snap := evidence.Snapshot{SchemaVersion: evidence.SchemaVersion, Source: im.Source, Commit: im.Commit, Unborn: im.Unborn, Completeness: evidence.Complete, Diff: a.Content, IndexSnapshot: index, Limits: []string{"two matching reads; not an atomic filesystem snapshot", "diff includes captured regular files only; inspect excluded and unsupported inventory"}}
-		if im.Source == evidence.MergeBase {
-			snap.MergeBase = im.MergeBase
-			snap.BaseCommit = im.BaseCommit
-		}
-		if a.Completeness != evidence.Complete {
-			snap.Completeness = evidence.Incomplete
-			snap.Limits = append(snap.Limits, "diff redacted or truncated")
-		}
-		for _, e := range im.Entries {
-			switch {
-			case e.Excluded != "":
-				snap.Excluded = append(snap.Excluded, evidence.Limitation{Path: e.Path, Reason: e.Excluded})
-			case e.Reason != "":
-				snap.Unsupported = append(snap.Unsupported, evidence.Limitation{Path: e.Path, Reason: e.Reason})
-				snap.Completeness = evidence.Incomplete
-			default:
-				blob, err := s.PutArtifact(e.Data, "source", store.MaxBlobBytes)
-				if err != nil {
-					return snap, err
-				}
-				if blob.Completeness != evidence.Complete {
-					snap.Completeness = evidence.Incomplete
-					snap.Limits = append(snap.Limits, fmt.Sprintf("source redacted or truncated: %s", e.Path))
-				}
-				snap.Files = append(snap.Files, evidence.File{Path: e.Path, Mode: e.Mode, Content: blob.Content})
-			}
+		snap, err := manifest(im, index, a, func(data []byte) (evidence.Artifact, error) {
+			return s.PutArtifact(data, "source", store.MaxBlobBytes)
+		})
+		if err != nil {
+			return snap, err
 		}
 		return store.Put(s, snap)
 	}
@@ -585,6 +658,116 @@ func persist(ctx context.Context, s *store.Store, scan scan, opts Options) (Resu
 	return out, err
 }
 
+// manifest describes a frozen image; content records one file's bytes.
+func manifest(im image, index evidence.Digest, diff evidence.Artifact, content func([]byte) (evidence.Artifact, error)) (evidence.Snapshot, error) {
+	snap := evidence.Snapshot{SchemaVersion: evidence.SchemaVersion, Source: im.Source, Commit: im.Commit, Unborn: im.Unborn, Completeness: evidence.Complete, Diff: diff.Content, IndexSnapshot: index, Limits: []string{"two matching reads; not an atomic filesystem snapshot", "diff includes captured regular files only; inspect excluded and unsupported inventory"}}
+	if im.Source == evidence.MergeBase {
+		snap.MergeBase = im.MergeBase
+		snap.BaseCommit = im.BaseCommit
+	}
+	if diff.Completeness != evidence.Complete {
+		snap.Completeness = evidence.Incomplete
+		snap.Limits = append(snap.Limits, "diff redacted or truncated")
+	}
+	for _, e := range im.Entries {
+		switch {
+		case e.Excluded != "":
+			snap.Excluded = append(snap.Excluded, evidence.Limitation{Path: e.Path, Reason: e.Excluded})
+		case e.Reason != "":
+			snap.Unsupported = append(snap.Unsupported, evidence.Limitation{Path: e.Path, Reason: e.Reason})
+			snap.Completeness = evidence.Incomplete
+		default:
+			blob, err := content(e.Data)
+			if err != nil {
+				return snap, err
+			}
+			if blob.Completeness != evidence.Complete {
+				snap.Completeness = evidence.Incomplete
+				snap.Limits = append(snap.Limits, fmt.Sprintf("source redacted or truncated: %s", e.Path))
+			}
+			snap.Files = append(snap.Files, evidence.File{Path: e.Path, Mode: e.Mode, Content: blob.Content})
+		}
+	}
+	return snap, nil
+}
+
+// unstored identifies bytes the way the store would without retaining them.
+func unstored(data []byte) (evidence.Artifact, error) {
+	sum := sha256.Sum256(data)
+	return evidence.Artifact{Content: evidence.Digest("sha256:" + hex.EncodeToString(sum[:])), Bytes: int64(len(data)), Completeness: evidence.Complete}, nil
+}
+
+// Live is the checkout's current change as Capture would read it. Its
+// snapshots have no record IDs, and file and diff identities are SHA-256
+// digests of the unredacted bytes read; nothing is stored.
+type Live struct {
+	Base, Candidate evidence.Snapshot
+	Patch           []byte
+}
+
+// ReadLive performs Capture's consistent read and patch generation without
+// writing evidence. Only private temporary files hold bytes for Git's diff.
+func ReadLive(ctx context.Context, dir string, opts Options) (Live, error) {
+	if opts.Mode == "" {
+		opts.Mode = evidence.WorkingTree
+	}
+	frozen, err := consistentScan(ctx, dir, opts, nil)
+	if err != nil {
+		return Live{}, err
+	}
+	patch, err := makeDiff(ctx, frozen.Base, frozen.Candidate)
+	if err != nil {
+		return Live{}, err
+	}
+	diff, _ := unstored(patch)
+	out := Live{Patch: patch}
+	if out.Base, err = manifest(frozen.Base, "", diff, unstored); err != nil {
+		return Live{}, err
+	}
+	out.Candidate, err = manifest(frozen.Candidate, "", diff, unstored)
+	return out, err
+}
+
+// Unchanged reports whether the checkout still holds a stored capture's
+// content in its recorded scope: the HEAD commit and index, plus, for a
+// working-tree capture, tracked files, the recorded untracked selection and the
+// excluded untracked inventory. It reads like Capture and writes nothing. Only
+// complete snapshots identify original bytes, so callers must not pass
+// incomplete ones. Merge-base captures compare commits, not checkout state.
+func Unchanged(ctx context.Context, dir string, record evidence.Capture, base, candidate evidence.Snapshot, index *evidence.Snapshot) (bool, error) {
+	if record.Mode != evidence.WorkingTree && record.Mode != evidence.Index {
+		return false, errors.New("only working-tree and index captures describe checkout state")
+	}
+	frozen, err := consistentScan(ctx, dir, Options{Mode: record.Mode, IncludeUntracked: record.SelectedUntracked}, nil)
+	if errors.Is(err, errSelection) {
+		return false, nil // a selected untracked file was removed or added to Git
+	}
+	if err != nil {
+		return false, err
+	}
+	compare := []struct {
+		image  image
+		stored evidence.Snapshot
+	}{{frozen.Base, base}, {frozen.Candidate, candidate}}
+	if index != nil {
+		compare = append(compare, struct {
+			image  image
+			stored evidence.Snapshot
+		}{frozen.Index, *index})
+	}
+	for _, item := range compare {
+		live, err := manifest(item.image, "", evidence.Artifact{Completeness: evidence.Complete}, unstored)
+		if err != nil {
+			return false, err
+		}
+		if live.Source != item.stored.Source || live.Commit != item.stored.Commit || live.Unborn != item.stored.Unborn ||
+			!slices.Equal(live.Files, item.stored.Files) || !slices.Equal(live.Excluded, item.stored.Excluded) || !slices.Equal(live.Unsupported, item.stored.Unsupported) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // Diff only frozen bytes in a private Git object database. No repository config,
 // attributes, hooks, filters or working-tree contents participate.
 func makeDiff(ctx context.Context, base, candidate image) ([]byte, error) {
@@ -596,6 +779,45 @@ func makeDiff(ctx context.Context, base, candidate image) ([]byte, error) {
 	if _, err = git(ctx, dir, nil, "init", "--quiet", "--template=", dir); err != nil {
 		return nil, err
 	}
+	// Write each distinct frozen payload once under a generated name and hash
+	// them all in one process. Checkout paths never reach hash-object.
+	payloads := filepath.Join(dir, "payloads")
+	if err := os.Mkdir(payloads, 0o700); err != nil {
+		return nil, err
+	}
+	names := map[[sha256.Size]byte]int{}
+	var paths bytes.Buffer
+	for _, im := range []image{base, candidate} {
+		for _, e := range im.Entries {
+			sum := sha256.Sum256(e.Data)
+			if _, ok := names[sum]; ok || e.Excluded != "" || e.Reason != "" {
+				continue
+			}
+			name := "payloads/" + strconv.Itoa(len(names))
+			if err := os.WriteFile(filepath.Join(dir, name), e.Data, 0o600); err != nil {
+				return nil, err
+			}
+			names[sum] = len(names)
+			paths.WriteString(name + "\n")
+		}
+	}
+	oids := make([]string, len(names))
+	if len(names) > 0 {
+		hashed, err := git(ctx, dir, paths.Bytes(), "hash-object", "-w", "--no-filters", "--stdin-paths")
+		if err != nil {
+			return nil, err
+		}
+		lines := strings.Split(strings.TrimSuffix(string(hashed), "\n"), "\n")
+		if len(lines) != len(oids) {
+			return nil, errors.New("unexpected Git object reply")
+		}
+		for i, oid := range lines {
+			if !validOID(oid) {
+				return nil, errors.New("invalid Git object identity")
+			}
+			oids[i] = oid
+		}
+	}
 	tree := func(im image) (string, error) {
 		if _, err := git(ctx, dir, nil, "read-tree", "--empty"); err != nil {
 			return "", err
@@ -605,11 +827,7 @@ func makeDiff(ctx context.Context, base, candidate image) ([]byte, error) {
 			if e.Excluded != "" || e.Reason != "" {
 				continue
 			}
-			oid, err := git(ctx, dir, e.Data, "hash-object", "-w", "--stdin", "--no-filters")
-			if err != nil {
-				return "", err
-			}
-			fmt.Fprintf(&index, "%s %s\t%s%c", e.Mode, strings.TrimSpace(string(oid)), e.Path, 0)
+			fmt.Fprintf(&index, "%s %s\t%s%c", e.Mode, oids[names[sha256.Sum256(e.Data)]], e.Path, 0)
 		}
 		if _, err := git(ctx, dir, index.Bytes(), "update-index", "-z", "--index-info"); err != nil {
 			return "", err

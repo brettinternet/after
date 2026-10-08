@@ -7,6 +7,7 @@ Usage
   after inspect BASE CANDIDATE
 
 Options
+  --stored                 bare inspect: skip the checkout check
   --raw-diff               include a bounded captured patch (default: true)
   --diff-bytes N           maximum raw patch bytes (default: 65536)
   --diff-offset N          raw diff byte offset (default: 0)

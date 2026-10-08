@@ -55,5 +55,5 @@ sha256:3f76b06c014375d24e9b9ecb8c8ede0431a063a4c99a0fe916838b3152d0ca39
 sha256:e58b5fee29ed7b42a5c73e5665e8b4c2413803645107b9ccbee1c7ab2d93155f
 sha256:c79b5b8eb26e7c9fa980226a677c0e08e559c282ff678cdc1584a0e1f3259a2f
 Next
-  after inspect sha256:3f76b06c014375d24e9b9ecb8c8ede0431a063a4c99a0fe916838b3152d0ca39 --project <project>
+  after inspect 3f76b06c --project <project>
     inspect the reported test results

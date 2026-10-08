@@ -282,8 +282,12 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 			return nil, err
 		}
 		lines := []readableLine{textLine("Effective AFTER configuration", terminal.Strong)}
+		width := 0
 		for _, setting := range result.Settings {
-			lines = append(lines, readableRow(setting.Name, fmt.Sprintf("%v · %s", setting.Value, setting.Source)))
+			width = max(width, len(setting.Name))
+		}
+		for _, setting := range result.Settings {
+			lines = append(lines, textLine(fmt.Sprintf("  %-*s  %v · %s", width, setting.Name, setting.Value, setting.Source), terminal.Plain))
 		}
 		return append(lines, dockerSetupReadableLines(state, result.Setup)...), nil
 	case "capture":
@@ -298,9 +302,8 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		lines := []readableLine{textLine(fmt.Sprintf("Captured candidate %s (%s) against base %s (%s)", shortID(result.Candidate.ID), sourceName(result.Candidate.Source, ""), shortID(result.Base.ID), sourceName(result.Base.Source, "")), terminal.Strong)}
 		lines = appendSnapshotSummary(lines, "Base", result.Base)
 		lines = appendSnapshotSummary(lines, "Candidate", result.Candidate)
-		if result.Index != nil {
-			lines = appendSnapshotSummary(lines, "Index", *result.Index)
-		}
+		lines = appendLimits(lines, result.Base.Limits)
+		lines = appendLimits(lines, result.Candidate.Limits)
 		if output, ok := original.(captureOutput); ok && output.Guidance != nil {
 			lines = append(lines, emptyGuidanceLines(*output.Guidance)...)
 		}
@@ -439,9 +442,12 @@ func statusLines(state *invocation, view statusView) []readableLine {
 	if candidate != nil {
 		candidateName = sourceName(candidate.Source, candidate.Commit)
 	}
-	lines := []readableLine{textLine(fmt.Sprintf("Checkout · base %s (%s) → candidate %s (%s)", shortID(capture.Base), baseName, shortID(capture.Candidate), candidateName), terminal.Strong)}
-	captured := fmt.Sprintf("%s · %d %s changed", state.formatTime(capture.CapturedAt), view.ChangedPaths, plural(view.ChangedPaths, "path"))
-	if view.UntrackedExcluded {
+	lines := []readableLine{textLine(fmt.Sprintf("Stored capture · %s (%s) → %s (%s)", shortID(capture.Base), baseName, shortID(capture.Candidate), candidateName), terminal.Strong)}
+	changed := view.ChangedPaths - view.ExcludedPaths
+	captured := fmt.Sprintf("%s · %d %s changed", state.formatTime(capture.CapturedAt), changed, plural(changed, "path"))
+	if view.ExcludedPaths > 0 {
+		captured += fmt.Sprintf(" · %d untracked %s excluded", view.ExcludedPaths, plural(view.ExcludedPaths, "path"))
+	} else if view.UntrackedExcluded {
 		captured += " · untracked paths excluded"
 	} else if view.Capture.SelectedUntracked > 0 {
 		captured += fmt.Sprintf(" · %d untracked paths selected", view.Capture.SelectedUntracked)
@@ -449,6 +455,7 @@ func statusLines(state *invocation, view statusView) []readableLine {
 		captured += " · no untracked paths selected"
 	}
 	lines = append(lines, readableRow("Captured", captured))
+	lines = appendFreshness(lines, view.Freshness)
 	if view.SavedReview != nil && *view.SavedReview != (evidence.SnapshotPair{Base: capture.Base, Candidate: capture.Candidate}) {
 		lines = append(lines, readableRow("Saved review", fmt.Sprintf("%s → %s", shortID(view.SavedReview.Base), shortID(view.SavedReview.Candidate))))
 	}
@@ -510,8 +517,11 @@ func logLines(state *invocation, view logView) []readableLine {
 		case "capture":
 			id = row.Candidate
 			description = fmt.Sprintf("%s against %s", strings.ReplaceAll(string(row.Mode), "_", " "), shortID(row.Base))
-			if row.Paths != 0 {
-				description += fmt.Sprintf(" · %d %s", row.Paths, plural(row.Paths, "path"))
+			if changed := row.Paths - row.Excluded; changed != 0 {
+				description += fmt.Sprintf(" · %d %s changed", changed, plural(changed, "path"))
+			}
+			if row.Excluded != 0 {
+				description += fmt.Sprintf(" · %d excluded", row.Excluded)
 			}
 		case "run":
 			description = fmt.Sprintf("%s → %s · %s", shortID(row.Base), shortID(row.Candidate), row.Outcome)
@@ -570,6 +580,34 @@ func usingCaptureLine(ids resolvedIDs) readableLine {
 	return textLine(fmt.Sprintf("Using the newest capture: base %s → candidate %s", shortID(ids.Base), shortID(ids.Candidate)), terminal.Muted)
 }
 
+// appendFreshness says whether the checkout still matches a stored capture,
+// so stored results are never presented as the current change by omission.
+func appendFreshness(lines []readableLine, f *freshness) []readableLine {
+	if f == nil {
+		return lines
+	}
+	style, value := terminal.Muted, ""
+	switch {
+	case f.State == freshMatches:
+		style, value = terminal.Plain, "matches this capture"
+	case f.State == freshChanged:
+		style, value = terminal.Attention, "changed since capture · results below are for the stored pair"
+	case f.Reason == "incomplete_capture":
+		value = "not verified · this capture is incomplete"
+	case f.Reason == "checkout_unreadable":
+		style, value = terminal.Attention, "not verified · the checkout could not be read"
+	case f.Reason == "immutable_comparison":
+		value = "not checked · merge-base captures compare commits"
+	case f.Reason == "stored_requested":
+		value = "not checked (--stored)"
+	case f.Reason == "no_capture":
+		return lines
+	default:
+		value = "not verified"
+	}
+	return append(lines, textLine(fmt.Sprintf("  %-12s %s", "Checkout", value), style))
+}
+
 func usingRunLine(ids resolvedIDs) readableLine {
 	return textLine(fmt.Sprintf("Using the newest run of base %s → candidate %s", shortID(ids.Base), shortID(ids.Candidate)), terminal.Muted)
 }
@@ -597,8 +635,8 @@ func appendNextLines(state *invocation, kind string, raw []byte, original any, l
 		return append(lines, textLine("  No further command is suggested.", terminal.Muted))
 	}
 	for _, item := range data.Next[:min(3, len(data.Next))] {
-		command := item.Command
-		if state.suggestionFlags != "" && !strings.Contains(command, "--project ") && !strings.Contains(command, "--config ") {
+		command := shortenCommandIDs(state.project, item.Command)
+		if state.suggestionFlags != "" && strings.HasPrefix(command, "after ") && !strings.Contains(command, "--project ") && !strings.Contains(command, "--config ") {
 			command += state.suggestionFlags
 		}
 		lines = append(lines, fullLine("  "+command))
@@ -611,16 +649,6 @@ func appendNextLines(state *invocation, kind string, raw []byte, original any, l
 
 func suggestedNext(state *invocation, kind string, raw []byte, original any) []nextCommand {
 	switch kind {
-	case "capture":
-		var data struct {
-			Candidate snapshotSummary `json:"candidate_snapshot"`
-		}
-		if json.Unmarshal(raw, &data) == nil && data.Candidate.ID != "" {
-			return []nextCommand{
-				next("after review", "open or resume the saved review"),
-				next("after diff", "print this captured patch"),
-			}
-		}
 	case "import":
 		var data reportViewData
 		if json.Unmarshal(raw, &data) == nil && data.ID != "" {
@@ -639,6 +667,10 @@ func suggestedNext(state *invocation, kind string, raw []byte, original any) []n
 	case "snapshot":
 		var pair snapshotView
 		if json.Unmarshal(raw, &pair) == nil && pair.Base != "" && pair.Candidate != "" {
+			if pair.Freshness.staleOrUnreadable() {
+				_, saved, _, _ := readReviewSession(state.project)
+				return freshnessNext(saved)
+			}
 			return []nextCommand{next(reviewSuggestion(state.project, evidence.SnapshotPair{Base: pair.Base, Candidate: pair.Candidate}), "open or resume a review")}
 		}
 		var snapshot evidence.Snapshot
@@ -706,8 +738,7 @@ func suggestedNext(state *invocation, kind string, raw []byte, original any) []n
 }
 
 func appendSnapshotSummary(lines []readableLine, label string, snapshot snapshotSummary) []readableLine {
-	lines = append(lines, readableRow(label, fmt.Sprintf("%s · %d %s · %s · %d excluded · %d unsupported", shortID(snapshot.ID), snapshot.Files, plural(snapshot.Files, "path"), snapshot.Completeness, snapshot.Excluded, snapshot.Unsupported)))
-	return appendLimits(lines, snapshot.Limits)
+	return append(lines, readableRow(label, fmt.Sprintf("%s · %d %s · %s · %d excluded · %d unsupported", shortID(snapshot.ID), snapshot.Files, plural(snapshot.Files, "path"), snapshot.Completeness, snapshot.Excluded, snapshot.Unsupported)))
 }
 
 func (s *invocation) formatTime(value time.Time) string {
@@ -786,12 +817,14 @@ func snapshotLines(state *invocation, raw []byte, original any) ([]readableLine,
 		if view.Using != nil {
 			lines = append(lines, usingCaptureLine(*view.Using))
 		}
+		lines = appendFreshness(lines, view.Freshness)
 		if records, ok := original.(snapshotView); ok {
 			if records.BaseRecord.ID != "" {
-				lines = appendSnapshotRecord(state, lines, "Base", records.BaseRecord, records.BaseCaptureHistory)
+				lines = append(lines, snapshotRecordRow("Base", records.BaseRecord))
 			}
 			if records.CandidateRecord.ID != "" {
-				lines = appendSnapshotRecord(state, lines, "Candidate", records.CandidateRecord, records.CandidateCaptureHistory)
+				lines = append(lines, snapshotRecordRow("Candidate", records.CandidateRecord))
+				lines = appendSnapshotCaptureHistory(state, lines, pairCaptureHistory(records.CandidateCaptureHistory, view.Base))
 			}
 		}
 		lines = append(lines, readableRow("Inventory", fmt.Sprintf("%d %s · %d shown%s", view.InventoryTotal, plural(view.InventoryTotal, "path"), len(view.Inventory), moreSuffix(view.InventoryMore))))
@@ -840,9 +873,24 @@ func snapshotLines(state *invocation, raw []byte, original any) ([]readableLine,
 	return addIDs(lines, snapshot.ID, snapshot.IndexSnapshot), nil
 }
 
-func appendSnapshotRecord(state *invocation, lines []readableLine, label string, snapshot evidence.Snapshot, history snapshotCaptureHistory) []readableLine {
-	lines = append(lines, readableRow(label, fmt.Sprintf("%s · %s · %d %s · %s · %d excluded · %d unsupported", shortID(snapshot.ID), sourceName(snapshot.Source, snapshot.Commit), len(snapshot.Files), plural(len(snapshot.Files), "path"), snapshot.Completeness, len(snapshot.Excluded), len(snapshot.Unsupported))))
-	return appendSnapshotCaptureHistory(state, lines, history)
+func snapshotRecordRow(label string, snapshot evidence.Snapshot) readableLine {
+	return readableRow(label, fmt.Sprintf("%s · %s · %d %s · %s · %d excluded · %d unsupported", shortID(snapshot.ID), sourceName(snapshot.Source, snapshot.Commit), len(snapshot.Files), plural(len(snapshot.Files), "path"), snapshot.Completeness, len(snapshot.Excluded), len(snapshot.Unsupported)))
+}
+
+// pairCaptureHistory shows the capture events that produced this exact pair
+// once, rather than repeating the shared event under both snapshots.
+func pairCaptureHistory(history snapshotCaptureHistory, base evidence.Digest) snapshotCaptureHistory {
+	pair := history
+	pair.Records = nil
+	for _, record := range history.Records {
+		if record.Base == base {
+			pair.Records = append(pair.Records, record)
+		}
+	}
+	if len(pair.Records) == 0 {
+		return history
+	}
+	return pair
 }
 
 func appendSnapshotCaptureHistory(state *invocation, lines []readableLine, history snapshotCaptureHistory) []readableLine {
@@ -1167,9 +1215,21 @@ func planInspectionLines(state *invocation, view planInspection) []readableLine 
 	return addIDs(lines, view.ID)
 }
 
+// appendLimits prints each limit once per result, even when several records
+// (for example, both snapshots of a pair) carry the same limitation.
 func appendLimits(lines []readableLine, limits []string) []readableLine {
 	for _, limit := range limits {
-		lines = append(lines, readableRow("Limit", limit))
+		row := readableRow("Limit", limit)
+		duplicate := false
+		for _, line := range lines {
+			if line.text == row.text {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			lines = append(lines, row)
+		}
 	}
 	return lines
 }

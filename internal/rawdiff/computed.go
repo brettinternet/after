@@ -207,6 +207,9 @@ func readEntrySource(v *View, file *evidence.File) ([]byte, error) {
 	if file == nil {
 		return nil, nil
 	}
+	if v.s == nil {
+		return nil, ErrContext
+	}
 	return v.s.ReadBlob(file.Content)
 }
 

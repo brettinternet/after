@@ -106,7 +106,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 		Reader:                    reader,
 		DisableSliceFlagSeparator: true,
 		HideHelpCommand:           false,
-		Flags:                     globalFlags(),
+		Flags:                     append(globalFlags(), storedFlag()),
 		Action: func(ctx *ucli.Context) error {
 			if ctx.NArg() > 0 {
 				return invalidWithFix("unexpected arguments", "run after --help to list available commands")
@@ -122,7 +122,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 				return err
 			}
 			state.suggestionFlags = suggestionFlags(ctx)
-			return statusCommand(state, cfg.Project)
+			return statusCommand(state, cfg.Project, ctx.Bool("stored"))
 		},
 		OnUsageError:   usageError,
 		ExitErrHandler: func(*ucli.Context, error) {},

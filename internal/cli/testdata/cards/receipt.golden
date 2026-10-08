@@ -33,5 +33,5 @@ sha256:65a43906b3c3a3e140ce95037101b2d13deef1dce7b7787dd189bae326784ded
 sha256:36bea88d66d213f528cef2db58027a618128d373b66feff585b409dc26de4d39
 sha256:e8c3e4faa6b27058ee06d25eabe8643618863a992a216ed57d9f6a58021e01c4
 Next
-  after compare sha256:b1e86b2c3b9d4413880f5b142b393d2a864ddecf3020d32d2f9f7bade4b4382a --project <project>
+  after compare b1e86b2c --project <project>
     compare the stored run

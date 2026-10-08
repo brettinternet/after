@@ -14,6 +14,9 @@ import (
 type dockerSetup struct {
 	Problems    []string `json:"problems"`
 	Suggestions []string `json:"suggested_settings,omitempty"`
+	// Apply exports detected values for one shell only when each missing
+	// setting has exactly one detected candidate. Copying it runs nothing.
+	Apply string `json:"apply_command,omitempty"`
 }
 
 // dockerSetupStatus uses configuration and filesystem metadata only. It never
@@ -39,14 +42,17 @@ func dockerSetupStatus(cfg config.Config) dockerSetup {
 	if len(status.Problems) == 0 {
 		return status
 	}
-	binarySuggestion := ""
+	var exports []string
+	ambiguous := false
 	if cfg.DockerBinary == "" || !binaryValid {
-		binarySuggestion = detectedDockerBinary()
+		binarySuggestion := detectedDockerBinary()
 		comment := ""
 		if binarySuggestion == "" {
 			binarySuggestion = "/absolute/path/to/docker"
+			ambiguous = true
 		} else {
 			comment = "  # found on PATH; not executed"
+			exports = append(exports, "AFTER_DOCKER_BINARY="+shellQuote(binarySuggestion))
 		}
 		status.Suggestions = append(status.Suggestions, "docker_binary: "+strconv.Quote(binarySuggestion)+comment)
 	}
@@ -59,6 +65,14 @@ func dockerSetupStatus(cfg config.Config) dockerSetup {
 		} else {
 			status.Suggestions = append(status.Suggestions, `docker_host: "unix:///absolute/path/to/local/docker.sock"`)
 		}
+		if len(sockets) == 1 {
+			exports = append(exports, "AFTER_DOCKER_HOST="+shellQuote("unix://"+sockets[0]))
+		} else {
+			ambiguous = true
+		}
+	}
+	if !ambiguous && len(exports) > 0 {
+		status.Apply = "export " + strings.Join(exports, " ")
 	}
 	return status
 }
@@ -147,7 +161,7 @@ func dockerSetupReadableLines(state *invocation, status dockerSetup) []readableL
 		lines = append(lines, textLine("  "+problem, terminal.Attention))
 	}
 	if len(status.Suggestions) > 0 {
-		lines = append(lines, textLine("  Suggested config (not selected):", terminal.Muted))
+		lines = append(lines, textLine("  Suggested settings for the AFTER config file (not selected):", terminal.Muted))
 		for _, suggestion := range status.Suggestions {
 			line := "    " + suggestion
 			if state.stdoutTTY {

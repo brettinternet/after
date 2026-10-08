@@ -1,10 +1,12 @@
-Summarize stored capture and review state without capture or execution.
+Summarize the newest stored capture and its review state, and say whether the
+checkout still matches it. Nothing is captured, stored, or executed.
 
 Usage
   after status
+  after status --stored
 
 Options
-  No command-specific options.
+  --stored   skip the checkout check; show only stored state
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

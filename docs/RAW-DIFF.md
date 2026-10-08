@@ -135,18 +135,23 @@ fuzz/property, source and output bounds, real capture/load integration, a bounde
 
 ## CLI patch streaming
 
-`after diff` uses `rawdiff.Open` for a shared captured patch, then reads bounded
-64 KiB pages into `internal/terminal.WriteDiff`; it does not build an unbounded
-line index or output document. The renderer retains at most its bounded input and
+Bare `after diff` uses `capture.ReadLive`: capture's consistent, hardened read and
+private-Git patch generation, with nothing stored. `rawdiff.Unstored` derives its
+inventory from those unstored snapshots. `after diff --stored` and explicit pairs
+use `rawdiff.Open` for a shared captured patch and read it in bounded 64 KiB pages;
+the selected patch never exceeds the stored artifact bound. Either patch goes to
+`internal/terminal.WriteDiff`, which does not build an unbounded line index or
+output document. The renderer retains at most its bounded input and
 output buffers plus an incomplete UTF-8 suffix. It sanitizes control/format
 characters and invalid UTF-8, keeps tabs in pipes, and applies only fixed theme SGR
 on a terminal. Both display and raw output stream every line within the existing
 artifact byte bounds; `--raw` streams exact bytes and is refused when stdout is a
 terminal. The 100,250-line streaming test verifies the complete output digest and
-keeps full-command allocations below the terminal's 64 MiB preparation budget. `--stat` prints the capture summary instead of patch
-bytes.
+keeps full-command allocations below the terminal's 64 MiB preparation budget. `--stat` prints per-file changed-line counts parsed
+from the selected patch's sections, like `git diff --stat`.
 
-Pair diagnostics go to stderr: full base/candidate IDs, `captured patch` or
+Diagnostics go to stderr: the current change's sources or the short base/candidate
+IDs, `current checkout; not stored`, `captured patch` or
 `computed from captured sources — not Git's patch`, every unknown/excluded/
 unsupported/limited inventory path, and all limits. For a pair without a shared
 patch, `after diff` uses `View.Compute` and reads only stored source blobs; no Git

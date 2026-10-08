@@ -22,11 +22,25 @@ go test -json ./... | ./bin/after import --project "/work/payment"
 `after` and `after status` show a read-only summary of the newest stored capture,
 its pair, any stored run/comparison, applicable pin heads, and reports bound to the
 candidate. They do not capture, import, run, compare, or create `.after/`; a
-checkout with no capture suggests `after capture`. Outside Git, bare `after` prints
+checkout with no capture suggests `after review`, then `after capture`. Outside Git, bare `after` prints
 short help, while `after status` reports the checkout requirement. The JSON form
 `after status --json` returns these same facts with full IDs. A saved review on a
 different pair is named in a `Saved review` row; its resume (`after review`) and
 start-over (`after review --new`) suggestions take precedence over pin/run actions.
+
+The summary is labeled `Stored capture`, and status and bare `after inspect` say
+whether the checkout still matches it. They reread the checkout with the capture's
+consistent, hardened Git reads and compare content hashes (never timestamps) of
+HEAD, the index, tracked files, the recorded untracked selection and the excluded
+untracked inventory. Nothing is stored. The `Checkout` row and the JSON `freshness`
+object report `matches`, `changed`, `unknown` (an incomplete capture or an
+unreadable checkout, with a `reason`), or `not_checked`. Merge-base captures are
+`not_checked` with reason `immutable_comparison`, because they compare commits, not
+checkout state. When the checkout changed, Next leads with `after diff` and a review
+of the current change (`after review --new` when a review is saved). If the
+checkout cannot be read, the labeled stored summary is still printed but the
+command exits 1. `--stored` skips the check (`not_checked`, reason
+`stored_requested`).
 
 `after log [-n N]` lists the newest 20 stored capture events, run receipts,
 imported reports, and pin revision events; `-n` accepts 1–10000. Rows are newest
@@ -36,13 +50,22 @@ bounds fail visibly rather than returning a falsely complete history.
 
 ## Diff
 
-`after diff` streams the newest capture's patch; `after diff BASE CANDIDATE` accepts
-any two stored snapshot IDs or unique prefixes. A shared captured patch is used
-when available; otherwise the bounded pure-Go computed diff uses only captured
-source blobs. A computed diff is a display fallback, not Git's captured patch.
+`after diff` prints the checkout's current change, HEAD versus the working tree,
+like `git diff HEAD`. It reads the checkout with the same consistent, hardened
+Git reads and capture flags as `after capture` (`--staged`, `--base REF
+[--target REF]`, repeated `--include-untracked PATH`), but stores nothing and never
+creates `.after/`. It does not inherit a prior capture's or saved review's flags.
+If the checkout cannot be read it exits 1 with an empty stdout and suggests
+`after diff --stored`; it never falls back to a stored patch.
 
-Stdout contains only patch lines. Stderr names the full snapshot pair and patch
-origin, lists every unknown, excluded, unsupported, or otherwise limited inventory
+`after diff --stored` streams the newest stored capture's patch; `after diff BASE
+CANDIDATE` accepts any two stored snapshot IDs or unique prefixes. Capture flags
+cannot be combined with either. A shared captured patch is used when available;
+otherwise the bounded pure-Go computed diff uses only captured source blobs. A
+computed diff is a display fallback, not Git's captured patch.
+
+Stdout contains only patch lines. Stderr names what was compared (the current
+change's sources, or the short stored snapshot pair) and the patch origin, lists every unknown, excluded, unsupported, or otherwise limited inventory
 path, and reports capture/computation limits. Untrusted patch bytes pass through
 `internal/terminal`: controls, format characters and invalid UTF-8 are made visible;
 tabs remain tabs in a pipe and expand on a terminal. Terminal output uses the Diff
@@ -51,34 +74,39 @@ When sanitizing changes a byte, stderr warns that exact bytes are available with
 `--raw`. Both safe and raw output stream the entire selected patch without a
 line-count cutoff; storage and computed-diff byte bounds still apply.
 
-`after diff --raw [BASE CANDIDATE]` writes the selected patch bytes exactly, with no
+`after diff --raw` writes the selected patch bytes exactly, with no
 sanitizing, color, or summary on stdout. It is refused with exit 2 when stdout is a
-terminal; redirect to a file or pipe. For an ordinary captured pair these bytes are
-the stored patch and `git apply` can reproduce the captured candidate. A computed
-pair's raw bytes are exactly its generated computed diff, which is not claimed to
-be the captured Git patch. `--raw` and `--stat` cannot be combined. `--stat`
-prints the same readable capture summary rows as `after capture`, while stderr
-still reports pair, origin, uncovered inventory and limits. There is no pager.
+terminal; redirect to a file or pipe. For the current change or an ordinary
+captured pair these bytes are the generated patch and `git apply` can reproduce
+the candidate. A computed pair's raw bytes are exactly its generated computed
+diff, which is not claimed to be the captured Git patch. `--raw` and `--stat`
+cannot be combined. `--stat` prints per-file changed-line counts and a total, like
+`git diff --stat`; binary files show `Bin`. Stderr still reports what was compared,
+the origin, uncovered inventory and limits. There is no pager.
 
 ```sh
 after diff > change.patch
 after diff --raw > exact.patch
 git apply --check exact.patch
+after diff --stored --stat
 after diff BASE CANDIDATE --stat
 ```
 
-Bare `after inspect` summarizes the newest capture record's pair and says which
-capture it resolved. Bare `after compare` compares the newest stored run receipt
+Bare `after inspect` summarizes the newest capture record's pair, says which
+capture it resolved, and reports checkout freshness like status (`--stored` skips
+the check). Bare `after compare` compares the newest stored run receipt
 for that pair; comparison reads stored observations and may persist a comparison,
 but never captures or executes project code. Bare `after export` always emits JSON
 for the newest stored comparison associated with that capture pair. These results
 include a `using` object with the full resolved capture, snapshot, receipt, and/or
 comparison IDs. If a required record is missing, the diagnostic names the missing
-record and the command that creates it.
+record and the command that creates it. A missing run suggests bare `after run`
+for the newest capture.
 
 Bare `after pin` lists computed pin heads, including forks, without choosing one.
 Its Next block offers `after pin RECEIPT` when the newest capture's newest run
-has a suggested observation not yet pinned.
+has a suggested observation not yet pinned. Otherwise it suggests `after review`,
+where pins are created from run results.
 `after pin --expectation TEXT` may omit the receipt to use the newest run of the
 newest capture pair; this resolves a receipt, never a pin revision. Every decision
 still requires an explicit pin revision ID. Pin history corruption or the 512-head /
@@ -88,8 +116,10 @@ Every readable result ends with a `Next` block containing at most three availabl
 syntax-ready commands. `after run` without arguments prepares the newest capture;
 when status identifies a rerun as the next action, its suggestion is the bare
 `after run` command. Explicit `--project` and `--config` values are retained in
-suggestions and shell-quoted when needed. A safe suggestion can be run as written;
-it does not authorize execution.
+suggestions and shell-quoted when needed. Readable suggestions and diagnostics
+shorten full IDs to the shortest unique prefix of at least eight hex characters
+(never `--approve` digests); JSON keeps full IDs. A safe suggestion can be run as
+written; it does not authorize execution.
 
 ## Grammar, help and diagnostics
 
@@ -151,7 +181,7 @@ project code. The shell adapters pass words as arguments rather than evaluating
 record descriptions; control characters and line breaks in descriptions are
 sanitized before they cross the shell completion interface.
 
-Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import accepts `FILE`, `-`, or omitted input when stdin is piped; omitted terminal input exits 2 without reading and shows the file and pipe forms. `--producer` is optional: when omitted, no producer claim is stored. A supplied producer and `--captured-at RFC3339` are caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using the `after capture` policy, writes a capture event, and binds the report to its candidate snapshot. Untracked files stay excluded; readable output warns that tests may have used excluded files. A binding is a caller claim, not proof the report's tests ran on that capture; if the default capture fails, import reports the capture reason and suggests `--snapshot ID`. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
+Flags may appear before or after positional arguments. Capture defaults to HEAD versus the working tree; `--staged` selects HEAD versus the index. `--base REF` selects a merge-base capture, and `--target REF` optionally chooses its target (default `HEAD`). `--base` is a Git ref on `capture`; snapshot pairs everywhere else are positional `BASE CANDIDATE` IDs. `--include-untracked` accepts repeated exact paths only. Capture and import create private `.after/` storage; inspection/export open it read-only. Import accepts `FILE`, `-`, or omitted input when stdin is piped; omitted terminal input exits 2 without reading and shows the file and pipe forms. Empty input (for example a `go test` pipe that produced nothing) exits 2, takes no capture, stores nothing, and shows the `go test -json` pipe form. `--producer` is optional: when omitted, no producer claim is stored. A supplied producer and `--captured-at RFC3339` are caller claims, not authenticated provenance. Without `--snapshot`, import captures the working tree using the `after capture` policy, writes a capture event, and binds the report to its candidate snapshot. Untracked files stay excluded; readable output warns that tests may have used excluded files. A binding is a caller claim, not proof the report's tests ran on that capture; if the default capture fails, import reports the capture reason and suggests `--snapshot ID`. The ordinary diff and all excluded/unsupported inventory entries remain available without imported or observed evidence. `inspect BASE_ID CANDIDATE_ID` returns bounded inventory pages and a base64 raw-patch page; `--diff-offset`, `--diff-size`, and `--inventory-offset`/`--inventory-limit` page the data. Imported report cards use `--card-offset`/`--card-limit`.
 
 Each successful capture also writes an immutable capture event with its time, mode,
 snapshot IDs and selected untracked paths. Recapturing unchanged content leaves
@@ -242,7 +272,7 @@ reuse rules, broader-intent limits, historical revisions and rerun authorization
 
 ## Execution authorization
 
-Bare `after run` prepares the payment-specific frozen plan for the newest stored capture; an explicit `BASE CANDIDATE` pair still works. Preparation does not execute project code. The readable preview names the resolved capture, displays consent rows decoded from the exact plan bytes and its byte size, stores the immutable plan in `.after/` with mode 0600, and prints its full authorization digest and exact command. Pass `--json` when a script must parse the digest or resolved IDs.
+Bare `after run` prepares the payment-specific frozen plan for the newest stored capture; an explicit `BASE CANDIDATE` pair still works. Preparation does not execute project code. The readable preview names the resolved capture, displays consent rows decoded from the exact plan bytes and its byte size, stores the immutable plan in `.after/` with mode 0600, and prints its full authorization digest and exact command. Pass `--json` when a script must parse the digest or resolved IDs. A capture the payment runner cannot use exits 2 before storing any plan and names the reason with a fix: no `go.mod` and `app/main.go` (an unsupported project), an incomplete capture, the reserved `after-launch.go` path, or the 255-file / 8 MiB sandbox budget.
 
 ```sh
 ./bin/after run --project "/work/payment"
@@ -269,7 +299,7 @@ No Docker context, image pull, host execution, build, or project command is used
 
 ## Configuration
 
-AFTER reads configuration only when a command needs it. The explicit `--config FILE` or `AFTER_CONFIG` path must exist; otherwise the optional discovered file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Relative config/project paths are resolved from the invocation working directory. The discovered file may be absent. Configuration loading parses data only; it never runs repository code. `after config` reports effective values and each winning source (`flag`, `env`, `file`, or `default`), hides project/config paths and Docker endpoint values, and lists Docker setup problems with their configuration fixes.
+AFTER reads configuration only when a command needs it. The explicit `--config FILE` or `AFTER_CONFIG` path must exist; otherwise the optional discovered file is `${XDG_CONFIG_HOME}/after/config.yaml`, falling back to `~/.config/after/config.yaml`. Relative config/project paths are resolved from the invocation working directory. The discovered file may be absent. Configuration loading parses data only; it never runs repository code. `after config` reports effective values and each winning source (`flag`, `env`, `file`, or `default`), hides project/config paths and Docker endpoint values, and lists Docker setup problems with their configuration fixes. When it finds a Docker CLI on `PATH` and exactly one existing local socket, without running or contacting either, it shows them as labeled YAML suggestions and offers a shell-quoted `export AFTER_DOCKER_BINARY=… AFTER_DOCKER_HOST=…` line in Next that applies them to the current shell.
 
 Precedence is explicit flags > `AFTER_*` environment > YAML > defaults. Empty/whitespace strings and YAML `null` are unset and allow a lower layer to win. Explicit booleans and integers are values: `false` is not a default, and zero is not silently discarded. `diff_bytes: 0` is supported and suppresses patch bytes while retaining the change inventory; `repetitions: 0` is invalid.
 

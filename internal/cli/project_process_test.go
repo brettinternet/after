@@ -128,8 +128,9 @@ func TestProjectCommandProcessModes(t *testing.T) {
 		{"pin-list", []string{"pin"}, ExitOK},
 		{"pin-default-create", []string{"pin", "--expectation", "process default expectation", "--scope", "human_intent"}, ExitOK},
 		{"capture", captureArgs, ExitOK},
-		{"diff", []string{"diff"}, ExitOK},
-		{"diff-stat", []string{"diff", "--stat"}, ExitOK},
+		{"diff", []string{"diff", "--base", baseRef, "--target", candidateRef}, ExitOK},
+		{"diff-stored", []string{"diff", "--stored"}, ExitOK},
+		{"diff-stat", []string{"diff", "--stored", "--stat"}, ExitOK},
 		{"import", []string{"import", report, "--producer", "fixture", "--snapshot", candidateID}, ExitOK},
 		{"inspect-pair", []string{"inspect", baseID, candidateID}, ExitOK},
 		{"inspect-snapshot", []string{"inspect", candidateID}, ExitOK},
@@ -195,15 +196,16 @@ func TestProjectCommandProcessModes(t *testing.T) {
 							t.Fatalf("unexpected terminal control in %s output: %q", mode, transcript)
 						}
 					}
-					if command.name == "capture" || command.name == "bare-status" || command.name == "status" || command.name == "diff" || command.name == "diff-stat" {
+					if command.name == "capture" || command.name == "bare-status" || command.name == "status" || strings.HasPrefix(command.name, "diff") && command.name != "diff-stat" {
 						styled := strings.Contains(transcript, "\x1b[1m")
 						wantStyle := mode == "pty" && !noColor
 						if styled != wantStyle {
 							t.Fatalf("terminal styling mismatch: command=%s mode=%s NO_COLOR=%t output=%q", command.name, mode, noColor, transcript)
 						}
 					}
-					if command.name == "diff" {
-						if mode == "pipe" && (!strings.HasPrefix(stdout, "diff --git ") || !strings.Contains(stderr, "captured patch") || !strings.Contains(stderr, "uncovered inventory")) {
+					if command.name == "diff" || command.name == "diff-stored" {
+						origin := map[string]string{"diff": "not stored", "diff-stored": "captured patch"}[command.name]
+						if mode == "pipe" && (!strings.HasPrefix(stdout, "diff --git ") || !strings.Contains(stderr, origin)) {
 							t.Fatalf("pipe diff did not separate patch and diagnostics: stdout=%q stderr=%q", stdout, stderr)
 						}
 						t.Logf("80-column diff terminal verification: mode=%s NO_COLOR=%t excerpt=%q", mode, noColor, trimExcerpt(transcript))

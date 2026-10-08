@@ -7,7 +7,7 @@ Consent summary
   Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1
 Docker setup
   Docker execution is not configured; set docker_binary and docker_host as a pa…
-  Suggested config (not selected):
+  Suggested settings for the AFTER config file (not selected):
     docker_binary: "/absolute/path/to/docker"
     docker_host: "unix:///absolute/path/to/local/docker.sock"
 Authorization digest for this exact plan:

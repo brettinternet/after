@@ -37,6 +37,15 @@ const rules = ComparisonRules
 
 var scope = []string{"Sequential synthetic payment ABI only; two same-key requests at 12h and 30s; finite observation window, not production billing or universal behavior.", "Candidate suites are not run; candidate test/driver/mask files remain source inventory, not the frozen oracle.", "Docker daemon, CLI, image and kernel trusted; app and observer share only offline loopback networking; denial of service fails the run."}
 
+// Preparation errors that name an operator-correctable property of the
+// selected snapshots. Other preparation failures are storage problems.
+var (
+	ErrUnsupportedProject = errors.New("unsupported payment driver: go.mod and app/main.go required")
+	ErrIncompleteSnapshot = errors.New("incomplete snapshot cannot execute")
+	ErrSnapshotBudget     = errors.New("snapshot exceeds the sandbox budget of 255 files and 8 MiB")
+	ErrReservedPath       = errors.New("reserved launcher path in snapshot")
+)
+
 type Plan struct {
 	request      evidence.Digest
 	pair         evidence.SnapshotPair
@@ -87,6 +96,16 @@ func prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 	if request != "" && !validRequestID(request) {
 		return nil, errors.New("invalid saved request identity")
 	}
+	// Reject unsupported snapshots before writing scenario records.
+	for _, id := range []evidence.Digest{pair.Base, pair.Candidate} {
+		snap, err := store.Get[evidence.Snapshot](s, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkSnapshot(snap); err != nil {
+			return nil, err
+		}
+	}
 	input, err := s.PutArtifact([]byte(inputs), "frozen-input", 4096)
 	if err != nil {
 		return nil, err
@@ -112,30 +131,24 @@ func prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 		if e != nil {
 			return nil, e
 		}
-		if snap.Completeness != evidence.Complete {
-			return nil, errors.New("incomplete snapshot cannot execute")
-		}
-		if len(snap.Files) > 255 {
-			return nil, errors.New("snapshot exceeds sandbox file budget")
+		if err := checkSnapshot(snap); err != nil {
+			return nil, err
 		}
 		files := map[string][]byte{}
 		total := len(launcher)
 		for _, f := range snap.Files {
-			if f.Path == "after-launch.go" {
-				return nil, errors.New("reserved launcher path in snapshot")
-			}
 			data, e := s.ReadBlob(f.Content)
 			if e != nil {
 				return nil, e
 			}
 			total += len(data)
 			if total > 8<<20 {
-				return nil, errors.New("snapshot exceeds sandbox input budget")
+				return nil, ErrSnapshotBudget
 			}
 			files[f.Path] = data
 		}
 		if len(files["go.mod"]) == 0 || len(files["app/main.go"]) == 0 {
-			return nil, errors.New("unsupported payment driver: go.mod and app/main.go required")
+			return nil, ErrUnsupportedProject
 		}
 		files["after-launch.go"] = launcher
 		argv := []string{"/usr/local/go/bin/go", "run", "/input/after-launch.go"}
@@ -214,4 +227,24 @@ func PrepareFromPreview(s *store.Store, preview []byte) (*Plan, error) {
 		return nil, errors.New("saved execution plan no longer matches stored inputs")
 	}
 	return p, nil
+}
+
+// checkSnapshot reports the project-shape problem an operator can act on,
+// most fundamental first: an unrelated project is not a budget problem.
+func checkSnapshot(snap evidence.Snapshot) error {
+	paths := map[string]bool{}
+	for _, f := range snap.Files {
+		paths[f.Path] = true
+	}
+	switch {
+	case !paths["go.mod"] || !paths["app/main.go"]:
+		return ErrUnsupportedProject
+	case paths["after-launch.go"]:
+		return ErrReservedPath
+	case snap.Completeness != evidence.Complete:
+		return ErrIncompleteSnapshot
+	case len(snap.Files) > 255:
+		return ErrSnapshotBudget
+	}
+	return nil
 }

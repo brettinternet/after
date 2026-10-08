@@ -92,7 +92,37 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 	if err := candidate.Validate(); err != nil {
 		return nil, err
 	}
-	v := &View{s: s, base: files(base), candidate: files(candidate), indexComplete: true}
+	v := inventory(base, candidate)
+	v.s = s
+	if !CapturedPair(base, candidate) {
+		v.indexComplete = false
+		v.limits = append(v.limits, "snapshots are not a captured base/candidate pair; complete stored inventory and both sources remain available, but no patch is claimed for this pair")
+		return v, nil
+	}
+	var err error
+	v.raw, err = s.ReadBlob(candidate.Diff)
+	if err != nil {
+		v.indexComplete = false
+		v.limits = append(v.limits, "captured diff unavailable; inventory retained")
+		return v, nil
+	}
+	v.available = true
+	v.index(candidate.Diff)
+	return v, nil
+}
+
+// Unstored indexes a patch generated from unstored manifests, such as a live
+// checkout read whose snapshots have no record IDs. Without a store, source
+// context is unavailable; inventory, files and hunks match Open.
+func Unstored(base, candidate evidence.Snapshot, raw []byte) *View {
+	v := inventory(base, candidate)
+	v.raw, v.available = raw, true
+	v.index(candidate.Diff)
+	return v
+}
+
+func inventory(base, candidate evidence.Snapshot) *View {
+	v := &View{base: files(base), candidate: files(candidate), indexComplete: true}
 	v.limits = append(v.limits, base.Limits...)
 	v.limits = append(v.limits, candidate.Limits...)
 	if base.Completeness != evidence.Complete || candidate.Completeness != evidence.Complete {
@@ -145,21 +175,7 @@ func Open(s *store.Store, base, candidate evidence.Snapshot) (*View, error) {
 		v.entries = append(v.entries, e)
 	}
 	sort.Slice(v.entries, func(i, j int) bool { return v.entries[i].Path < v.entries[j].Path })
-	if !CapturedPair(base, candidate) {
-		v.indexComplete = false
-		v.limits = append(v.limits, "snapshots are not a captured base/candidate pair; complete stored inventory and both sources remain available, but no patch is claimed for this pair")
-		return v, nil
-	}
-	var err error
-	v.raw, err = s.ReadBlob(candidate.Diff)
-	if err != nil {
-		v.indexComplete = false
-		v.limits = append(v.limits, "captured diff unavailable; inventory retained")
-		return v, nil
-	}
-	v.available = true
-	v.index(candidate.Diff)
-	return v, nil
+	return v
 }
 
 // CapturedPair reports whether the shared stored Diff is this pair's patch. A
@@ -228,7 +244,7 @@ func (v *View) Context(side Side, path string, offset, size int) (Page, error) {
 	default:
 		return Page{}, ErrContext
 	}
-	if !ok {
+	if !ok || v.s == nil {
 		return Page{}, ErrContext
 	}
 	data, err := v.s.ReadBlob(f.Content)

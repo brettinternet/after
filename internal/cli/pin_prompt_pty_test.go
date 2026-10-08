@@ -102,7 +102,7 @@ func TestPinExpectationPTY(t *testing.T) {
 					run = runCLIPTY
 				}
 				code, out, stderr, err := run(project, home, noColor, []string{"pin"})
-				if err != nil || code != 0 || stderr != "" || !strings.Contains(out, "after pin "+string(receipt.ID)) {
+				if err != nil || code != 0 || stderr != "" || !strings.Contains(out, "after pin "+shortID(receipt.ID)) {
 					t.Fatalf("bare pin: %d %s %s %v", code, out, stderr, err)
 				}
 				t.Logf("bare pin %s NO_COLOR=%t: %s", mode, noColor, out)

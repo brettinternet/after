@@ -1,14 +1,23 @@
-Print the newest captured patch or compare any two stored snapshots.
+Print the checkout's current change (HEAD versus the working tree) without
+storing it, the newest stored capture, or any two stored snapshots.
 
 Usage
   after diff
+  after diff --staged
+  after diff --base main [--target HEAD]
+  after diff --stored
   after diff BASE CANDIDATE
-  after diff --stat [BASE CANDIDATE]
-  after diff --raw [BASE CANDIDATE]
+  after diff --stat
+  after diff --raw > change.patch
 
 Options
-  --stat   print capture summary rows instead of the patch
-  --raw    write exact patch bytes; stdout must not be a terminal
+  --staged                   read HEAD versus the index
+  --base REF                 read the merge base with a Git ref
+  --target REF               other side of a --base diff (default: HEAD)
+  --include-untracked PATH   include one non-ignored untracked file (repeatable)
+  --stored                   print the newest stored capture's patch
+  --stat                     print per-file changed line counts instead
+  --raw                      write exact patch bytes to a file or pipe
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

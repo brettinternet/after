@@ -6,5 +6,5 @@ Card · sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 IDs
 sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 Next
-  after inspect sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --project <project>
+  after inspect ffffffff --project <project>
     inspect the reported test results

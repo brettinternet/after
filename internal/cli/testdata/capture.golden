@@ -1,8 +1,9 @@
 Captured candidate bbbbbbbb (working tree) against base aaaaaaaa (commit)
   Base         aaaaaaaa · 3 paths · complete · 0 excluded · 0 unsupported
   Candidate    bbbbbbbb · 4 paths · complete · 1 excluded · 0 unsupported
+  Limit        two matching reads; not an atomic filesystem snapshot
 Next
   after review
-    open or resume the saved review
-  after diff
+    open a review of this change
+  after diff --stored
     print this captured patch
