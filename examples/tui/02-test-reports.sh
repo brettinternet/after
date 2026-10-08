@@ -38,28 +38,35 @@ commit "free shipping from \$50"
 section "Candidate: threshold moves to \$75; its test is rewritten to match"
 perl -pi -e 's/5000/7500/' shipping.go
 perl -pi -e 's/\{4999, 599\}, \{5000, 0\}/{7499, 599}, {7500, 0}/' shipping_test.go
-capture_ids "$(after 0 capture)"
+capture_ids "$(after 0 capture --json)"
 inventory "$BASE" "$CANDIDATE"
 
 section "Reports you produce (AFTER only imports them)"
-go test -json ./... >"$WORK/candidate.jsonl" || true
-report=$(after 0 import "$WORK/candidate.jsonl" --snapshot "$CANDIDATE" --producer "$(go version); candidate suite")
+note "Piped/redirected import needs no filename; without --snapshot it captures and binds the working tree."
+go test -json ./... >"$WORK/candidate.jsonl"
+report=$(after 0 import --json <"$WORK/candidate.jsonl" --producer "$(go version); candidate suite")
 cards "$report"
 cp shipping_test.go "$WORK/candidate_test.go.txt"
 git show HEAD:shipping_test.go >shipping_test.go
-go test -json ./... >"$WORK/frozen.jsonl" || true
+if go test -json ./... >"$WORK/frozen.jsonl"; then
+	echo "Expected the frozen oracle to fail" >&2; exit 1
+else
+	test "$?" -eq 1
+fi
 cp "$WORK/candidate_test.go.txt" shipping_test.go
-frozen=$(after 0 import "$WORK/frozen.jsonl" --snapshot "$CANDIDATE" --producer "$(go version); base tests on candidate code")
+frozen=$(after 0 import --json "$WORK/frozen.jsonl" --snapshot "$CANDIDATE" --producer "$(go version); base tests on candidate code")
 cards "$frozen"
 
 cat >&2 <<EOF
 
 Try in the TUI:
-  1/2/3      Overview, Changes inventory, and captured Diff; Tab/Shift+Tab cycle views
+  1/2/3/4    Overview, Changes, Diff, Activity; Tab/Shift+Tab cycle views
+  /, n/N     search the current list or document; next/previous match
   j/k Enter  inspect a row: producer, output, and inputs/effects "unavailable" (reported, not observed)
   2          Changes shows shipping_test.go as a potential oracle
   c          capture again after editing the checkout in another terminal, e.g.
                cd $PROJECT && echo '// free over \$75' >> shipping.go
-  u          use that capture as the reviewed candidate; the original base stays selected
+  u          choose original base or last inspected with Left/Right; confirm with a reason
+  4          inspect capture/selection activity and full references
 EOF
 open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.id <<<"$report")" "$(jq -r .data.id <<<"$frozen")"

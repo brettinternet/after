@@ -37,21 +37,26 @@ commit "member discount"
 section "Candidate: discount becomes 15%, and the test is updated to agree"
 perl -pi -e 's/90 \/ 100/85 \/ 100/' price.go
 perl -pi -e 's/900/850/g' price_test.go
-capture_ids "$(after 0 capture)"
+capture_ids "$(after 0 capture --json)"
 inventory "$BASE" "$CANDIDATE"
 
 section "You run the candidate's own tests (AFTER never runs them)"
-go test -json ./... >"$WORK/candidate-tests.jsonl" || true
-report=$(after 0 import "$WORK/candidate-tests.jsonl" --snapshot "$CANDIDATE" \
+note "Import reads redirected stdin and captures a binding by default; --producer is an optional caller claim."
+go test -json ./... >"$WORK/candidate-tests.jsonl"
+report=$(after 0 import --json <"$WORK/candidate-tests.jsonl" \
 	--producer "$(go version); candidate tests on candidate code")
 cards "$report"
 
 section "Freeze the oracle: base tests against candidate code"
 cp price_test.go "$WORK/candidate_test.go.txt"
 git show HEAD:price_test.go >price_test.go
-go test -json ./... >"$WORK/frozen-tests.jsonl" || true
+if go test -json ./... >"$WORK/frozen-tests.jsonl"; then
+	echo "Expected the frozen oracle to fail" >&2; exit 1
+else
+	test "$?" -eq 1
+fi
 cp "$WORK/candidate_test.go.txt" price_test.go
-frozen=$(after 0 import "$WORK/frozen-tests.jsonl" --snapshot "$CANDIDATE" \
+frozen=$(after 0 import --json "$WORK/frozen-tests.jsonl" --snapshot "$CANDIDATE" \
 	--producer "$(go version); base tests on candidate code")
 cards "$frozen"
 

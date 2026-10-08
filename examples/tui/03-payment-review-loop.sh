@@ -7,7 +7,7 @@ require_docker
 
 section "Observe the current service (base and candidate are both 24h retention)"
 payment_project tui-payment
-capture_ids "$(after 0 capture)"
+capture_ids "$(after 0 capture --json)"
 result=$(run_pair "$BASE" "$CANDIDATE" 0)
 provider_counts "$result"
 
@@ -24,19 +24,26 @@ chmod +x "$regress"
 cat >&2 <<EOF
 
 Try in the TUI:
-  1. Enter on a case row: exact responses and provider calls. Esc.
+  1. Expand an Overview group with Enter if needed, then inspect a case row:
+     exact responses and provider calls. Esc. Use / to search; n/N cycles matches.
   2. On the 43200s (12h) row, p: review the exact receipt/pair, then Enter pins its
      measured count (1). Ctrl-U clears the prefilled reason; Esc cancels. Press p again
      to see the duplicate-basis refusal and existing pin ID.
   3. In another terminal:  $regress
-  4. c captures the edit; u confirms the new candidate ID, changed-path count and
-     original base. Esc cancels; Enter selects it. End selects the pin: reopened | stale
-     | missing current evidence. Enter shows why.
-  5. r previews the exact offline rerun plan; n denies (nothing runs), y approves once.
+  4. c captures the edit; u shows the new candidate ID and changed-path count.
+     Left/Right chooses original base (use this here) or last inspected; Enter
+     confirms with the editable reason, Esc cancels. Find the pin under Needs
+     another look: reopened | stale | missing current evidence. Enter shows why.
+  5. r previews the offline rerun; Tab switches Summary/Exact plan.
+     n denies (nothing runs), y approves the retained plan once.
      Navigation stays live during the run; x cancels it.
   6. New rows appear: 43200s base=[1] candidate=[2] breaks the pinned expectation;
-     the 30s control is unchanged. Press a, review the pin/current-receipt IDs and
-     reason, then Enter records acceptance; Esc cancels. The row shows [ACCEPTED].
-  7. s shows snapshot/pin/result IDs for restarting later; q quits.
+     the 30s control is unchanged. Leave this regression unaccepted. To explore
+     acceptance deliberately, select the pin and press a: review its exact IDs and
+     reason, then Enter records the human decision; Esc cancels. Acceptance does
+     not change the observed counts or make a violating result satisfy the pin.
+  7. s or 4 opens Activity with full references; q quits (asks first during a run).
 EOF
+note "The explicit pair opens stored evidence without changing a saved review."
+note "Use Activity references to reopen a new pin revision, not just the original comparison."
 open_tui "$BASE" "$CANDIDATE" "$(jq -r .data.comparison.id <<<"$result")"

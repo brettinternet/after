@@ -3,7 +3,7 @@
 # in AFTER's offline sandbox and compare HTTP responses AND provider requests.
 #
 #   retention  24h -> 5min idempotency window: identical responses, duplicate charge (exit 4)
-#   refactor   86400 -> 24*60*60 rewrite: behavior equal on the frozen cases (exit 0)
+#   refactor   24*60*60 -> 86400 rewrite: behavior equal on the frozen cases (exit 0)
 #   no-dedup   idempotency disabled: even the 30s control double-charges (exit 4)
 #   fake-log   app prints a different request count: the observer ignores app logs (exit 0)
 #
@@ -22,7 +22,7 @@ require_docker
 section "Payment API: retries with the same Idempotency-Key must not charge twice"
 payment_project "payment-$variant"
 set_config "${change[@]}"
-capture_ids "$(after 0 capture)"
+capture_ids "$(after 0 capture --json)"
 patch "$BASE" "$CANDIDATE"
 
 section "Frozen experiment: POST /payments, then retry the same key after 12h and after 30s"
@@ -34,9 +34,9 @@ section "Observed provider requests (independent log, not app output)"
 provider_counts "$result"
 
 section "Deterministic comparison of the stored receipt (no execution)"
-comparison=$(after "$want" compare "$receipt")
+comparison=$(after "$want" compare --json "$receipt")
 note "outcome: $(jq -r .data.comparison.outcome <<<"$comparison")"
 witnesses "$comparison"
 
 note "Receipt: $receipt"
-note "Machine-readable bundle: after export $(jq -r .data.comparison.id <<<"$comparison") --project $PROJECT"
+note "Machine-readable bundle (JSON by default): after export $(jq -r .data.comparison.id <<<"$comparison") --project $PROJECT"

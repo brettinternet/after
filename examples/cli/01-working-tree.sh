@@ -20,19 +20,25 @@ perl -pi -e 's/600/1200/' limits/limits.go
 echo "load test notes" >notes.txt
 
 section "Capture (reads Git only; never builds or runs the project)"
-capture=$(after 0 capture)
+capture=$(after 0 capture --json)
 capture_ids "$capture"
 note "base:      $BASE"
 note "candidate: $CANDIDATE"
 
+section "Readable defaults resolve the newest capture (no IDs or jq needed)"
+after 0 status
+after 0 inspect
+after 0 log -n 3
+
 section "Inventory: every path stays visible, even untracked ones that were excluded"
 inventory "$BASE" "$CANDIDATE"
 
-section "Raw patch (captured bytes, not the live checkout)"
-patch "$BASE" "$CANDIDATE"
+section "Stream the captured patch (not the live checkout)"
+after 0 diff
+note "Use after diff --raw > exact.patch for exact bytes; --raw refuses terminal output."
 
 section "Opt in to an untracked file by exact path"
-capture=$(after 0 capture --include-untracked notes.txt)
+capture=$(after 0 capture --json --include-untracked notes.txt)
 capture_ids "$capture"
 inventory "$BASE" "$CANDIDATE"
 

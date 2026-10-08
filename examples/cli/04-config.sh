@@ -16,16 +16,16 @@ repetitions: 3
 run_seconds: 120
 diff_bytes: 0 # inventory only, no patch bytes (zero is a value, not "unset")
 EOF
-after 0 config | settings
+after 0 config --json | settings
 
 section "Environment overrides YAML; run options stay on the run command"
 note "AFTER_REPETITIONS=2 AFTER_INTERACTIVE=false"
-AFTER_REPETITIONS=2 AFTER_INTERACTIVE=false after 0 config | settings
+AFTER_REPETITIONS=2 AFTER_INTERACTIVE=false after 0 config --json | settings
 note "after run --help shows its command-scoped run options and configuration defaults"
 after 0 run --help | sed -n '/--repetitions/ p; /--run-seconds/ p; /--output-bytes/ p' >&2
 
 section "Invalid values fail fast with the setting and its source (exit 2)"
 note "AFTER_REPETITIONS=9"
-AFTER_REPETITIONS=9 "$AFTER_BIN" config 2>&1 >/dev/null | sed 's/^/   /' >&2 || true
+AFTER_REPETITIONS=9 after 2 config
 
 note "There is deliberately no setting that grants execution consent."

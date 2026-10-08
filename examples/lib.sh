@@ -37,11 +37,11 @@ workspace() {
 # commit MESSAGE: commit every tracked and new file.
 commit() { git add -A && git commit -qm "$1"; }
 
-# after WANT ARGS...: run AFTER, require exit status WANT, print stdout JSON.
+# after WANT ARGS...: run AFTER, require exit status WANT, print stdout.
+# Pass --json explicitly when consuming the result in a script.
 after() {
 	local want=$1 out code=0
 	shift
-	set -- "$@" --json
 	printf '$ after %s\n' "$*" | sed -E 's/(sha256:[0-9a-f]{8})[0-9a-f]{56}/\1…/g' >&2
 	out=$("$AFTER_BIN" "$@") || code=$?
 	if [[ $code != "$want" ]]; then
@@ -61,7 +61,7 @@ capture_ids() {
 
 # inventory BASE CANDIDATE: print one line per changed path.
 inventory() {
-	after 0 inspect "$1" "$2" | jq -r '.data.inventory[] |
+	after 0 inspect --json "$1" "$2" | jq -r '.data.inventory[] |
 		"   \(.change | .[0:9] | . + " " * (9 - length)) \(.path)" +
 		(if .potential_oracle then "  [potential oracle]" else "" end) +
 		(if .binary then "  [binary]" else "" end) +
@@ -69,8 +69,8 @@ inventory() {
 		(if .limits then "  (" + (.limits | join("; ")) + ")" else "" end)' >&2
 }
 
-# patch BASE CANDIDATE: print the captured raw diff.
-patch() { after 0 inspect "$1" "$2" | jq -r .data.diff.base64 | base64 --decode >&2; }
+# patch BASE CANDIDATE: stream the complete terminal-safe captured diff.
+patch() { after 0 diff "$1" "$2" >&2; }
 
 # cards IMPORT_JSON: print imported report cards with their evidence state.
 cards() {
@@ -120,16 +120,15 @@ require_docker() {
 # the terminal, then run exactly that plan. Prints the run JSON. WANT is 0 for
 # equal results or 4 for a finding.
 run_pair() {
-	local plan preview digest answer
-	plan=$WORK/plan-$(date +%s)-$RANDOM.json
-	preview=$(after 3 run "$1" "$2" --plan-out "$plan" --interactive=false)
+	local preview digest answer
+	preview=$(after 3 run --json "$1" "$2" --interactive=false)
 	digest=$(jq -r .data.authorization_digest <<<"$preview")
-	note "Preview only; nothing executed. Full plan: $plan"
-	jq -r '.data.plan | "   build: \(.build_argv | join(" "))\n   app:   \(.app_argv | join(" "))\n   repetitions: \(.repetitions), \(.limits.seconds)s and \(.limits.output_bytes) output bytes per container, no network"' <<<"$preview" >&2
+	note "Preview only; nothing executed. Exact plan stored privately in .after/."
+	after 0 inspect "$digest" >&2
 	read -r -p "   Type yes to run exactly $digest: " answer </dev/tty
 	[[ $answer == yes ]] || { note "Declined; nothing executed."; exit 3; }
 	note "Running 2 versions x 2 cases in the offline sandbox (1-2 minutes)..."
-	after "$3" run --plan-file "$plan" --approve "$digest"
+	after "$3" run --json --approve "$digest"
 }
 
 # witnesses COMPARISON_JSON: print paired witnesses and their exact changes.

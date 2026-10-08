@@ -21,17 +21,21 @@ printf '{"status":"healthy"}\n' >testdata/health.golden.json # the oracle moved 
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x01' >assets/logo.png
 chmod +x build.sh
 echo "STRIPE_KEY=sk_test_example" >.env.local # untracked: never captured
-capture_ids "$(after 0 capture)"
+capture_ids "$(after 0 capture --json)"
 inventory "$BASE" "$CANDIDATE"
 
 cat >&2 <<'EOF'
 
 Try in the TUI:
-  1/2/3      Overview, Changes inventory, and captured Diff; active tab is highlighted
+  1/2/3/4    Overview, Changes inventory, Diff, and Activity; active tab is highlighted
   Tab        next view; Shift+Tab previous view (inside a detail, move between sections)
   j/k Enter  inspect one entry; Changes includes deleted, added, binary, mode, and excluded paths
+  /, n/N     search the current list or document; next/previous match
+  ], [       next/previous file in Diff; }, { next/previous hunk
   b          toggle exact hex bytes; h/l pan long lines
   Esc        back to the previous view; no evidence was supplied
   ?          grouped contextual keys and unavailable reasons; q quits and restores the terminal
 EOF
-open_tui "$BASE" "$CANDIDATE"
+note "Plain after review starts/saves this review; run it again to resume."
+note "after review --new starts fresh without deleting old evidence or pins."
+open_tui
