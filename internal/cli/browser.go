@@ -33,7 +33,7 @@ func runBrowser(state *invocation, ctx *ucli.Context, cfg config.Config, selecti
 				return "", err
 			}
 			defer input.Close()
-			report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, Snapshot: selected.Pair.Candidate, ImportedAt: time.Now().UTC()})
+			report, err := gotestreport.ImportFormat(input, gotestreport.Metadata{Producer: producer, Snapshot: selected.Pair.Candidate, ImportedAt: time.Now().UTC()}, "auto")
 			if err != nil {
 				return "", err
 			}

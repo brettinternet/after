@@ -5,11 +5,47 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/store"
 )
+
+func TestJUnitDiscoveryAndSafeReportedCard(t *testing.T) {
+	s, selection := setup(t, false)
+	report, err := gotestreport.ImportJUnit(strings.NewReader("<testsuite name=\"suite\"><testcase name=\"hostile&#x202e;name\"><system-out>reported&#x9;output</system-out></testcase></testsuite>"), gotestreport.Metadata{Snapshot: selection.Pair.Candidate, Producer: "caller\x1b]52;c;clipboard\a", ImportedAt: viewTime})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := viewArtifact(t, s, report, gotestreport.ArtifactChannel(report.Dialect))
+	found, _, err := discoverEvidence(s, selection.Pair, nil)
+	if err != nil || len(found) != 1 || found[0] != artifact.Content {
+		t.Fatalf("discovery: %v %v", found, err)
+	}
+	selection.Evidence = found
+	d, err := Load(t.Context(), selection)
+	if err != nil || len(d.Entries) != 1 {
+		t.Fatalf("load: %+v %v", d, err)
+	}
+	entry := d.Entries[0]
+	if entry.State.Applicability != evidence.Unknown || badgeFor(entry).word != "REPORTED" {
+		t.Fatalf("promoted card: %+v", entry)
+	}
+	parts := reportCardParts(reportCardView{Dialect: report.Dialect, State: report.Cards[0].State})
+	if !strings.Contains(string(parts[2].Content), "JUnit XML") {
+		t.Fatal("wrong dialect label")
+	}
+	m := New(t.Context(), selection, Jobs{})
+	drain(m, m.Init())
+	step(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	step(m, key("enter"))
+	view := m.View()
+	if strings.Contains(view, "\u202e") || strings.Contains(view, "\x1b]52;") || !strings.Contains(view, "REPORTED") {
+		t.Fatalf("unsafe TUI: %q", view)
+	}
+}
 
 func TestDiscoveryKeepsForksPrioritizesReviewAndBoundsResults(t *testing.T) {
 	s, selection := setup(t, false)

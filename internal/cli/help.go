@@ -69,14 +69,16 @@ Options
   --include-untracked PATH   include one non-ignored untracked file (repeatable)
 ` + global
 	case "import":
-		body = `Import stock go test -json as reported evidence; AFTER does not run tests.
+		body = `Import Go test JSON or JUnit XML as reported evidence; AFTER does not run tests.
 
 Usage
   go test -json ./... | after import
   after import FILE [--producer TEXT] [--snapshot ID]
   after import - [--producer TEXT] [--snapshot ID]
+  after import report.xml --format junit
 
 Options
+  --format FORMAT   auto (default), go-test-json, or junit
   --producer TEXT   optional caller-supplied producer claim
   --captured-at RFC3339   optional caller-supplied capture time
   --snapshot ID     bind to a snapshot (not proof of test source)
@@ -341,7 +343,7 @@ func commandExample(name string) string {
 
 func missingArgument(name string, count int) string {
 	missing := map[string]string{
-		"import":  "a Go test JSON input",
+		"import":  "a Go test JSON or JUnit XML input",
 		"inspect": "a record ID or BASE CANDIDATE snapshot pair",
 		"compare": "a receipt ID",
 		"export":  "a record ID",

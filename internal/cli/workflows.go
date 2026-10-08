@@ -45,7 +45,7 @@ func isImportedReportArtifact(s *store.Store, content evidence.Digest) bool {
 		}
 		readBytes += entry.Size
 		artifact, err := s.ReadArtifactMetadata(entry.ID)
-		if err == nil && artifact.Content == content && artifact.Channel == "go-test-report-v1" {
+		if err == nil && artifact.Content == content && gotestreport.ReportChannel(artifact.Channel) {
 			return true
 		}
 	}
@@ -97,10 +97,11 @@ func commands(state *invocation) []*ucli.Command {
 			), OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return captureCommand(state, ctx) },
 		},
 		{
-			Name: "import", Usage: "import bounded stock go test -json as reported evidence",
+			Name: "import", Usage: "import bounded Go test JSON or JUnit XML as reported evidence",
 			Before:    outputBefore(state),
 			ArgsUsage: "[FILE|-]", Flags: append(globalFlags(),
 				&ucli.StringFlag{Name: "producer", Usage: "optional caller-supplied producer/version claim"},
+				&ucli.StringFlag{Name: "format", Value: "auto", Usage: "report format: auto, go-test-json, or junit"},
 				&ucli.StringFlag{Name: "captured-at", Usage: "optional caller-supplied RFC3339 capture time"},
 				&ucli.StringFlag{Name: "snapshot", Usage: "bind the report to a validated snapshot ID (not proof of applicability)"},
 				&ucli.IntFlag{Name: "offset", Usage: "first imported report card (default 0)"},
@@ -320,7 +321,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	if ctx.NArg() == 1 {
 		inputName = ctx.Args().First()
 	} else if state.tty {
-		return invalidWithFix("missing Go test JSON input", "use after import FILE, after import -, or go test -json ./... | after import")
+		return invalidWithFix("missing test report input", "use after import FILE, after import -, or go test -json ./... | after import")
 	}
 	producer := ""
 	if ctx.IsSet("producer") {
@@ -355,7 +356,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	} else {
 		inputFile, err = openInput(inputName)
 		if err != nil {
-			return operational("cannot read Go test report file")
+			return operational("cannot read test report file")
 		}
 		defer inputFile.Close()
 		input = inputFile
@@ -367,11 +368,11 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 		importedAt = state.now().UTC()
 	}
 	// Parse before opening storage so empty or unrelated input changes nothing.
-	report, err := gotestreport.Import(input, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, ImportedAt: importedAt})
+	report, err := gotestreport.ImportFormat(input, gotestreport.Metadata{Producer: producer, CapturedAt: capturedAt, ImportedAt: importedAt}, ctx.String("format"))
 	if err != nil {
-		return invalid("report is invalid or exceeds the 8 MiB input limit")
+		return invalid(err.Error())
 	}
-	if len(report.Cards) == 0 {
+	if len(report.Cards) == 0 && report.Dialect == gotestreport.Dialect {
 		problem := "the input contains no go test -json events; nothing was imported"
 		if report.OriginalBytes == 0 {
 			problem = "the report input is empty; nothing was imported"
@@ -419,7 +420,7 @@ func importCommand(state *invocation, ctx *ucli.Context) error {
 	if err != nil || len(encoded) > store.MaxBlobBytes {
 		return operational("imported report exceeds the private artifact limit")
 	}
-	artifact, err := s.PutArtifact(encoded, "go-test-report-v1", store.MaxBlobBytes)
+	artifact, err := s.PutArtifact(encoded, gotestreport.ArtifactChannel(report.Dialect), store.MaxBlobBytes)
 	if err != nil || artifact.Completeness != evidence.Complete {
 		return operational("cannot persist complete imported report")
 	}
@@ -818,7 +819,7 @@ func optionalGet[T store.Record](s *store.Store, id evidence.Digest) (T, bool, e
 }
 
 func validImportedReport(report gotestreport.Report) bool {
-	if report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect {
+	if report.SchemaVersion != 1 || !gotestreport.SupportedDialect(report.Dialect) {
 		return false
 	}
 	for _, card := range report.Cards {

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="5" failures="2" errors="0" time="0.003274958">
+    <testsuite name="report.test.js" timestamp="2026-10-08T23:39:02.990Z" hostname="synthetic-host" tests="5" failures="2" errors="0" skipped="1" time="0.003274958">
+        <testcase classname="report.test.js" name="pass" time="0.000635584">
+            <system-out>
+synthetic stdout
+
+            </system-out>
+            <system-err>
+synthetic stderr
+
+            </system-err>
+        </testcase>
+        <testcase classname="report.test.js" name="fail" time="0.002129166">
+            <failure message="expected 1 to be 2 // Object.is equality" type="AssertionError">
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ report.test.js:8:28
+            </failure>
+        </testcase>
+        <testcase classname="report.test.js" name="skip" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="report.test.js" name="nested &gt; pass" time="0.000064709">
+        </testcase>
+        <testcase classname="report.test.js" name="nested &gt; error" time="0.000097875">
+            <failure message="synthetic runtime error" type="Error">
+Error: synthetic runtime error
+ ❯ report.test.js:13:11
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report.xsd" version="3.0.2" name="ReportTest" time="0.017" tests="4" errors="1" skipped="1" failures="1">
+  <testcase name="fail" classname="ReportTest" time="0.007">
+    <failure message="synthetic failure ==&gt; expected: &lt;1&gt; but was: &lt;2&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: synthetic failure ==> expected: <1> but was: <2>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:563)
+	at ReportTest.fail(ReportTest.java:10)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+]]></failure>
+  </testcase>
+  <testcase name="pass" classname="ReportTest" time="0.001">
+    <system-out><![CDATA[synthetic stdout
+]]></system-out>
+    <system-err><![CDATA[synthetic stderr
+]]></system-err>
+  </testcase>
+  <testcase name="skip" classname="ReportTest" time="0.0">
+    <skipped message="synthetic skip"/>
+  </testcase>
+  <testcase name="error" classname="ReportTest" time="0.001">
+    <error message="synthetic runtime error" type="java.lang.IllegalStateException"><![CDATA[java.lang.IllegalStateException: synthetic runtime error
+	at ReportTest.error(ReportTest.java:11)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+]]></error>
+  </testcase>
+</testsuite>

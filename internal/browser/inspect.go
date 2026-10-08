@@ -47,7 +47,7 @@ func Inspect(project string, id evidence.Digest) ([]Entry, error) {
 			return []Entry{{Unavailable: true, Name: string(id), Sections: unavailableCard(id, "stored ID", "No supported receipt, comparison, pin, or report record was found."), IDs: []evidence.Digest{id}}}, nil
 		}
 		var report gotestreport.Report
-		if err := decode(raw, &report); err != nil || report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect {
+		if err := decode(raw, &report); err != nil || report.SchemaVersion != 1 || !gotestreport.SupportedDialect(report.Dialect) {
 			return []Entry{{Unavailable: true, Name: string(id), Sections: rawFallbackSections("artifact", id, raw, "Strict decoding or expected Card shape failed; showing the full raw artifact."), IDs: []evidence.Digest{id}}}, nil
 		}
 		pair.Candidate = report.Metadata.Snapshot

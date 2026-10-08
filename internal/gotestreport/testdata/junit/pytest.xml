@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="1" skipped="1" tests="5" time="0.011" timestamp="2026-10-08T17:39:01.975312-06:00" hostname="synthetic-host"><testcase classname="test_report" name="test_pass" time="0.000"><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+synthetic stdout
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+synthetic stderr
+
+</system-err></testcase><testcase classname="test_report" name="test_fail" time="0.000"><failure message="AssertionError: synthetic failure&#10;assert 1 == 2">def test_fail():
+&gt;       assert 1 == 2, "synthetic failure"
+E       AssertionError: synthetic failure
+E       assert 1 == 2
+
+test_report.py:11: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="test_report" name="test_skip" time="0.000"><skipped type="pytest.skip" message="synthetic skip">/synthetic/junit/test_report.py:14: synthetic skip</skipped><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="test_report" name="test_error" time="0.000"><error message="failed on setup with &quot;RuntimeError: synthetic setup error&quot;">@pytest.fixture
+    def broken():
+&gt;       raise RuntimeError("synthetic setup error")
+E       RuntimeError: synthetic setup error
+
+test_report.py:21: RuntimeError</error><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="test_report.TestOther" name="test_pass" time="0.000"><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase></testsuite></testsuites>

@@ -189,7 +189,7 @@ func normalizeArgs(args []string) []string {
 		"--config": true, "--project": true, "--docker-binary": true, "--docker-host": true,
 		"--repetitions": true, "--run-seconds": true, "--output-bytes": true, "--diff-bytes": true,
 		"--base": true, "--target": true, "--include-untracked": true, "--snapshot": true,
-		"--producer": true, "--captured-at": true,
+		"--producer": true, "--captured-at": true, "--format": true,
 		"--offset": true, "--limit": true, "-n": true, "--n": true, "--diff-offset": true, "--diff-size": true,
 		"--inventory-offset": true, "--inventory-limit": true, "--card-offset": true,
 		"--card-limit": true, "--plan-file": true, "--plan-out": true, "--approve": true,

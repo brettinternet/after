@@ -2,6 +2,8 @@
 
 `internal/gotestreport.Import(io.Reader, Metadata)` parses stock `go test -json` as reported data. It opens no project, runs no Go command, fetches no URLs and follows no paths. An imported report is not a runner receipt or behavioral observation.
 
+The shared schema also supports [JUnit XML](JUNIT-REPORTS.md). CLI format selection is explicit (`--format go-test-json` or `--format junit`) or based on an unambiguous input prefix, never the filename.
+
 ## Import
 
 ```sh

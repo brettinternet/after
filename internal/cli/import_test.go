@@ -23,6 +23,51 @@ func runImportWithReader(args []string, tty bool, input io.Reader) (int, string,
 	return code, stdout.String(), stderr.String()
 }
 
+func TestImportJUnitPersistsAndInspectsWithoutPromotingClaims(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	makeProject(t, project)
+	input := "<testsuite name=\"synthetic\"><testcase name=\"hostile&#x202e;name\"><failure message=\"reported only\">not observed</failure></testcase></testsuite>"
+	code, output, diagnostic := invoke([]string{"import", "--format", "junit", "--project", project, "--producer", "unverified", "--json"}, false, input)
+	if code != ExitOK || diagnostic != "" {
+		t.Fatalf("import: %d %s %s", code, output, diagnostic)
+	}
+	var result struct{ Data reportViewData }
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Data.Dialect != gotestreport.JUnitDialect || len(result.Data.Cards) != 1 || result.Data.Cards[0].State.Applicability != evidence.Unknown {
+		t.Fatalf("report: %+v", result)
+	}
+	for _, args := range [][]string{
+		{"inspect", string(result.Data.ID), "--project", project},
+		{"log", "--project", project},
+		{"status", "--stored", "--project", project},
+	} {
+		code, text, diagnostic := invoke(args, false, "")
+		if code != ExitOK || diagnostic != "" || strings.Contains(text, "\u202e") {
+			t.Fatalf("read: %d %q %q", code, text, diagnostic)
+		}
+		if args[0] == "inspect" && (!strings.Contains(text, "JUnit XML") || !strings.Contains(text, "did not run or observe") || strings.Contains(text, "go test JSON")) {
+			t.Fatalf("wrong trust label: %s", text)
+		}
+	}
+	// Unknown data must fail with a fix before capture/storage; filenames never
+	// choose an importer, and empty JUnit suites must not become passing tests.
+	fresh := filepath.Join(t.TempDir(), "fresh")
+	makeProject(t, fresh)
+	code, _, diagnostic = invoke([]string{"import", "--project", fresh}, false, "ambiguous runner output")
+	if code != ExitInvalid || !strings.Contains(diagnostic, "--format") {
+		t.Fatalf("ambiguous: %d %q", code, diagnostic)
+	}
+	if _, err := os.Stat(filepath.Join(fresh, ".after")); !os.IsNotExist(err) {
+		t.Fatal("ambiguous import wrote storage")
+	}
+	code, output, diagnostic = invoke([]string{"import", "--project", fresh, "--json"}, false, "<testsuite/>")
+	if code != ExitOK || diagnostic != "" || !strings.Contains(output, "no_cases") || !strings.Contains(output, `"completeness":"incomplete"`) {
+		t.Fatalf("empty JUnit: %d %s %s", code, output, diagnostic)
+	}
+}
+
 func TestImportAcceptsFileDashAndPipedInput(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "project")
 	makeProject(t, project)

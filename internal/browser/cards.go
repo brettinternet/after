@@ -572,7 +572,7 @@ func reportCardParts(card reportCardView) []Part {
 	return []Part{
 		textPart("Package", card.Package),
 		textPart("Test", fmt.Sprintf("%s · attempt %d", card.Test, card.Attempt)),
-		textPart("Outcome", fmt.Sprintf("%s, as reported by go test JSON. AFTER did not run or observe this test.", outcome)),
+		textPart("Outcome", fmt.Sprintf("%s, as reported by %s. AFTER did not run or observe this test.", outcome, gotestreport.DialectLabel(card.Dialect))),
 		textPart("Producer", producer),
 		textPart("Bound to", binding),
 		textPart("Events", at),
@@ -583,13 +583,13 @@ func reportCardParts(card reportCardView) []Part {
 }
 
 type reportCardView struct {
-	Package, Test, Producer         string
-	Binding                         evidence.Digest
-	Attempt                         int
-	State                           evidence.EvidenceState
-	FirstEventAt                    *time.Time
-	LastEventAt                     *time.Time
-	Inputs, ExpectedValues, Effects string
+	Package, Test, Producer, Dialect string
+	Binding                          evidence.Digest
+	Attempt                          int
+	State                            evidence.EvidenceState
+	FirstEventAt                     *time.Time
+	LastEventAt                      *time.Time
+	Inputs, ExpectedValues, Effects  string
 }
 
 func unavailableCard(id evidence.Digest, kind, limitation string) []Section {
@@ -765,7 +765,7 @@ func readReportRaw(raw []byte, pair evidence.SnapshotPair) ([]reportCardView, er
 	if err := decode(raw, &report); err != nil {
 		return nil, err
 	}
-	if report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards || report.Metadata.ImportedAt.IsZero() {
+	if report.SchemaVersion != 1 || !gotestreport.SupportedDialect(report.Dialect) || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards || report.Metadata.ImportedAt.IsZero() {
 		return nil, errors.New("unexpected report shape")
 	}
 	cards := make([]reportCardView, 0, len(report.Cards))
@@ -773,7 +773,7 @@ func readReportRaw(raw []byte, pair evidence.SnapshotPair) ([]reportCardView, er
 		if card.Package == "" || (card.Scope != "package" && card.Scope != "test" && card.Scope != "build") || card.Attempt < 1 || len(card.Output) > gotestreport.MaxOutputBytes || card.State.Validate() != nil || card.State.Kind != evidence.Reported || card.State.Producer != evidence.Importer || card.State.Execution != evidence.NotRun || card.State.Comparison != evidence.NotCompared || (card.Scope == "test" && card.Test == "") {
 			return nil, errors.New("unexpected report card shape")
 		}
-		cards = append(cards, reportCardView{Package: card.Package, Test: card.Test, Producer: report.Metadata.Producer, Binding: report.Metadata.Snapshot, Attempt: card.Attempt, State: card.State, FirstEventAt: card.FirstEventAt, LastEventAt: card.LastEventAt, Inputs: card.Inputs, ExpectedValues: card.ExpectedValues, Effects: card.Effects})
+		cards = append(cards, reportCardView{Dialect: report.Dialect, Package: card.Package, Test: card.Test, Producer: report.Metadata.Producer, Binding: report.Metadata.Snapshot, Attempt: card.Attempt, State: card.State, FirstEventAt: card.FirstEventAt, LastEventAt: card.LastEventAt, Inputs: card.Inputs, ExpectedValues: card.ExpectedValues, Effects: card.Effects})
 	}
 	_ = pair
 	return cards, nil

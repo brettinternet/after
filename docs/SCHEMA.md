@@ -1,6 +1,6 @@
 # Evidence records, version 1
 
-`internal/evidence` defines and validates AFTER's local record contracts. [Storage](STORAGE.md), [capture](CAPTURE.md), [Go report import](GO-REPORTS.md), [runner](RUNNER.md), [comparison](COMPARISON.md), and [review](REVIEW.md) own persistence and behavior. The [schema example](schema-example.json) is synthetic; its digests are placeholders, not measurements.
+`internal/evidence` defines and validates AFTER's local record contracts. [Storage](STORAGE.md), [capture](CAPTURE.md), [Go report import](GO-REPORTS.md), [JUnit import](JUNIT-REPORTS.md), [runner](RUNNER.md), [comparison](COMPARISON.md), and [review](REVIEW.md) own persistence and behavior. The [schema example](schema-example.json) is synthetic; its digests are placeholders, not measurements.
 
 ## Encoding and identity
 
@@ -27,7 +27,7 @@ A successful immutable `Capture` event stores `captured_at`, mode, base/candidat
 
 A complete snapshot is complete only within its selection policy; excluded files were not captured. Unsupported entries force incomplete capture. Incomplete captures need a limitation. Paths cannot be absolute, traverse upward, contain NUL/backslash/colon, or repeat across inventory lists. Selected untracked paths cannot include `.git` or `.after` components. Only regular Git modes `100644` and `100755` are captured; symlinks and other entries are unsupported.
 
-Imported Go reports may omit `producer`. If present, it is an unverified caller claim; absence means no producer claim. Optional report `snapshot` is likewise a caller binding, not proof of test applicability.
+Imported Go JSON and JUnit XML reports share schema-1 cards, distinguished by `go-test-json-v1` and `junit-xml-v1` dialects. They may omit `producer`. If present, it is an unverified caller claim; absence means no producer claim. Optional report `snapshot` is likewise a caller binding, not proof of test applicability.
 
 Runner receipts—including failed or cancelled runs—require the complete planned binding. Do not invent actual environment evidence when unavailable. Pre-execution planning errors need no run receipt. An unstarted sample retains frozen plan bindings but omits actual derived image identities if no container was prepared. Samples retain actual images, completion, cleanup, timestamps, and separate observation/diagnostic artifact references. AFTER-8 may add `request_id` to bind asynchronous submission through storage.
 

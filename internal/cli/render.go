@@ -789,7 +789,7 @@ func reportLines(state *invocation, report reportViewData) []readableLine {
 		count := report.Binding.UntrackedExcluded
 		lines = append(lines, readableRow("Untracked", fmt.Sprintf("%d %s excluded; tests may have used them", count, plural(count, "path"))))
 	}
-	lines = append(lines, textLine("Reported in go test JSON; AFTER did not run or observe these tests", terminal.Muted))
+	lines = append(lines, textLine("Reported in "+gotestreport.DialectLabel(report.Dialect)+"; AFTER did not run or observe these tests", terminal.Muted))
 	for _, card := range report.Cards {
 		title := card.Test
 		if title == "" {

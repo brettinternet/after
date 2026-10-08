@@ -6,7 +6,7 @@ This page gives developers and agents the current product direction, safety rule
 
 AFTER is an independent local Go CLI/TUI for reviewing concrete changes and their evidence. It has no required editor, model, account, or GitHub dependency. Local Git review comes first; GitHub PR sync and browser comparison remain deferred. The presentation is a concept simulation. Read the [proposal](README.md), [behavior and evidence design](behavior-and-evidence.md), and [research](research.md) for product rationale.
 
-The working POC includes native capture, private versioned storage, stock `go test -json` import, raw diff/inventory inspection, the [payment fixture](../internal/paymentfixture/README.md), offline runner, exact comparison, persistent pins, and a terminal evidence browser. See [CLI](CLI.md), [TUI](TUI.md), [schema](SCHEMA.md), and the [implementation contract](IMPLEMENTATION.md) for current behavior.
+The working POC includes native capture, private versioned storage, stock `go test -json` and [JUnit XML](JUNIT-REPORTS.md) import, raw diff/inventory inspection, the [payment fixture](../internal/paymentfixture/README.md), offline runner, exact comparison, persistent pins, and a terminal evidence browser. See [CLI](CLI.md), [TUI](TUI.md), [schema](SCHEMA.md), and the [implementation contract](IMPLEMENTATION.md) for current behavior.
 
 Start implementation from [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md), and the dependency-ready task in the [Backlog](../backlog/tasks). Work only on ready M1/M2 tasks. M3 tasks AFTER-18–20 are gated; AFTER-18 requires explicit human-study authorization. Do not select follow-up work automatically.
 

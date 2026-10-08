@@ -1,4 +1,4 @@
-// Package gotestreport imports stock Go test JSON as unverified reported data.
+// Package gotestreport imports Go test JSON and JUnit XML as unverified reported data.
 // It never opens paths, fetches URLs, runs commands, or produces observations.
 package gotestreport
 
@@ -87,12 +87,16 @@ func validDigest(d evidence.Digest) bool {
 	return err == nil
 }
 
+func validMetadata(meta Metadata) bool {
+	return len(meta.Producer) <= 256 && (meta.Producer == "" || strings.TrimSpace(meta.Producer) == meta.Producer) && !meta.ImportedAt.IsZero() && (meta.CapturedAt == nil || !meta.CapturedAt.IsZero()) && (meta.Snapshot == "" || validDigest(meta.Snapshot))
+}
+
 // Import consumes at most MaxBytes+1 bytes. Oversized/unreadable sources fail
 // outright (no partial digest); recoverable line errors retain unrelated cards.
 // Callers own reader cancellation/deadlines. Report strings remain untrusted.
 func Import(src io.Reader, meta Metadata) (Report, error) {
 	var result Report
-	if src == nil || len(meta.Producer) > 256 || (meta.Producer != "" && strings.TrimSpace(meta.Producer) != meta.Producer) || meta.ImportedAt.IsZero() || (meta.CapturedAt != nil && meta.CapturedAt.IsZero()) || (meta.Snapshot != "" && !validDigest(meta.Snapshot)) {
+	if src == nil || !validMetadata(meta) {
 		return result, errors.New("invalid report metadata")
 	}
 	raw, err := io.ReadAll(io.LimitReader(src, MaxBytes+1))

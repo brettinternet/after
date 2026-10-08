@@ -198,7 +198,7 @@ func readHistory(s *store.Store) (storedHistory, error) {
 		if err != nil {
 			return history, err
 		}
-		if artifact.Channel != "go-test-report-v1" {
+		if !gotestreport.ReportChannel(artifact.Channel) {
 			continue
 		}
 		raw, err := s.ReadBlob(artifact.Content)

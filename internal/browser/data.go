@@ -421,7 +421,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		return nil, err
 	}
 	var report gotestreport.Report
-	if decode(raw, &report) != nil || report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards {
+	if decode(raw, &report) != nil || report.SchemaVersion != 1 || !gotestreport.SupportedDialect(report.Dialect) || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards {
 		return nil, errors.New("unsupported report")
 	}
 	cardViews, err := readReportRaw(raw, pair)

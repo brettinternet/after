@@ -108,7 +108,7 @@ func discoverEvidence(s *store.Store, pair evidence.SnapshotPair, preferredPins 
 		if err != nil {
 			return nil, 0, err
 		}
-		if metadata.Channel != "report" || metadata.Bytes > gotestreport.MaxBytes {
+		if (metadata.Channel != "report" && !gotestreport.ReportChannel(metadata.Channel)) || metadata.Bytes > store.MaxBlobBytes {
 			continue
 		}
 		raw, err := s.ReadBlob(metadata.Content)
@@ -168,7 +168,7 @@ func discoverEvidence(s *store.Store, pair evidence.SnapshotPair, preferredPins 
 }
 
 func validDiscoveredReport(report gotestreport.Report) bool {
-	if report.SchemaVersion != 1 || report.Dialect != gotestreport.Dialect || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards || report.Metadata.Snapshot == "" || report.Metadata.ImportedAt.IsZero() {
+	if report.SchemaVersion != 1 || !gotestreport.SupportedDialect(report.Dialect) || (report.Completeness != evidence.Complete && report.Completeness != evidence.Incomplete) || len(report.Cards) > gotestreport.MaxCards || report.Metadata.Snapshot == "" || report.Metadata.ImportedAt.IsZero() {
 		return false
 	}
 	for _, card := range report.Cards {

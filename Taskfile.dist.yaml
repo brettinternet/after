@@ -128,6 +128,12 @@ tasks:
       AFTER_POC_PROOF: "1"
     cmd: go run ./internal/pocgate
 
+  test:reports:
+    desc: Verify offline report parsing, CLI import and shared CLI/TUI cards
+    cmds:
+      - go test -race ./internal/gotestreport
+      - go test -race ./internal/cli ./internal/browser -run 'Test(Import|JUnit|Report|Help|CommandHelp|Card|Discovery)' {{.CLI_ARGS}}
+
   test:cli:
     desc: Run focused CLI, configuration, and native entry point tests
     cmd: go test -race ./internal/config ./internal/cli ./cmd/after
@@ -167,6 +173,10 @@ tasks:
     env:
       AFTER_CLI_PROOF: "1"
     cmd: go test -v -count=1 -timeout=15m ./cmd/after -run '^TestPaymentCLIProof$'
+
+  fixtures:junit:
+    desc: Capture synthetic JUnit reports (explicit network/toolchain execution; see docs/JUNIT-REPORTS.md)
+    cmd: python3 scripts/capture-junit.py
 
   fixtures:go-report:
     desc: Regenerate synthetic Go report fixtures (intentional test/build failures)

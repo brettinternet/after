@@ -1,10 +1,10 @@
 # Extension design
 
-Status: proposal, not implemented. The POC has no plugin system; see the [implementation contract](IMPLEMENTATION.md). This page records how AFTER could accept community and private integrations without weakening its evidence labels. Follow-up tasks AFTER-48–50 in the [backlog](../backlog/tasks) build the first concrete cases.
+Status: plugin proposal, not implemented. Native [JUnit XML import](JUNIT-REPORTS.md) is implemented by AFTER-48; declarative scenarios remain proposals. The POC has no plugin system; see the [implementation contract](IMPLEMENTATION.md). This page records how AFTER could accept community and private integrations without weakening its evidence labels. Follow-up tasks AFTER-48–50 in the [backlog](../backlog/tasks) build the first concrete cases.
 
 ## The problem
 
-Each language, test runner, application type and observation channel is a separate integration. One Go binary cannot own all of them, and [behavior and evidence](behavior-and-evidence.md#11-preferred-implementation-language) already says language facts should come from existing tools. Today every integration is hardcoded: `internal/gotestreport` imports one report format, and `internal/runner` runs one payment experiment.
+Each language, test runner, application type and observation channel is a separate integration. One Go binary cannot own all of them, and [behavior and evidence](behavior-and-evidence.md#11-preferred-implementation-language) already says language facts should come from existing tools. Today every integration is hardcoded: `internal/gotestreport` imports Go JSON and JUnit XML, and `internal/runner` runs one payment experiment.
 
 ## Why not copy Pi's model
 
@@ -80,7 +80,7 @@ Change Pi's trust model:
 
 The POC contract rules out a plugin framework without a demonstrated requirement. Build concrete cases first, then extract the interface:
 
-1. **AFTER-48: native JUnit XML import.** pytest, Vitest, jest-junit, Maven Surefire, Gradle, cargo-nextest, PHPUnit and go-junit-report emit it, so one importer covers reported results for most ecosystems.
+1. **AFTER-48: native JUnit XML import (implemented).** The bounded [dialect](JUNIT-REPORTS.md) is tested against captured pytest, Vitest and Maven Surefire output. Other producers may emit compatible XML but are not certified.
 2. **AFTER-49: declarative `http-service` scenarios.** The payment experiment becomes one definition; a second service in another language proves the runner is not Go-specific.
 3. **AFTER-50: declarative `command` scenarios.** Exit status, stdout and stderr cover CLIs, generators and library harnesses.
 
