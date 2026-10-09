@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@pi'
 created_date: '2026-10-09 20:54'
-updated_date: '2026-10-09 21:12'
+updated_date: '2026-10-09 22:39'
 labels: []
 dependencies: []
 ordinal: 59000
@@ -23,6 +23,11 @@ Terminal clipping hides evidence qualifications. Example 06 makes unchanged base
 - [x] #2 Readable capture exposes the base Git commit and example 06 explains why base snapshot IDs can change.
 <!-- AC:END -->
 
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [x] #1 Implementation is integrated into main and focused CLI regression tests pass.
+<!-- DOD:END -->
+
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -33,6 +38,8 @@ Print sanitized Limit rows without clipping, letting the terminal wrap naturally
 
 <!-- SECTION:NOTES:BEGIN -->
 Verified task test:cli, task examples, task check:go and task test. Narrow-terminal renderer regression retains more than 4 KiB of Unicode and hostile limit text safely. Example smoke output shows the full base commit. Rebased onto concurrent main changes and reran all Go checks; Docker example 06 not rerun (narration-only change).
+
+CI repair: restored the missing completion gate. Integration is present in main; task test:cli passed again during CI repair.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

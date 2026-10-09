@@ -5,7 +5,7 @@ status: Done
 assignee:
   - pi
 created_date: '2026-10-09 21:14'
-updated_date: '2026-10-09 21:32'
+updated_date: '2026-10-09 22:39'
 labels: []
 dependencies: []
 ordinal: 60000
@@ -23,6 +23,11 @@ Operator requested readable hello → HELLO evidence in Example 09 instead of jq
 - [x] #2 task demo:gifs succeeds and refreshed GIFs are committed.
 <!-- AC:END -->
 
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [x] #1 Implementation is integrated into main and focused CLI regression tests pass.
+<!-- DOD:END -->
+
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -33,6 +38,8 @@ Operator requested readable hello → HELLO evidence in Example 09 instead of jq
 
 <!-- SECTION:NOTES:BEGIN -->
 Verified: task test:cli passed, including terminal safety and 24-detail overflow regression; reran successfully after rebasing onto updated main. Example 09 executed in a PTY against the provisioned Docker sandbox: run and compare each printed hello → HELLO for both repetitions. task demo:gifs regenerated payment, oracle and review GIFs; visually checked oracle indentation and payment observation. task docs:check passed in Chromium; task check:staged passed. Integrated implementation into main.
+
+CI repair: restored the missing completion gate. Integration is present in main; task test:cli passed again during CI repair.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
