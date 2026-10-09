@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@pi'
 created_date: '2026-10-08 23:01'
-updated_date: '2026-10-09 00:22'
+updated_date: '2026-10-09 05:14'
 labels:
   - poc
   - tui
@@ -35,6 +35,11 @@ The review TUI shows a dense always-on key-hint row, floats its footer under sho
 - [x] #5 Golden views, browser and PTY tests pass with the new layout; docs/TUI.md, docs/TUI-DESIGN.md, docs/TERMINAL.md and examples reflect it; the review VHS tape and GIF are regenerated
 <!-- AC:END -->
 
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [x] #1 Record implemented delivery, relevant verification results and limitations, and required documentation/example updates in the task history.
+<!-- DOD:END -->
+
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -50,6 +55,8 @@ The review TUI shows a dense always-on key-hint row, floats its footer under sho
 
 <!-- SECTION:NOTES:BEGIN -->
 Integrated as 861c476 (fast-forward after rebasing onto 99e89a4). Verification: go vet ./...; gofmt clean; go test ./... and task check:go (race) pass except TestCompletionScriptsInBashZshAndFish, which also fails on unmodified main because the mise fish shim has no version (environmental). Golden views/cards regenerated and reviewed; browser, frame/document PTY and CLI loop/new-review PTY tests updated to the new strings (tests now match visible text after stripping the closed theme SGR set). TestCapturedBrowserDiffEventBudget: alloc/event 131 KiB (budget 256 KiB) after making ChangedSpan allocation-free and capping it at 4 KiB lines. Manual tmux checks at 100x30/110x32/120x40 in xterm-256color; review.tape extended with Diff, ] and ? and review.gif regenerated with VHS 0.11.0 (frames inspected). Decisions: badges keep brackets in every mode (matches CLI output); emphasis backgrounds 22/52 with 28/124 emphasis; no external delta and no language-aware token colouring; documents show section position k/n in the strip; help merges aliases of the same action; canSearch now evaluates the screen help was opened from.
+
+Operator-authorized metadata repair during AFTER-49 integration: this Done task lacked a completion-hygiene entry, causing the mandatory backlog gate to reject main. Added the missing DoD based on existing delivery and verification notes (861c476, docs and regenerated demo); no acceptance or implementation behavior changed. Combined AFTER-47/49 race tests passed after integration of main 5db1eb4, including the fish completion test fixed on main. Existing verification limitations remain recorded above.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
