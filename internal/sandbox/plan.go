@@ -85,22 +85,6 @@ func PrepareImage(snapshot string, files map[string][]byte, argv []string, limit
 	return prepareImage(snapshot, files, argv, limits, image, platform, nil)
 }
 
-// PrepareCommandImage freezes a bounded stdin byte stream into an otherwise
-// ordinary offline plan. Only the approved container receives those bytes.
-func PrepareCommandImage(snapshot string, files map[string][]byte, argv []string, limits Limits, image, platform string, stdin []byte) (*Plan, error) {
-	if len(stdin) > 16<<10 {
-		return nil, errors.New("command stdin exceeds its byte limit")
-	}
-	plan, err := prepareImage(snapshot, files, argv, limits, image, platform, nil)
-	if err != nil {
-		return nil, err
-	}
-	plan.stdin = append([]byte(nil), stdin...)
-	plan.spec.StdinDigest = digest(stdin)
-	plan.spec.Preparation += "; attach frozen bounded stdin to the approved container"
-	return plan, nil
-}
-
 // PrepareTemplate additionally reserves fixed trusted-runtime files whose bytes
 // will be supplied only after the approved preparation recipe succeeds.
 func PrepareTemplate(snapshot string, files map[string][]byte, argv []string, limits Limits, image, platform string, slots []GeneratedFile) (*Plan, error) {
@@ -157,13 +141,15 @@ func prepareImage(snapshot string, files map[string][]byte, argv []string, limit
 // the resulting concrete plan; all captured source remains unchanged.
 // WithCommandInput returns a private plan copy whose preview binds the exact
 // bounded stdin bytes that ExecuteCommand later attaches to the container.
+// Docker opens a container's stdin only when it is created --interactive.
 func (p *Plan) WithCommandInput(stdin []byte) (*Plan, error) {
-	if p == nil || len(stdin) > 16<<10 {
-		return nil, errors.New("command stdin exceeds its byte limit")
+	if p == nil || len(stdin) > 16<<10 || p.spec.StdinDigest != "" {
+		return nil, errors.New("command stdin exceeds its byte limit or is already bound")
 	}
 	copyPlan := *p
 	copyPlan.stdin = append([]byte(nil), stdin...)
 	copyPlan.spec.StdinDigest = digest(stdin)
+	copyPlan.spec.Policy = append(append([]string(nil), p.spec.Policy...), "--interactive")
 	copyPlan.spec.Preparation += "; attach frozen bounded stdin to the approved container"
 	return &copyPlan, nil
 }

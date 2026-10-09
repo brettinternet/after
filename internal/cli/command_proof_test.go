@@ -14,12 +14,14 @@ import (
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
+	"github.com/brettinternet/after/internal/store"
 )
 
 const commandFixtureSource = `package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -30,9 +32,12 @@ func main() {
 		fmt.Println(changedValue)
 		return
 	}
-	fmt.Println("stable control")
+	fmt.Print("stable control: ")
+	io.Copy(os.Stdout, os.Stdin)
 }
 `
+
+const commandFixtureStdin = "frozen stdin bytes\n"
 
 func TestCommandCLIProof(t *testing.T) {
 	if os.Getenv("AFTER_COMMAND_PROOF") != "1" {
@@ -55,7 +60,7 @@ func TestCommandCLIProof(t *testing.T) {
 		BuildArgv: []string{"/usr/local/go/bin/go", "build", "-o", "/work/command-fixture", "/input/main.go"},
 		Cases: []runner.CommandCase{
 			{ID: "changed", Title: "Source-dependent output changes", Argv: []string{"/work/command-fixture", "changed"}, Stdin: []byte{}, Environment: []string{}},
-			{ID: "control", Title: "Unaffected control output", Argv: []string{"/work/command-fixture", "control"}, Stdin: []byte{}, Environment: []string{}},
+			{ID: "control", Title: "Unaffected control output", Argv: []string{"/work/command-fixture", "control"}, Stdin: []byte(commandFixtureStdin), Environment: []string{}},
 		},
 		Repetitions: 2, Limits: runner.DefinitionLimits{Seconds: 60, OutputBytes: 65536, PreparationSeconds: 90},
 		Comparison: runner.CommandComparison{Stdout: "text", Stderr: "text"},
@@ -137,6 +142,27 @@ func TestCommandCLIProof(t *testing.T) {
 	}
 	if !changed || !control {
 		t.Fatalf("changed/control output witnesses missing: changed=%t control=%t", changed, control)
+	}
+	// Equal control witnesses would also pass if both sides read EOF; the
+	// container-boundary stdout must contain the frozen stdin bytes.
+	s, err := store.Open(root, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	controlStreams := 0
+	for _, artifact := range runResult.Data.Receipt.Artifacts {
+		if !strings.HasSuffix(artifact.Channel, "/control/0/stdout") {
+			continue
+		}
+		controlStdout, err := s.ReadBlob(artifact.Content)
+		if err != nil || string(controlStdout) != "stable control: "+commandFixtureStdin {
+			t.Fatalf("%s did not receive frozen stdin: %q %v", artifact.Channel, controlStdout, err)
+		}
+		controlStreams++
+	}
+	if controlStreams != 2 {
+		t.Fatalf("want base and candidate control stdout, got %d", controlStreams)
 	}
 
 	pinCode, pinRaw, pinErr := commandCLI(t, append([]string{"pin", string(runResult.Data.Receipt.ID), "--expectation", "Changed command output is intentional; control output stays fixed", "--scope", "finite_example", "--reason", "synthetic command proof"}, common...))

@@ -2,9 +2,11 @@ package browser
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/store"
 )
@@ -159,6 +161,38 @@ func TestOtherArtifactTitlesEscapeUntrustedChannels(t *testing.T) {
 	content, err := ReadSection(t.Context(), selection.Project, Section{Parts: []Part{part}})
 	if err != nil || string(content) != "synthetic artifact bytes" {
 		t.Fatalf("escaped channel hid its exact artifact bytes: %q %v", content, err)
+	}
+}
+
+// A changed command exit status is a root-path JSON witness; it must render as
+// a card, not fall back to raw strict-decoding failure.
+func TestComparisonCardAcceptsRootPathWitnessChange(t *testing.T) {
+	s, selection := setup(t, false)
+	comparison, err := store.Get[evidence.Comparison](s, viewComparison(t, s, selection, false, evidence.Complete))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := s.ReadBlob(comparison.Details.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report compare.Report
+	if err := json.Unmarshal(raw, &report); err != nil {
+		t.Fatal(err)
+	}
+	report.Witnesses[0].Outcome = evidence.Different
+	report.Witnesses[0].Changes = []compare.Change{{Path: "", Kind: "changed", Before: json.RawMessage("2"), After: json.RawMessage("0")}}
+	details := viewArtifact(t, s, report, "comparison-details-v1")
+	comparison.ID, comparison.Details = "", &details
+	if comparison, err = store.Put(s, comparison); err != nil {
+		t.Fatal(err)
+	}
+	data, err := Load(t.Context(), Selection{Project: selection.Project, Pair: selection.Pair, Evidence: []evidence.Digest{comparison.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Entries[0].Unavailable {
+		t.Fatal("root-path witness change fell back to the raw strict-decoding view")
 	}
 }
 

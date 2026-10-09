@@ -270,7 +270,8 @@ func strictReport(raw []byte, receipt evidence.Receipt, comparison evidence.Comp
 			return nil, errors.New("comparison witness limit")
 		}
 		for _, change := range witness.Changes {
-			if change.Path == "" || len(change.Path) > 4096 || (change.Kind != "added" && change.Kind != "removed" && change.Kind != "changed") || !json.Valid(change.Before) && len(change.Before) > 0 || !json.Valid(change.After) && len(change.After) > 0 {
+			// "" is the JSON Pointer root, e.g. a changed command exit status.
+			if (change.Path != "" && change.Path[0] != '/') || len(change.Path) > 4096 || (change.Kind != "added" && change.Kind != "removed" && change.Kind != "changed") || !json.Valid(change.Before) && len(change.Before) > 0 || !json.Valid(change.After) && len(change.After) > 0 {
 				return nil, errors.New("unexpected comparison change shape")
 			}
 		}

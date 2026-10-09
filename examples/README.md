@@ -29,6 +29,7 @@ exploring. `task examples` smoke-tests everything that needs no Docker.
 | [04-config](cli/04-config.sh)                            | YAML defaults, environment overrides, an invalid value      | Each value and the layer it came from; exit 2 on bad input         |
 | [05-payment-experiment](cli/05-payment-experiment.sh) 🐳 | Payment idempotency change (four variants below)            | Same HTTP responses, different provider charges                    |
 | [06-pin-reopen-rerun](cli/06-pin-reopen-rerun.sh) 🐳     | Reviewer pins "one charge per retry"; the author fixes it   | The pin reopens on the edit until a rerun is attached and accepted |
+| [07-command-scenario](cli/07-command-scenario.sh) 🐳     | A quote CLI is "tidied": struct output, shorter JSON decode | Valid quote equal as JSON; a misspelled field now exits 0 with $0  |
 
 `examples/cli/05-payment-experiment.sh VARIANT` sends `POST /payments`, then
 retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
@@ -64,7 +65,9 @@ retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
 
 ## 🐳 Docker
 
-The payment examples run code in the offline sandbox. Provision the image once
+The payment and command examples run code in the offline sandbox. Example 07
+selects its own [command definition](../docs/RUNNER.md#direct-argv-command-scenarios)
+with `after run BASE CANDIDATE --definition FILE`. Provision the image once
 ([SANDBOX.md](../docs/SANDBOX.md)), then:
 
 ```sh
