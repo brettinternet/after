@@ -64,11 +64,95 @@ func goldenComparison() (evidence.Comparison, compare.Report) {
 	return comparison, report
 }
 
-func readableGoldenCases() []struct {
+type readableGoldenCase struct {
 	name string
 	kind string
 	data any
-} {
+}
+
+type readableRunOutput struct {
+	Status        string              `json:"status"`
+	Authorization string              `json:"authorization_digest"`
+	Plan          json.RawMessage     `json:"plan"`
+	Receipt       evidence.Receipt    `json:"receipt"`
+	Comparison    evidence.Comparison `json:"comparison"`
+	Details       compare.Report      `json:"details"`
+	Samples       []runner.Sample     `json:"samples"`
+}
+
+func goldenCommandPresentation() (runner.CommandDefinition, compare.Report) {
+	definition := runner.CommandDefinition{
+		Version: 1, Kind: "command", Name: "command-fixture", Platform: "linux/amd64", Image: sandbox.Image,
+		Cases: []runner.CommandCase{
+			{ID: "typo", Title: "Command changes", Argv: []string{"/work/fixture"}, Stdin: []byte{}, Environment: []string{}},
+			{ID: "control", Title: "Unaffected control", Argv: []string{"/work/fixture"}, Stdin: []byte{}, Environment: []string{}},
+		},
+		Repetitions: 2, Limits: runner.DefinitionLimits{Seconds: 30, OutputBytes: 65536, PreparationSeconds: 90},
+		Comparison: runner.CommandComparison{Stdout: "json", Stderr: "text"},
+	}
+	ref := func(side, caseID string, repetition int) compare.SampleRef {
+		return compare.SampleRef{Side: side, CaseID: caseID, Repetition: repetition, Metadata: goldenDigest("e"), Observation: goldenDigest("f")}
+	}
+	witness := func(relation, channel, caseID string, repetition int, outcome evidence.ComparisonOutcome, changes ...compare.Change) compare.Witness {
+		before, after := ref("base", caseID, repetition), ref("candidate", caseID, repetition)
+		if relation == "repetition" {
+			after = ref("base", caseID, repetition+1)
+		}
+		return compare.Witness{Relation: relation, Channel: channel, Before: before, After: after, Outcome: outcome, Changes: changes}
+	}
+	textChange := func(before, after string) compare.Change {
+		beforeRaw, _ := json.Marshal(struct {
+			Base64 string `json:"base64"`
+		}{base64.StdEncoding.EncodeToString([]byte(before))})
+		afterRaw, _ := json.Marshal(struct {
+			Base64 string `json:"base64"`
+		}{base64.StdEncoding.EncodeToString([]byte(after))})
+		return compare.Change{Path: "/base64", Kind: "changed", Before: beforeRaw, After: afterRaw}
+	}
+	var witnesses []compare.Witness
+	for _, caseID := range []string{"typo", "control"} {
+		for repetition := 0; repetition < 2; repetition++ {
+			for _, channel := range []string{"exit_status", "stdout", "stderr"} {
+				outcome := evidence.Equal
+				var changes []compare.Change
+				if caseID == "typo" {
+					outcome = evidence.Different
+					switch channel {
+					case "exit_status":
+						changes = []compare.Change{{Path: "", Kind: "changed", Before: json.RawMessage("2"), After: json.RawMessage("0")}}
+					case "stdout":
+						changes = []compare.Change{{Path: "/error", Kind: "removed", Before: json.RawMessage(`"invalid request"`)}, {Path: "/total_cents", Kind: "added", After: json.RawMessage("0")}}
+					case "stderr":
+						changes = []compare.Change{textChange("invalid \x1b]52;c;clipboard\a request", "handled safely")}
+					}
+				}
+				witnesses = append(witnesses, witness("paired", channel, caseID, repetition, outcome, changes...))
+			}
+		}
+		for _, channel := range []string{"exit_status", "stdout", "stderr"} {
+			for _, side := range []string{"base", "candidate"} {
+				outcome := evidence.Equal
+				var changes []compare.Change
+				if caseID == "typo" && channel == "stderr" && side == "base" {
+					outcome = evidence.Different
+					changes = []compare.Change{textChange("invalid \x1b]52;c;clipboard\a request", "retrying safely")}
+				}
+				before := ref(side, caseID, 0)
+				after := ref(side, caseID, 1)
+				witnesses = append(witnesses, compare.Witness{Relation: "repetition", Channel: channel, Before: before, After: after, Outcome: outcome, Changes: changes})
+			}
+		}
+	}
+	report := compare.Report{
+		Version: 1, Receipt: goldenReceipt().ID, Snapshots: goldenReceipt().Snapshots, DefinitionName: definition.Name,
+		Cases: []string{"typo", "control"}, CaseTitles: []string{"Command changes", "Unaffected control"},
+		Channels: []string{"exit_status", "stdout", "stderr"}, Outcome: evidence.Unstable,
+		Artifacts: []evidence.Artifact{}, Witnesses: witnesses, Limits: []string{"synthetic finite command comparison"},
+	}
+	return definition, report
+}
+
+func readableGoldenCases() []readableGoldenCase {
 	idA, idB, idC, idD, idE := goldenDigest("a"), goldenDigest("b"), goldenDigest("c"), goldenDigest("d"), goldenDigest("e")
 	baseSnapshot := evidence.Snapshot{SchemaVersion: 1, ID: idA, Source: evidence.Commit, Commit: strings.Repeat("a", 40), Files: []evidence.File{{Path: "internal/cli/base.go", Content: idE, Mode: "100644"}}, Completeness: evidence.Complete, Diff: idE, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}}
 	snapshot := evidence.Snapshot{SchemaVersion: 1, ID: idB, Source: evidence.WorkingTree, Commit: strings.Repeat("1", 40), Files: []evidence.File{{Path: "internal/cli/main.go", Content: idE, Mode: "100644"}}, Completeness: evidence.Complete, Diff: idE, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}}
@@ -125,11 +209,13 @@ func readableGoldenCases() []struct {
 		Base64   string          `json:"base64"`
 		Document json.RawMessage `json:"document,omitempty"`
 	}{ID: idE, Offset: 0, Next: 17, Total: 17, Base64: "eyJrZXkiOiJ2YWx1ZSJ9", Document: json.RawMessage(`{"key":"value"}`)}
-	return []struct {
-		name string
-		kind string
-		data any
-	}{
+	_, commandDetails := goldenCommandPresentation()
+	commandReceipt := receipt
+	commandReceipt.State.Kind = evidence.Observed
+	commandReceipt.State.Execution = evidence.Completed
+	commandReceipt.State.Comparison = evidence.Unstable
+	commandReceipt.Completeness = evidence.Complete
+	return []readableGoldenCase{
 		{"status", "status", status},
 		{"log", "log", log},
 		{"pin-heads", "pins", pinHeads},
@@ -162,6 +248,8 @@ func readableGoldenCases() []struct {
 			Receipt    evidence.Receipt    `json:"receipt"`
 			Details    *compare.Report     `json:"details,omitempty"`
 		}{comparison, receipt, &details}},
+		{"compare-command", "comparison", comparisonResult{Comparison: evidence.Comparison{SchemaVersion: 1, ID: goldenDigest("c"), Receipt: commandReceipt.ID, Outcome: evidence.Unstable, Completeness: evidence.Complete, Limits: []string{"recorded command samples only"}}, Receipt: commandReceipt, Details: &commandDetails}},
+		{"run-command", "run", readableRunOutput{Status: "completed", Receipt: commandReceipt, Comparison: evidence.Comparison{SchemaVersion: 1, ID: goldenDigest("c"), Receipt: commandReceipt.ID, Outcome: evidence.Unstable, Completeness: evidence.Complete, Limits: []string{"recorded command samples only"}}, Details: commandDetails}},
 		{"pin", "review", view},
 		{"review", "review", view},
 		{"run-preview", "execution_preview", executionPreview{
@@ -196,6 +284,26 @@ func TestLegacySnapshotCaptureTimeRemainsUnavailable(t *testing.T) {
 	}
 }
 
+func TestReadableCommandWitnessOverflowPointsToJSON(t *testing.T) {
+	definition, report := goldenCommandPresentation()
+	for index := 0; index < 100; index++ {
+		report.Witnesses[0].Changes = append(report.Witnesses[0].Changes, compare.Change{Path: "/many", Kind: "changed", Before: json.RawMessage("1"), After: json.RawMessage("2")})
+	}
+	project := t.TempDir()
+	receipt := commandGoldenReceipt(t, project, goldenReceipt(), definition)
+	state := goldenState()
+	state.project = project
+	lines := comparisonDetailLines(state, nil, report, receipt)
+	var output strings.Builder
+	for _, line := range lines {
+		output.WriteString(line.text)
+		output.WriteByte('\n')
+	}
+	if !strings.Contains(output.String(), "More command witnesses omitted; use --json for the complete report.") {
+		t.Fatalf("bounded command output did not point to its complete JSON report: %q", output.String())
+	}
+}
+
 func TestReadableCommandEnumeration(t *testing.T) {
 	state := &invocation{}
 	got := map[string]bool{}
@@ -225,10 +333,56 @@ func TestReadableCommandEnumeration(t *testing.T) {
 	}
 }
 
+func commandGoldenReceipt(t *testing.T, project string, receipt evidence.Receipt, definition runner.CommandDefinition) evidence.Receipt {
+	t.Helper()
+	s, err := store.Open(project, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := s.PutArtifact(raw, "command-definition", store.MaxBlobBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scenario, err := store.Put(s, evidence.Scenario{
+		SchemaVersion: evidence.SchemaVersion, Input: input.Content, Driver: input.Content, Observer: input.Content, Rules: input.Content,
+		Boundary: "synthetic command boundary", Author: "AFTER operator-selected command v1", Limits: []string{"synthetic, finite command example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	receipt.Bindings = &evidence.Bindings{Scenario: scenario.ID, Input: input.Content, Driver: input.Content, Observer: input.Content, Rules: input.Content}
+	return receipt
+}
+
+func withCommandGoldenReceipt(data any, receipt evidence.Receipt) any {
+	switch value := data.(type) {
+	case comparisonResult:
+		value.Receipt = receipt
+		return value
+	case readableRunOutput:
+		value.Receipt = receipt
+		return value
+	default:
+		panic("command golden has an unsupported result type")
+	}
+}
+
 func TestReadableOutputGoldens(t *testing.T) {
 	for _, tc := range readableGoldenCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			state := goldenState()
+			if strings.HasSuffix(tc.name, "-command") {
+				definition, _ := goldenCommandPresentation()
+				state.project = t.TempDir()
+				tc.data = withCommandGoldenReceipt(tc.data, commandGoldenReceipt(t, state.project, goldenReceipt(), definition))
+			}
 			if err := writeReadable(state, tc.kind, tc.data); err != nil {
 				t.Fatal(err)
 			}

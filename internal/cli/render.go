@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/brettinternet/after/internal/browser"
+	"github.com/brettinternet/after/internal/commandview"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
@@ -421,7 +422,7 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		lines := []readableLine{textLine(fmt.Sprintf("Run %s · %s · %s", shortID(result.Receipt.ID), result.Status, result.Comparison.Outcome), badgeStyle(string(result.Comparison.Outcome)))}
 		lines = append(lines, readableRow("Snapshots", fmt.Sprintf("%s → %s", shortID(result.Receipt.Snapshots.Base), shortID(result.Receipt.Snapshots.Candidate))))
-		lines = comparisonDetailLines(lines, result.Details)
+		lines = comparisonDetailLines(state, lines, result.Details, result.Receipt)
 		lines = appendLimits(lines, result.Comparison.Limits)
 		return lines, nil
 	default:
@@ -468,7 +469,7 @@ func statusLines(state *invocation, view statusView) []readableLine {
 	} else if view.Comparison != nil {
 		lines = append(lines, readableRow("Behavior", fmt.Sprintf("run %s · %s · %s", shortID(view.Receipt.ID), view.Receipt.State.Execution, view.Comparison.Outcome)))
 		if view.Details != nil && len(view.Details.Witnesses) > 0 {
-			lines = comparisonDetailLines(lines, *view.Details)
+			lines = comparisonDetailLines(state, lines, *view.Details, *view.Receipt)
 		} else {
 			lines = append(lines, textLine("  Stored comparison has no detailed witnesses.", terminal.Muted))
 		}
@@ -1036,7 +1037,7 @@ func comparisonLines(state *invocation, raw []byte) ([]readableLine, error) {
 		lines = append(lines, readableRow("Snapshots", fmt.Sprintf("%s → %s", shortID(result.Receipt.Snapshots.Base), shortID(result.Receipt.Snapshots.Candidate))))
 	}
 	if result.Details != nil {
-		lines = comparisonDetailLines(lines, *result.Details)
+		lines = comparisonDetailLines(state, lines, *result.Details, result.Receipt)
 	}
 	lines = appendLimits(lines, comparison.Limits)
 	ids := []evidence.Digest{comparison.ID, comparison.Receipt}
@@ -1055,7 +1056,21 @@ func comparisonLines(state *invocation, raw []byte) ([]readableLine, error) {
 	return addIDs(lines, ids...), nil
 }
 
-func comparisonDetailLines(lines []readableLine, report compare.Report) []readableLine {
+func comparisonDetailLines(state *invocation, lines []readableLine, report compare.Report, receipt evidence.Receipt) []readableLine {
+	if commandview.IsCommandReport(report) {
+		if definition, ok := commandDefinitionForReceipt(state, receipt); ok {
+			if presentation, ok := commandview.Format(report, definition); ok {
+				for _, line := range presentation.Lines {
+					lines = append(lines, textLine(line, terminal.Plain))
+				}
+				if presentation.More {
+					lines = append(lines, textLine("  More command witnesses omitted; use --json for the complete report.", terminal.Muted))
+				}
+				return lines
+			}
+		}
+		return append(lines, textLine("  Command witness summary unavailable; use --json for the stored report.", terminal.Attention))
+	}
 	if report.DefinitionName != "" && !report.BuiltInPayment {
 		for index, caseID := range report.Cases {
 			for _, channel := range report.Channels {
@@ -1126,6 +1141,30 @@ func comparisonDetailLines(lines []readableLine, report compare.Report) []readab
 		}
 	}
 	return lines
+}
+
+func commandDefinitionForReceipt(state *invocation, receipt evidence.Receipt) (runner.CommandDefinition, bool) {
+	if state == nil || state.project == "" || receipt.Bindings == nil || receipt.Bindings.Scenario == "" {
+		return runner.CommandDefinition{}, false
+	}
+	s, err := store.Open(state.project, false, nil)
+	if err != nil {
+		return runner.CommandDefinition{}, false
+	}
+	defer s.Close()
+	scenario, err := store.Get[evidence.Scenario](s, receipt.Bindings.Scenario)
+	if err != nil || scenario.Author != "AFTER operator-selected command v1" || scenario.Input == "" || scenario.Input != receipt.Bindings.Input {
+		return runner.CommandDefinition{}, false
+	}
+	raw, err := s.ReadBlob(scenario.Input)
+	if err != nil {
+		return runner.CommandDefinition{}, false
+	}
+	definition, err := runner.ParseCommandDefinition(raw)
+	if err != nil {
+		return runner.CommandDefinition{}, false
+	}
+	return definition, true
 }
 
 func rawValue(raw json.RawMessage) string {

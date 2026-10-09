@@ -1,0 +1,40 @@
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
+  Overview  ›  command-fixture command                                                                      [UNSTABLE]
+  [Card]   Artifacts   Receipt   Scenario   Plan   IDs                                                   1/6 · 1.4 KiB
+  ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ── Outcome ──
+  │ observed · completed · unstable · complete
+
+  ── Command changes ──
+  │   Command changes (typo) · exit_status [DIFFERENT]
+  │     rep 1: 2 → 0
+  │     rep 2: 2 → 0
+  │   Command changes (typo) · stdout [DIFFERENT]
+  │     rep 1: /error removed "invalid request"
+  │     rep 1: /total_cents added 0
+  │     rep 2: /error removed "invalid request"
+  │     rep 2: /total_cents added 0
+  │   Command changes (typo) · stderr [DIFFERENT]
+  │     rep 1: text before: invalid \u001b]52;c… → after: handled safely
+  │     rep 2: text before: invalid \u001b]52;c… → after: handled safely
+  │   Command changes (typo) · stderr [UNSTABLE: base repetitions]
+  │     rep 1→2: text: invalid \u001b]52;c… → retrying safely
+  │   Unaffected control (control) [EQUAL] exit_status, stdout, stderr
+
+  ── Full command report ──
+  │ Complete witnesses are in the comparison-details artifact 3ef3825d under Artifacts.
+
+  ── Producer ──
+  │ runner
+
+  ── Binding ──
+  │ base 2d13fdbf → candidate 8ae79385
+
+  ── Events ──
+  │ 2025-01-02T20:00:00Z–2025-01-02T20:00:00Z
+
+  ── Scope ──
+  │ synthetic; not a real command run
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Tab shows the next section · Esc goes back                                                                    ? help

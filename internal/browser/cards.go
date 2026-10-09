@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brettinternet/after/internal/commandview"
 	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/gotestreport"
@@ -489,14 +490,22 @@ func redactText(redacted bool) string {
 	return "not redacted"
 }
 
-func receiptCard(receipt evidence.Receipt, scenario *evidence.Scenario, comparison *evidence.Comparison, report *compare.Report) Section {
-	parts := []Part{
-		textPart("Outcome", fmt.Sprintf("%s · %s · %s · %s", receipt.State.Kind, receipt.State.Execution, receipt.State.Comparison, receipt.Completeness)),
+func receiptCard(receipt evidence.Receipt, scenario *evidence.Scenario, comparison *evidence.Comparison, report *compare.Report, commandSummary *commandview.Presentation) Section {
+	parts := []Part{textPart("Outcome", fmt.Sprintf("%s · %s · %s · %s", receipt.State.Kind, receipt.State.Execution, receipt.State.Comparison, receipt.Completeness))}
+	if commandSummary != nil {
+		parts = append(parts, textPart("Command changes", strings.Join(commandSummary.Lines, "\n")))
+		if commandSummary.More {
+			parts = append(parts, textPart("Full command report", "Readable command witnesses are capped at 24 lines; omitted values remain in the comparison-details artifact."))
+		} else if comparison != nil && comparison.Details != nil {
+			parts = append(parts, textPart("Full command report", "Complete witnesses are in the comparison-details artifact "+shortID(comparison.Details.Content)+" under Artifacts."))
+		}
+	}
+	parts = append(parts,
 		textPart("Producer", string(receipt.State.Producer)),
 		textPart("Binding", fmt.Sprintf("base %s → candidate %s", shortID(receipt.Snapshots.Base), shortID(receipt.Snapshots.Candidate))),
 		textPart("Events", fmt.Sprintf("%s–%s", receipt.StartedAt.Format(time.RFC3339Nano), receipt.FinishedAt.Format(time.RFC3339Nano))),
 		textPart("Scope", strings.Join(receipt.Limits, "\n")),
-	}
+	)
 	if receipt.Bindings != nil {
 		parts = append(parts, textPart("Scenario", string(receipt.Bindings.Scenario)+" · input "+string(receipt.Bindings.Input)+" · driver "+string(receipt.Bindings.Driver)+" · observer "+string(receipt.Bindings.Observer)+" · rules "+string(receipt.Bindings.Rules)))
 	}
@@ -512,6 +521,25 @@ func receiptCard(receipt evidence.Receipt, scenario *evidence.Scenario, comparis
 	return cardSection(parts...)
 }
 
+func commandPresentationForReceipt(s *store.Store, receipt evidence.Receipt, scenario *evidence.Scenario, report *compare.Report) *commandview.Presentation {
+	if scenario == nil || report == nil || receipt.Bindings == nil || scenario.Author != "AFTER operator-selected command v1" || receipt.Bindings.Scenario != scenario.ID || receipt.Bindings.Input != scenario.Input {
+		return nil
+	}
+	raw, err := s.ReadBlob(scenario.Input)
+	if err != nil {
+		return nil
+	}
+	definition, err := runner.ParseCommandDefinition(raw)
+	if err != nil {
+		return nil
+	}
+	presentation, ok := commandview.Format(*report, definition)
+	if !ok {
+		return nil
+	}
+	return &presentation
+}
+
 func receiptSections(s *store.Store, receipt evidence.Receipt, comparison *evidence.Comparison, report *compare.Report, scenario *evidence.Scenario, ids []evidence.Digest) []Section {
 	artifacts, _ := artifactsSection(s, receipt.Artifacts, nil)
 	if comparison != nil && comparison.Details != nil {
@@ -523,8 +551,9 @@ func receiptSections(s *store.Store, receipt evidence.Receipt, comparison *evide
 	} else {
 		scenarioDetail = Section{Name: "Scenario", Parts: []Part{textPart("frozen scenario", "Receipt has no frozen scenario binding.")}}
 	}
+	commandSummary := commandPresentationForReceipt(s, receipt, scenario, report)
 	return []Section{
-		receiptCard(receipt, scenario, comparison, report),
+		receiptCard(receipt, scenario, comparison, report, commandSummary),
 		artifacts,
 		{Name: "Receipt", Parts: []Part{recordPart(s, "receipt", receipt.ID, "receipt")}},
 		scenarioDetail,

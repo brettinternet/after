@@ -1,0 +1,27 @@
+Comparison cccccccc · unstable · complete
+  Receipt      dddddddd
+  Snapshots    aaaaaaaa → bbbbbbbb
+  Command changes (typo) · exit_status [DIFFERENT]
+    rep 1: 2 → 0
+    rep 2: 2 → 0
+  Command changes (typo) · stdout [DIFFERENT]
+    rep 1: /error removed "invalid request"
+    rep 1: /total_cents added 0
+    rep 2: /error removed "invalid request"
+    rep 2: /total_cents added 0
+  Command changes (typo) · stderr [DIFFERENT]
+    rep 1: text before: invalid \u001b]52;c… → after: handled safely
+    rep 2: text before: invalid \u001b]52;c… → after: handled safely
+  Command changes (typo) · stderr [UNSTABLE: base repetitions]
+    rep 1→2: text: invalid \u001b]52;c… → retrying safely
+  Unaffected control (control) [EQUAL] exit_status, stdout, stderr
+  Limit        recorded command samples only
+IDs
+sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+Next
+  after inspect cccccccc
+    inspect the stored comparison

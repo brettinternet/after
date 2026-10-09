@@ -32,6 +32,8 @@ Each witness links both sample metadata and observation blobs. The detail artifa
 
 The engine recomputes repetition stability under semantic JSON rules, so key-order-only differences are not unstable. It never cherry-picks a repetition. A newly redacted detail artifact makes the persisted comparison incomparable.
 
+Readable command run/compare output and receipt cards summarize each equal case on one line and show changed exit statuses, JSON paths, and text streams from the frozen command definition. Repetition drift is labeled `UNSTABLE`. Text witnesses are decoded from the exact-byte base64 wrapper only when that stream is declared `text`; declared JSON values at a `/base64` path remain ordinary JSON. Text snippets are terminal-sanitized, clipped to 20 display columns per side, and mark invalid UTF-8 or NUL-containing binary data. The shared summary is capped at 24 lines of 76 display columns. CLI output points to `--json` for the complete report; cards retain the complete comparison-details artifact under Artifacts. These display bounds do not change stored witnesses or JSON output.
+
 ## Bounds and limits
 
 | Input or work                      |                                                                                                                                                                  Bound |

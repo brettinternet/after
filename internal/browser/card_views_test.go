@@ -1,16 +1,112 @@
 package browser
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/brettinternet/after/internal/compare"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/runner"
+	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/brettinternet/after/internal/terminal"
 )
+
+func viewCommandComparison(t *testing.T, s *store.Store, selection Selection) evidence.Digest {
+	t.Helper()
+	definition := runner.CommandDefinition{
+		Version: 1, Kind: "command", Name: "command-fixture", Platform: "linux/amd64", Image: sandbox.Image,
+		Cases: []runner.CommandCase{
+			{ID: "typo", Title: "Command changes", Argv: []string{"/work/fixture"}, Stdin: []byte{}, Environment: []string{}},
+			{ID: "control", Title: "Unaffected control", Argv: []string{"/work/fixture"}, Stdin: []byte{}, Environment: []string{}},
+		},
+		Repetitions: 2, Limits: runner.DefinitionLimits{Seconds: 30, OutputBytes: 65536, PreparationSeconds: 90},
+		Comparison: runner.CommandComparison{Stdout: "json", Stderr: "text"},
+	}
+	input := viewArtifact(t, s, definition, "command-definition")
+	scenario, err := store.Put(s, evidence.Scenario{
+		SchemaVersion: evidence.SchemaVersion, Input: input.Content, Driver: input.Content, Observer: input.Content, Rules: input.Content,
+		Boundary: "synthetic command boundary", Author: "AFTER operator-selected command v1", Limits: []string{"synthetic finite command example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := &evidence.Environment{Environment: input.Content, Toolchain: input.Content, Dependencies: input.Content, Argv: []string{"synthetic command"}}
+	receipt := evidence.Receipt{
+		RequestID: input.Content, SchemaVersion: evidence.SchemaVersion,
+		State:           evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.Observed, Applicability: evidence.Current, Execution: evidence.Completed, Comparison: evidence.Unstable, Report: evidence.NoReport},
+		Snapshots:       selection.Pair,
+		Bindings:        &evidence.Bindings{Scenario: scenario.ID, Input: input.Content, Driver: input.Content, Observer: input.Content, Rules: input.Content},
+		BaseEnvironment: env, CandidateEnvironment: env, Authorization: input.Content,
+		StartedAt: viewTime, FinishedAt: viewTime, Completeness: evidence.Complete, Artifacts: []evidence.Artifact{input}, Limits: []string{"synthetic; not a real command run"},
+	}
+	ref := func(side, caseID string, repetition int) compare.SampleRef {
+		return compare.SampleRef{Side: side, CaseID: caseID, Repetition: repetition, Metadata: input.Content, Observation: input.Content}
+	}
+	textChange := func(before, after string) compare.Change {
+		beforeRaw, _ := json.Marshal(struct {
+			Base64 string `json:"base64"`
+		}{base64.StdEncoding.EncodeToString([]byte(before))})
+		afterRaw, _ := json.Marshal(struct {
+			Base64 string `json:"base64"`
+		}{base64.StdEncoding.EncodeToString([]byte(after))})
+		return compare.Change{Path: "/base64", Kind: "changed", Before: beforeRaw, After: afterRaw}
+	}
+	witnesses := []compare.Witness{}
+	for _, caseID := range []string{"typo", "control"} {
+		for repetition := 0; repetition < 2; repetition++ {
+			for _, channel := range []string{"exit_status", "stdout", "stderr"} {
+				outcome := evidence.Equal
+				var changes []compare.Change
+				if caseID == "typo" {
+					outcome = evidence.Different
+					switch channel {
+					case "exit_status":
+						changes = []compare.Change{{Path: "", Kind: "changed", Before: json.RawMessage("2"), After: json.RawMessage("0")}}
+					case "stdout":
+						changes = []compare.Change{{Path: "/error", Kind: "removed", Before: json.RawMessage(`"invalid request"`)}, {Path: "/total_cents", Kind: "added", After: json.RawMessage("0")}}
+					case "stderr":
+						changes = []compare.Change{textChange("invalid \x1b]52;c;clipboard\a request", "handled safely")}
+					}
+				}
+				witnesses = append(witnesses, compare.Witness{Relation: "paired", Channel: channel, Before: ref("base", caseID, repetition), After: ref("candidate", caseID, repetition), Outcome: outcome, Changes: changes})
+			}
+		}
+		for _, channel := range []string{"exit_status", "stdout", "stderr"} {
+			for _, side := range []string{"base", "candidate"} {
+				outcome := evidence.Equal
+				var changes []compare.Change
+				if caseID == "typo" && channel == "stderr" && side == "base" {
+					outcome = evidence.Different
+					changes = []compare.Change{textChange("invalid \x1b]52;c;clipboard\a request", "retrying safely")}
+				}
+				witnesses = append(witnesses, compare.Witness{Relation: "repetition", Channel: channel, Before: ref(side, caseID, 0), After: ref(side, caseID, 1), Outcome: outcome, Changes: changes})
+			}
+		}
+	}
+	report := compare.Report{
+		Version: 1, Snapshots: selection.Pair, DefinitionName: definition.Name,
+		Cases: []string{"typo", "control"}, CaseTitles: []string{"Command changes", "Unaffected control"},
+		Channels: []string{"exit_status", "stdout", "stderr"}, Outcome: evidence.Unstable,
+		Artifacts: []evidence.Artifact{input}, Witnesses: witnesses, Limits: []string{"synthetic finite command comparison"},
+	}
+	receipt, err = store.Put(s, receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report.Receipt = receipt.ID
+	detail := viewArtifact(t, s, report, "comparison-details-v1")
+	comparison, err := store.Put(s, evidence.Comparison{SchemaVersion: evidence.SchemaVersion, Receipt: receipt.ID, Outcome: evidence.Unstable, Completeness: evidence.Complete, Details: &detail, Limits: report.Limits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return comparison.ID
+}
 
 func viewCardScenarios(t *testing.T) []struct {
 	name, entryName, section string
@@ -19,6 +115,7 @@ func viewCardScenarios(t *testing.T) []struct {
 	t.Helper()
 	s, base := setup(t, false)
 	comparisonID := viewComparison(t, s, base, false, evidence.Complete)
+	commandComparisonID := viewCommandComparison(t, s, base)
 	comparison, err := store.Get[evidence.Comparison](s, comparisonID)
 	if err != nil {
 		t.Fatal(err)
@@ -30,6 +127,7 @@ func viewCardScenarios(t *testing.T) []struct {
 		{"payment-case", "12h same-key retry", "Card", Selection{Project: base.Project, Pair: base.Pair, Evidence: []evidence.Digest{comparisonID}}},
 		{"receipt", "12h same-key retry", "Receipt Card", Selection{Project: base.Project, Pair: base.Pair, Evidence: []evidence.Digest{comparison.Receipt}}},
 		{"comparison", "12h same-key retry", "Receipt Card", Selection{Project: base.Project, Pair: base.Pair, Evidence: []evidence.Digest{comparisonID}}},
+		{"command", "command-fixture command", "Card", Selection{Project: base.Project, Pair: base.Pair, Evidence: []evidence.Digest{commandComparisonID}}},
 		{"pin", "", "Card", viewPaymentLoopSelection(t)},
 		{"report", "", "Card", viewReportSelection(t)},
 		{"unavailable", "", "Card", viewUnavailableCardSelection(t)},
