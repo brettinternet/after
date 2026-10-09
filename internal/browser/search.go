@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"unicode/utf8"
 
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,7 +27,7 @@ type searchReady struct {
 }
 
 func canSearch(m *Model) string {
-	switch m.screen {
+	switch keyScreen(m) {
 	case "examples", "inventory", "activity":
 		if m.data == nil {
 			return "wait for stored records to load"
@@ -103,8 +102,12 @@ func (m *Model) updateSearchKey(key tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		return m.startSearch(), true
-	case "backspace", "delete":
-		m.searchQuery = removeSearchRune(m.searchQuery)
+	case "backspace", "delete", "ctrl+h", "ctrl+w":
+		if key.String() == "ctrl+w" {
+			m.searchQuery = removeLastWord(m.searchQuery)
+		} else {
+			m.searchQuery = removeLastRune(m.searchQuery)
+		}
 		m.resetSearchResults()
 		m.searchEditing = true
 		return nil, true
@@ -138,14 +141,6 @@ func appendSearchQuery(query string, input []rune) string {
 		query += safe
 	}
 	return query
-}
-
-func removeSearchRune(query string) string {
-	if query == "" {
-		return query
-	}
-	_, size := utf8.DecodeLastRuneInString(query)
-	return query[:len(query)-size]
 }
 
 func (m *Model) startSearch() tea.Cmd {

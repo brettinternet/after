@@ -62,7 +62,10 @@ func TestContextualHintsAndGroupedHelp(t *testing.T) {
 		}
 	}
 	step(m, key("?"))
-	help := m.View()
+	if !strings.Contains(m.View(), "Capture HEAD against the saved index (--staged)") {
+		t.Fatalf("help view missing capture label:\n%s", m.View())
+	}
+	help := strings.Join(m.helpLines(), "\n")
 	for _, want := range []string{"Navigation", "Views", "Review", "Consent", "c  Capture HEAD against the saved index (--staged)", "u  Choose original-base or last-inspected comparison (confirms)", "[unavailable: no new capture is waiting]", "a  Accept a pin's current complete result (confirms)", "s  Open Activity and record this session reference"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("grouped help missing %q:\n%s", want, help)
@@ -107,7 +110,7 @@ func TestFrameTabsHeaderAndSmallTerminalRules(t *testing.T) {
 	header, headerLines := m.frameHeader()
 	header += "\n" + strings.Join(headerLines, "\n")
 	for _, want := range []string{
-		"AFTER · unsafe",
+		"AFTER   unsafe",
 		"base " + shortID(sel.Pair.Base) + " (commit ",
 		"candidate " + shortID(sel.Pair.Candidate) + " (working tree)",
 		"new capture aaaaaaaa · u",
@@ -145,12 +148,12 @@ func TestFrameTabsHeaderAndSmallTerminalRules(t *testing.T) {
 	if !strings.Contains(lines[0], "original base "+shortID(sel.Pair.Base)) || strings.Contains(lines[0], "project") || strings.Contains(lines[0], "working tree") {
 		t.Fatalf("compact header retained project/source: %q", lines[0])
 	}
-	if !strings.Contains(lines[1], "[1 Ov]") {
-		t.Fatalf("small terminal tab did not use compact active label: %q", lines[1])
+	if !strings.Contains(lines[1], "[Overview]") {
+		t.Fatalf("small terminal tab did not show the active label: %q", lines[1])
 	}
 	m.height = 11
 	lines = strings.Split(m.View(), "\n")
-	if strings.Contains(lines[1], "[1 Ov]") {
+	if strings.Contains(lines[1], "[Overview]") {
 		t.Fatalf("tab bar was not hidden below 12 rows: %q", lines[1])
 	}
 	m.height = 6
@@ -196,7 +199,7 @@ func TestNumberAndTabNavigationAndColorlessActiveTab(t *testing.T) {
 		t.Fatal("Shift+Tab did not return to Changes")
 	}
 	step(m, key("4"))
-	if m.screen != "activity" || !strings.Contains(m.View(), "[4 Activity]") {
+	if m.screen != "activity" || !strings.Contains(m.View(), "[Activity]") {
 		t.Fatal("4 did not switch to Activity", m.View())
 	}
 	step(m, tea.KeyMsg{Type: tea.KeyTab})
@@ -204,14 +207,14 @@ func TestNumberAndTabNavigationAndColorlessActiveTab(t *testing.T) {
 		t.Fatal("Tab did not cycle from Activity to Overview")
 	}
 	step(m, key("1"))
-	if m.screen != "examples" || !strings.Contains(m.View(), "[1 Overview]") {
+	if m.screen != "examples" || !strings.Contains(m.View(), "[Overview]") {
 		t.Fatal("number navigation or no-color active tab marker failed", m.View())
 	}
 	m.theme.Color = true
 	view := m.View()
-	plain := regexp.MustCompile("\\x1b\\[(?:0|32|1;35|1;33|1;31|34|36|2|1|7)m").ReplaceAllString(view, "")
-	if !strings.Contains(view, "\x1b[7m[1 Overview]") || strings.Contains(plain, "\x1b[") {
-		t.Fatalf("color active-tab reverse style missing or unexpected escape: %q", view)
+	plain := regexp.MustCompile("\\x1b\\[(?:0|1|2|7|1;7|31|32|34|36|90|1;31|1;32|1;33|1;35|1;36|48;5;(?:22|52|237)|1;48;5;(?:28|124))m").ReplaceAllString(view, "")
+	if !strings.Contains(view, "\x1b[1mOverview\x1b[0m") || strings.Contains(view, "[Overview]") || strings.Contains(plain, "\x1b[") {
+		t.Fatalf("color active-tab style missing or unexpected escape: %q", view)
 	}
 	for _, line := range strings.Split(view, "\n") {
 		if strings.Contains(line, "\x1b]52;") || strings.Contains(line, "\a") {

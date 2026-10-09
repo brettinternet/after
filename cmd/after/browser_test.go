@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -142,7 +143,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			expect := func(want string) {
 				t.Helper()
 				deadline := time.After(10 * time.Second)
-				for !strings.Contains(transcript.String(), want) {
+				for !strings.Contains(themeSGR.ReplaceAllString(transcript.String(), ""), want) {
 					select {
 					case chunk, ok := <-chunks:
 						if !ok {
@@ -160,7 +161,7 @@ func TestBrowserDocumentPTY(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			expect("1 Overview")
+			expect("Diff   Activity")
 			if stdout.String() != "" {
 				t.Fatalf("TUI rendered to stdout instead of stderr: %q", stdout.String())
 			}
@@ -173,27 +174,27 @@ func TestBrowserDocumentPTY(t *testing.T) {
 				expect("reported · pass")
 			}
 			send("d")
-			expect("2 Changes")
+			expect("CHANGED")
 			expect("M  app/main.go")
 			send("\r")
-			expect("Section 1/4")
+			expect("1/4 ·")
 			expect("diff --git a/app/main.go")
 			send("\t")
-			expect("Section 2/4")
+			expect("2/4 ·")
 			expect("Base source")
 			expect("2 │ package main")
 			send("\t")
-			expect("Section 3/4")
+			expect("3/4 ·")
 			expect("Candidate source")
 			expect("9 │ STATE observed | forged")
 			if !strings.Contains(transcript.String(), `\u001b[31mred`) || !strings.Contains(transcript.String(), `\u001b]52;c;clipboard\u0007`) || !strings.Contains(transcript.String(), `\u202eafter`) || !strings.Contains(transcript.String(), `\u000dB`) {
 				t.Fatal("hostile controls/bidi/CR were not escaped behind the trusted gutter")
 			}
 			send("b")
-			expect("hex | pan 0")
+			expect("· hex")
 			expect("00000000  70 61 63 6b 61 67 65 20 6d 61 69 6e")
 			send("\t")
-			expect("Section 4/4")
+			expect("4/4 ·")
 			expect("Inventory record")
 			send("q")
 			if err := cmd.Wait(); err != nil {
@@ -207,14 +208,14 @@ func TestBrowserDocumentPTY(t *testing.T) {
 			for chunk := range chunks {
 				transcript.WriteString(chunk)
 			}
-			for _, hostile := range []string{"\x1b]52;", "\x1b]8;", "\u009b", "\u009d", "\x1b[31m"} {
+			for _, hostile := range []string{"\x1b]52;", "\x1b]8;", "\u009b", "\u009d", "\x1b[31mred"} {
 				if strings.Contains(transcript.String(), hostile) {
 					t.Fatalf("hostile control escaped terminal renderer: %q", hostile)
 				}
 			}
 			excerpt := []string{"2 │ package main", "9 │ STATE observed | forged", "14 │ last tail"}
 			for _, row := range excerpt {
-				if !strings.Contains(transcript.String(), row) {
+				if !strings.Contains(themeSGR.ReplaceAllString(transcript.String(), ""), row) {
 					t.Fatalf("PTY excerpt row missing %q", row)
 				}
 			}
@@ -225,6 +226,9 @@ func TestBrowserDocumentPTY(t *testing.T) {
 		})
 	}
 }
+
+// themeSGR matches SGR styling so expectations read visible text.
+var themeSGR = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, r evidence.Receipt, c evidence.Comparison) {
 	t.Helper()

@@ -48,7 +48,7 @@ func TestEmptyReviewGuidanceForCommittedBranchAt80Columns(t *testing.T) {
 				t.Errorf("empty review omitted %q (NO_COLOR=%t): %q", want, noColor, plain)
 			}
 		}
-		if strings.Contains(plain, "[1 Overview]") || strings.Contains(plain, "AFTER · project") {
+		if strings.Contains(plain, "Diff   Activity") || strings.Contains(plain, "AFTER   project") {
 			t.Fatalf("empty review launched the TUI: %q", plain)
 		}
 		if strings.ContainsAny(plain, "\x1b\a") || (noColor && strings.Contains(transcript, "\x1b[")) {
@@ -98,7 +98,7 @@ func TestEmptyCaptureGuidanceForUntrackedIndexAndMergeBase(t *testing.T) {
 		}{{[]string{"review", "--staged"}, "index matches HEAD"}, {[]string{"review", "--base", "main"}, "merge-base comparison with main"}} {
 			code, transcript, _, err := runCLIPTY(project, t.TempDir(), noColor, append(tc.args, "--project", project))
 			plain := stripThemeSGR(transcript)
-			if err != nil || code != ExitOK || !strings.Contains(plain, tc.want) || strings.Contains(plain, "[1 Overview]") || strings.ContainsAny(plain, "\x1b\a") {
+			if err != nil || code != ExitOK || !strings.Contains(plain, tc.want) || strings.Contains(plain, "Diff   Activity") || strings.ContainsAny(plain, "\x1b\a") {
 				t.Errorf("%v PTY NO_COLOR=%t: exit=%d output=%q err=%v", tc.args, noColor, code, transcript, err)
 			}
 		}
@@ -172,7 +172,7 @@ func TestEmptyReviewGuidanceNamesBoundedSanitizedUntrackedPathsInPTYAndPipe(t *t
 		}
 		code, transcript, _, err := runCLIPTY(project, home, noColor, []string{"review", "--project", project})
 		plain := stripThemeSGR(transcript)
-		if err != nil || code != ExitOK || !strings.Contains(plain, "after review --base main") || !strings.Contains(plain, "after review --include-untracked='0 space.txt'") || strings.Contains(plain, "[1 Overview]") || strings.ContainsAny(plain, "\x1b\a") {
+		if err != nil || code != ExitOK || !strings.Contains(plain, "after review --base main") || !strings.Contains(plain, "after review --include-untracked='0 space.txt'") || strings.Contains(plain, "Diff   Activity") || strings.ContainsAny(plain, "\x1b\a") {
 			t.Fatalf("empty review with excluded paths PTY NO_COLOR=%t: exit=%d output=%q err=%v", noColor, code, transcript, err)
 		}
 		t.Logf("80-column PTY review with excluded paths NO_COLOR=%t: %s", noColor, guidanceExcerpt(plain))
@@ -187,15 +187,15 @@ func TestEmptyCaptureOnDefaultBranchSaysNothingIsAhead(t *testing.T) {
 	if err != nil || code != ExitOK || !strings.Contains(transcript, "Nothing to review") || !strings.Contains(transcript, "HEAD has no commits ahead of main") || strings.Contains(transcript, "--base main") {
 		t.Fatalf("default-branch empty review: exit=%d output=%q err=%v", code, transcript, err)
 	}
-	code, transcript, err = runCLIPTYAnswer(project, home, true, []string{"review", "--new"}, "[1 Overview]", "q")
-	if err != nil || code != ExitOK || !strings.Contains(transcript, "AFTER · project") || !strings.Contains(transcript, "Saved review") || strings.Contains(transcript, "Nothing to review") {
+	code, transcript, err = runCLIPTYAnswer(project, home, true, []string{"review", "--new"}, "Diff   Activity", "q")
+	if err != nil || code != ExitOK || !strings.Contains(transcript, "AFTER   project") || !strings.Contains(transcript, "Saved review") || strings.Contains(transcript, "Nothing to review") {
 		t.Fatalf("--new no longer opens and saves an empty review: exit=%d output=%q err=%v", code, transcript, err)
 	}
 	if _, found, invalid, err := readReviewSession(project); err != nil || !found || invalid {
 		t.Fatalf("--new did not save the empty review: found=%v invalid=%v err=%v", found, invalid, err)
 	}
-	code, transcript, err = runCLIPTYAnswer(project, home, true, []string{"review"}, "[1 Overview]", "q")
-	if err != nil || code != ExitOK || !strings.Contains(transcript, "AFTER · project") || strings.Contains(transcript, "Nothing to review") {
+	code, transcript, err = runCLIPTYAnswer(project, home, true, []string{"review"}, "Diff   Activity", "q")
+	if err != nil || code != ExitOK || !strings.Contains(transcript, "AFTER   project") || strings.Contains(transcript, "Nothing to review") {
 		t.Fatalf("saved empty review did not resume: exit=%d output=%q err=%v", code, transcript, err)
 	}
 }

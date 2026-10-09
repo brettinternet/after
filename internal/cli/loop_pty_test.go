@@ -102,8 +102,9 @@ func (p *loopPTY) expect(want string) {
 	p.t.Helper()
 	deadline := time.After(4 * time.Minute)
 	for {
-		if index := strings.Index(p.unread.String(), want); index >= 0 {
-			remaining := p.unread.String()[index+len(want):]
+		visible := stripThemeSGR(p.unread.String())
+		if index := strings.Index(visible, want); index >= 0 {
+			remaining := visible[index+len(want):]
 			p.unread.Reset()
 			p.unread.WriteString(remaining)
 			return
@@ -225,7 +226,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			var allTranscript strings.Builder
 
 			p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			p.expect("NOT CHECKED — no evidence was loaded")
 			firstSelection, _ := p.finish()
 			allTranscript.WriteString(p.transcript.String())
@@ -246,7 +247,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 
 			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(2) }\n")
 			p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			// The transient loaded status can be replaced before the next frame.
 			// The pending-capture header survives either completion order.
 			p.expect("new capture ")
@@ -275,7 +276,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			gitRun(t, project, "add", "app/main.go")
 			writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(3) }\n")
 			p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, variant.width, variant.height)
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			p.expect("last inspected " + shortID(resumed.Pair.Base))
 			p.expect("candidate " + shortID(resumed.Pair.Candidate))
 			resumedAgain, _ := p.finish()
@@ -285,7 +286,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 			}
 			p = startLoopPTYSize(t, []string{"review", "--staged", "--project", project, "--json"}, variant.width, variant.height)
 			p.expect("Replaced saved review ")
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			// The initial header renders before stored records enable capture.
 			p.expect("NOT CHECKED — no evidence was loaded")
 			p.send("c")
@@ -303,7 +304,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 				t.Fatal(err)
 			}
 			p = startLoopPTYSize(t, []string{"review", string(first.Pair.Candidate), "--project", project, "--json"}, variant.width, variant.height)
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			explicitSelection, _ := p.finish()
 			allTranscript.WriteString(p.transcript.String())
 			if explicitSelection.Pair != first.Pair {
@@ -319,7 +320,7 @@ func TestReviewLaunchResumePTY(t *testing.T) {
 				if regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(transcript) {
 					t.Fatal("NO_COLOR PTY emitted SGR")
 				}
-			} else if !strings.Contains(transcript, "\x1b[7m[1 Overview]") {
+			} else if !strings.Contains(transcript, "\x1b[1mOverview\x1b[0m") {
 				t.Fatal("color PTY did not style the active tab")
 			}
 			t.Logf("PTY %dx%d NO_COLOR=%t excerpts: NOT CHECKED — no evidence was loaded · New capture %s — u reviews it · Snapshot selected; prior evidence remains history · c: Capture running; selected pair unchanged · No new capture; the selected pair is unchanged · Saved review %s → %s · after review resumes it", variant.width, variant.height, variant.noColor, shortID(resumed.Pair.Candidate), shortID(first.Pair.Base), shortID(first.Pair.Candidate))
@@ -406,7 +407,7 @@ func TestReviewInvalidSessionIsReplacedPTY(t *testing.T) {
 	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(1) }\n")
 	t.Setenv("TERM", "xterm-256color")
 	p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
-	p.expect("AFTER · project")
+	p.expect("AFTER   project")
 	p.finish()
 	statePath := filepath.Join(project, ".after", "session.json")
 	if err := os.Remove(statePath); err != nil {
@@ -417,7 +418,7 @@ func TestReviewInvalidSessionIsReplacedPTY(t *testing.T) {
 	}
 	p = startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
 	p.expect("saved review is invalid; it will be replaced at the next save")
-	p.expect("AFTER · project")
+	p.expect("AFTER   project")
 	selection, _ := p.finish()
 	raw, err := os.ReadFile(statePath)
 	if err != nil {
@@ -440,7 +441,7 @@ func TestExplicitOlderPinRevisionPTY(t *testing.T) {
 	writeProjectFile(t, project, "app/main.go", "package main\nfunc main() { println(1) }\n")
 	t.Setenv("TERM", "xterm-256color")
 	p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 120, 40)
-	p.expect("AFTER · project")
+	p.expect("AFTER   project")
 	pair, _ := p.finish()
 	statePath := filepath.Join(project, ".after", "session.json")
 	before, err := os.ReadFile(statePath)
@@ -477,11 +478,11 @@ func TestExplicitOlderPinRevisionPTY(t *testing.T) {
 	p = startLoopPTYSize(t, []string{"review", string(older.ID), "--project", project, "--json"}, 120, 40)
 	p.expect("older pin revision")
 	p.send("\r")
-	p.expect("Section 1/5")
+	p.expect("1/5 ·")
 	for range 4 {
 		p.send("\t")
 	}
-	p.expect("Section 5/5")
+	p.expect("5/5 ·")
 	p.expect(string(older.ID))
 	selection, _ := p.finish()
 	if selection.Pair != pair.Pair {
@@ -521,7 +522,7 @@ func TestReviewConsentPTY(t *testing.T) {
 				t.Setenv("NO_COLOR", "")
 			}
 			p := startLoopPTYSize(t, args, variant.width, variant.height)
-			p.expect("AFTER · payment")
+			p.expect("AFTER   payment")
 			p.send("r")
 			p.expect("Run this exact plan?")
 			p.expect("Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1")
@@ -533,10 +534,10 @@ func TestReviewConsentPTY(t *testing.T) {
 			p.expect("version")
 			transcript := p.transcript.String()
 			if variant.noColor {
-				if strings.Contains(transcript, "\x1b[7m[Summary]") {
-					t.Fatal("NO_COLOR PTY emitted theme reverse video")
+				if !strings.Contains(transcript, "[Summary]") || strings.Contains(transcript, "\x1b[1mSummary") {
+					t.Fatal("NO_COLOR PTY did not bracket the active Summary section")
 				}
-			} else if !strings.Contains(transcript, "\x1b[7m[Summary]") {
+			} else if !strings.Contains(transcript, "\x1b[1mSummary\x1b[0m") {
 				t.Fatal("color PTY did not style the active Summary section")
 			}
 			_, results := p.finish()
@@ -616,7 +617,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 			if regexp.MustCompile(`\x1b\[[0-9;]*m`).MatchString(transcript) {
 				t.Fatal("NO_COLOR mutation prompt emitted SGR")
 			}
-		} else if !strings.Contains(transcript, "\x1b[7m[1 Overview]") {
+		} else if !strings.Contains(transcript, "\x1b[1mOverview\x1b[0m") {
 			t.Fatal("color mutation prompt did not retain the active tab style")
 		}
 	}
@@ -624,7 +625,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	for index, variant := range variants {
 		setTerminal(variant)
 		p := startLoopPTYSize(t, args(sel), variant.width, variant.height)
-		p.expect("AFTER · payment")
+		p.expect("AFTER   payment")
 		p.expect("12h same-key retry")
 		p.send("p")
 		p.expect("Pin this finite expectation?")
@@ -647,11 +648,11 @@ func TestReviewLoopPTYProof(t *testing.T) {
 		p.send("p")
 		p.expect("Matching pin already exists: " + shortID(duplicateTargetID))
 		p.send("d")
-		p.expect("2 Changes")
+		p.expect("CHANGED")
 		p.send("\t")
-		p.expect("captured raw diff")
+		p.expect("diff --git")
 		p.send("\x1b")
-		p.expect("1 Overview")
+		p.expect("Diff   Activity")
 		p.finish()
 		verifyPromptTerminal(p, variant)
 	}
@@ -681,7 +682,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	for index, variant := range variants {
 		setTerminal(variant)
 		p = startLoopPTYSize(t, args(sel), variant.width, variant.height)
-		p.expect("AFTER · payment")
+		p.expect("AFTER   payment")
 		p.expect("Current complete result attached")
 		p.send("c")
 		p.expect("New capture")
@@ -734,7 +735,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.expect("Running the approved plan")
 	responsive := time.Now()
 	p.send("?")
-	p.expect("Help")
+	p.expect("Keys")
 	latency := time.Since(responsive)
 	t.Logf("real authorized fixture active: PTY help input-to-render=%s (warm UI, includes scheduling)", latency)
 	if latency > time.Second {
@@ -743,7 +744,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	p.send("\x1b")
 	p.expect("Measured result attached")
 	p.send("?")
-	p.expect("Help")
+	p.expect("Keys")
 	p.send("\x1b")
 	p.expect("NEEDS ANOTHER LOOK 2")
 	p.expect("[REOPENED]")
@@ -865,7 +866,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	}
 	writeProjectFile(t, project, "app/config.go", followUpSource)
 	p = startLoopPTYSize(t, args(sel), 120, 40)
-	p.expect("AFTER · payment")
+	p.expect("AFTER   payment")
 	p.expect("original base")
 	p.expect(shortID(sel.Pair.Base))
 	p.expect("[REOPENED]")
@@ -889,7 +890,7 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	// Reopen the pin's recorded mode, not a new explicit-pair review whose
 	// supplied base intentionally becomes its original baseline.
 	p = startLoopPTYSize(t, []string{"review", string(pinID), "--project", project, "--config", cfg, "--json"}, 120, 40)
-	p.expect("AFTER · payment")
+	p.expect("AFTER   payment")
 	p.expect("last inspected " + shortID(sel.Pair.Base))
 	p.expect("[REOPENED]")
 	p.send("r")

@@ -34,6 +34,8 @@ const (
 	formatObservation
 	formatSample
 	formatComparison
+	// formatPatch styles unified-diff lines like Diff; bytes are unchanged.
+	formatPatch
 )
 
 type Selection struct {
@@ -228,7 +230,7 @@ func Load(ctx context.Context, selected Selection) (*Data, error) {
 			diffOrigin = d.Diff.Origin
 		}
 		record := inventoryRecord{Path: item.Path, Change: item.Change, PotentialOracle: item.PotentialOracle, Binary: item.Binary, BaseMode: baseMode, CandidateMode: candidateMode, DiffOrigin: diffOrigin, Added: added, Deleted: deleted, Limits: append([]string(nil), item.Limits...)}
-		sections := []Section{{Name: "Diff", Content: pathDiff(d, item.Path)}}
+		sections := []Section{{Name: "Diff", Content: pathDiff(d, item.Path), format: formatPatch}}
 		sections = append(sections, sourceSection("Base source", item.Path, item.Base, item.Change, true, item.Limits))
 		sections = append(sections, sourceSection("Candidate source", item.Path, item.Candidate, item.Change, false, item.Limits))
 		sections = append(sections, document("Inventory record", record))
@@ -583,8 +585,11 @@ func readSectionDocument(ctx context.Context, project string, section Section, w
 		if title == "" {
 			title = section.Name
 		}
+		if display.Len() > 0 {
+			display.WriteByte('\n') // breathing room between parts; display only
+		}
 		result.dividers = append(result.dividers, strings.Count(display.String(), "\n"))
-		fmt.Fprintf(&display, "── %s · %d B ──\n", title, len(raw))
+		fmt.Fprintf(&display, "── %s ──\n", title)
 		var shown []byte
 		if part.columns != nil {
 			shown = renderCardColumns(*part.columns, max(width-6, 1))

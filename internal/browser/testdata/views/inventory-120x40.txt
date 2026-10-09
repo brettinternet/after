@@ -1,13 +1,40 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
-1 Overview   [2 Changes 6]   3 Diff   4 Activity
-6 paths · 1 indexed hunks, all unclassified · hunk index incomplete
-CHANGED 2                                              │ SELECTED PATH
-> M  app/config.go  +1 · −4                            │ PATH app/config.go
-  M  binary  binary                                    │ CHANGE modified
-UNKNOWN — not fully captured 4                         │ LINES +1 −4
-  ?  app/main.go  incomplete capture; equal stored co… │ diff --git a/app/config.go b/app/config.go
-  ?  go.mod  incomplete capture; equal stored content… │ index 41e6150..bb43ab7 100644
-  ?  unknown  excluded: untracked; not selected        │ --- a/app/config.go
-  ?  unsupported  unsupported: symlink or symlink par… │ +++ b/app/config.go
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 3726afba (working tree)
+  Overview   [Changes 6]   Diff   Activity
+  ───────────━━━━━━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────
 
-q quit · ? help · Esc back · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity
+  6 paths · 1 indexed hunks, all unclassified · hunk index incomplete
+
+    CHANGED  2                                         │ M  app/config.go
+  > M  app/config.go  +1 · −4                          │ modified  +1  −4
+    M  binary  binary                                  │ 
+                                                       │ diff --git a/app/config.go b/app/config.go
+    UNKNOWN  4  not fully captured                     │ index 41e6150..bb43ab7 100644
+    ?  app/main.go  incomplete capture; equal stored … │ --- a/app/config.go
+    ?  go.mod  incomplete capture; equal stored conte… │ +++ b/app/config.go
+    ?  unknown  excluded: untracked; not selected      │ @@ -1,5 +1,2 @@
+    ?  unsupported  unsupported: symlink or symlink p… │  package main
+                                                       │ -                                                            
+                                                       │ -const retentionSeconds int64 = 24 * 60 * 60                 
+                                                       │ -const deduplicate = true                                    
+                                                       │ -const printedCount = "1"                                    
+                                                       │ +const retentionSeconds = 300                                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Enter opens this path · 3 shows the whole diff                                                                ? help

@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/terminal"
+	"github.com/rivo/uniseg"
 )
 
 type keyAction uint8
@@ -81,7 +83,7 @@ type keyBinding struct {
 var keyMap = []keyBinding{
 	{keys: []string{"q", "ctrl+c"}, hint: "q quit", label: "Quit (q confirms during a run; Ctrl-C quits now)", group: "Session", action: keyQuit, contexts: allKeyContexts, priority: 0},
 	{keys: []string{"?"}, hint: "? help", label: "Open grouped key help", group: "Session", action: keyHelp, contexts: allKeyContexts, priority: 1},
-	{keys: []string{"esc"}, hint: "Esc back", label: "Return to the previous view", group: "Navigation", action: keyBack, contexts: allKeyContexts, priority: 2, disabled: canGoBack},
+	{keys: []string{"esc", "ctrl+g"}, hint: "Esc back", label: "Return to the previous view", group: "Navigation", action: keyBack, contexts: allKeyContexts, priority: 2, disabled: canGoBack},
 	{keys: []string{"/"}, hint: "/ search", label: "Search displayed text", group: "Search", action: keySearch, contexts: searchKeyContexts, priority: 3, disabled: canSearch},
 	{keys: []string{"n"}, hint: "n next match", label: "Go to the next search match", group: "Search", action: keyNextMatch, contexts: searchKeyContexts, priority: 4, disabled: canSearchNext},
 	{keys: []string{"N"}, hint: "N previous match", label: "Go to the previous search match", group: "Search", action: keyPreviousMatch, contexts: searchKeyContexts, priority: 4, disabled: canSearchNext},
@@ -95,15 +97,19 @@ var keyMap = []keyBinding{
 	{keys: []string{"["}, hint: "[ previous file", label: "Go to the previous captured file", group: "Diff", action: keyPreviousFile, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateFiles},
 	{keys: []string{"}"}, hint: "} next hunk", label: "Go to the next indexed hunk", group: "Diff", action: keyNextHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
 	{keys: []string{"{"}, hint: "{ previous hunk", label: "Go to the previous indexed hunk", group: "Diff", action: keyPreviousHunk, contexts: []keyContext{contextDiff}, priority: 4, disabled: canNavigateHunks},
-	{keys: []string{"j", "down"}, hint: "↓/j down", label: "Move down or scroll", group: "Navigation", action: keyDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
-	{keys: []string{"k", "up"}, hint: "↑/k up", label: "Move up or scroll", group: "Navigation", action: keyUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
-	{keys: []string{"pgdown"}, hint: "PgDn page", label: "Move down one page", group: "Navigation", action: keyPageDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
-	{keys: []string{"pgup"}, hint: "PgUp page", label: "Move up one page", group: "Navigation", action: keyPageUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
-	{keys: []string{"home", "g"}, hint: "Home/g start", label: "Move to the beginning", group: "Navigation", action: keyStart, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
-	{keys: []string{"end", "G"}, hint: "End/G end", label: "Move to the end", group: "Navigation", action: keyEnd, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
+	{keys: []string{"j", "down", "ctrl+n"}, hint: "↓/j down", label: "Move down or scroll", group: "Navigation", action: keyDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
+	{keys: []string{"k", "up", "ctrl+p"}, hint: "↑/k up", label: "Move up or scroll", group: "Navigation", action: keyUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 4},
+	{keys: []string{"pgdown", "ctrl+d", "ctrl+f", "ctrl+v"}, hint: "PgDn page", label: "Move down one page", group: "Navigation", action: keyPageDown, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
+	{keys: []string{"pgup", "ctrl+u", "ctrl+b", "alt+v"}, hint: "PgUp page", label: "Move up one page", group: "Navigation", action: keyPageUp, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 5},
+	{keys: []string{"home", "g", "alt+<"}, hint: "Home/g start", label: "Move to the beginning", group: "Navigation", action: keyStart, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
+	{keys: []string{"end", "G", "alt+>"}, hint: "End/G end", label: "Move to the end", group: "Navigation", action: keyEnd, contexts: []keyContext{contextOverview, contextChanges, contextActivity, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 6},
 	{keys: []string{"enter"}, hint: "Enter open", label: "Inspect the selected row", group: "Navigation", action: keyEnter, contexts: listKeyContexts, priority: 2, disabled: canOpen},
-	{keys: []string{"h", "left"}, hint: "←/h pan", label: "Pan left", group: "Documents", action: keyPanLeft, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
-	{keys: []string{"l", "right"}, hint: "→/l pan", label: "Pan right", group: "Documents", action: keyPanRight, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
+	{keys: []string{"l"}, hint: "l open", label: "Inspect the selected row", group: "Navigation", action: keyEnter, contexts: listKeyContexts, priority: 7, disabled: canOpen},
+	{keys: []string{"h"}, hint: "h back", label: "Return to the previous view", group: "Navigation", action: keyBack, contexts: []keyContext{contextChanges, contextActivity}, priority: 7, disabled: canGoBack},
+	{keys: []string{"left"}, hint: "← pan", label: "Pan left", group: "Documents", action: keyPanLeft, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
+	{keys: []string{"right"}, hint: "→ pan", label: "Pan right", group: "Documents", action: keyPanRight, contexts: []keyContext{contextOverview, contextChanges, contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
+	{keys: []string{"h"}, hint: "h pan", label: "Pan left", group: "Documents", action: keyPanLeft, contexts: []keyContext{contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
+	{keys: []string{"l"}, hint: "l pan", label: "Pan right", group: "Documents", action: keyPanRight, contexts: []keyContext{contextInspector, contextDiff, contextPlan, contextHelp}, priority: 7, disabled: canPan},
 	{keys: []string{"b"}, hint: "b bytes", label: "Toggle exact-byte hex view", group: "Documents", action: keyHex, contexts: []keyContext{contextDiff, contextInspector, contextPlan}, priority: 7, disabled: canHex},
 	{keys: []string{"d"}, hint: "d Changes", label: "Open the complete change inventory", group: "Views", action: keyChanges, contexts: topKeyContexts, priority: 4, disabled: needsData},
 	{keys: []string{"c"}, hint: "c capture", label: "Capture the working tree in the background", group: "Review", action: keyCapture, contexts: browseKeyContexts, priority: 8, disabled: canCapture},
@@ -488,30 +494,113 @@ func (m *Model) keyHints() string {
 	return strings.Join(parts, " · ")
 }
 
-func (m *Model) helpLines() []string {
-	lines := []string{}
+// helpRow is one help line: a group heading when keys is empty.
+type helpRow struct {
+	group, keys, label, reason string
+}
+
+// keyName is the display spelling of a dispatch key.
+func keyName(key string) string {
+	names := map[string]string{
+		"esc": "Esc", "enter": "Enter", "tab": "Tab", "shift+tab": "Shift-Tab", "down": "↓", "up": "↑",
+		"left": "←", "right": "→", "pgdown": "PgDn", "pgup": "PgUp", "home": "Home", "end": "End",
+	}
+	if name, ok := names[key]; ok {
+		return name
+	}
+	if rest, ok := strings.CutPrefix(key, "ctrl+"); ok {
+		return "Ctrl-" + strings.ToUpper(rest)
+	}
+	if rest, ok := strings.CutPrefix(key, "alt+"); ok {
+		return "Alt-" + rest
+	}
+	return key
+}
+
+// helpRows groups every binding in key-map order. Bindings that share a
+// group and label (one action under several contexts) merge into one row.
+func (m *Model) helpRows() []helpRow {
 	groups := []string{}
-	byGroup := make(map[string][]keyBinding)
+	byGroup := make(map[string][]helpRow)
 	for _, binding := range keyMap {
 		if _, ok := byGroup[binding.group]; !ok {
 			groups = append(groups, binding.group)
 		}
-		byGroup[binding.group] = append(byGroup[binding.group], binding)
+		label := binding.label
+		if binding.action == keyCapture {
+			label = m.captureHelpLabel()
+		}
+		names := make([]string, len(binding.keys))
+		for index, key := range binding.keys {
+			names[index] = keyName(key)
+		}
+		reason := m.keyReason(binding, true)
+		rows := byGroup[binding.group]
+		merged := false
+		for index := range rows {
+			if rows[index].label == label {
+				rows[index].keys += " " + strings.Join(names, " ")
+				if reason == "" {
+					rows[index].reason = ""
+				}
+				merged = true
+			}
+		}
+		if !merged {
+			rows = append(rows, helpRow{group: binding.group, keys: strings.Join(names, " "), label: label, reason: reason})
+		}
+		byGroup[binding.group] = rows
 	}
-	for _, group := range groups {
-		lines = append(lines, group)
-		for _, binding := range byGroup[group] {
-			reason := m.keyReason(binding, true)
-			label := binding.label
-			if binding.action == keyCapture {
-				label = m.captureHelpLabel()
-			}
-			line := "  " + strings.Join(binding.keys, "/") + "  " + label
-			if reason != "" {
-				line += "  [unavailable: " + reason + "]"
-			}
-			lines = append(lines, line)
+	out := []helpRow{}
+	for index, group := range groups {
+		if index > 0 {
+			out = append(out, helpRow{})
+		}
+		out = append(out, helpRow{group: group})
+		out = append(out, byGroup[group]...)
+	}
+	return out
+}
+
+func (m *Model) helpLines() []string {
+	rows := m.helpRows()
+	lines := make([]string, len(rows))
+	for index, row := range rows {
+		switch {
+		case row.keys == "":
+			lines[index] = row.group
+		case row.reason != "":
+			lines[index] = "  " + row.keys + "  " + row.label + "  [unavailable: " + row.reason + "]"
+		default:
+			lines[index] = "  " + row.keys + "  " + row.label
 		}
 	}
 	return lines
+}
+
+// helpView styles helpRows: group headings strong, keys accented in an
+// aligned column, and unavailable rows muted with their reason.
+func (m *Model) helpView(width int) []string {
+	rows := m.helpRows()
+	keyWidth := 0
+	for _, row := range rows {
+		keyWidth = max(keyWidth, uniseg.StringWidth(row.keys))
+	}
+	keyWidth = min(keyWidth, max(width/3, 8))
+	top := min(m.top, max(len(rows)-1, 0))
+	out := []string{}
+	for _, row := range rows[top:min(top+m.bodyRows(), len(rows))] {
+		if row.keys == "" {
+			out = append(out, m.theme.Render(row.group, width, terminal.Strong, false))
+			continue
+		}
+		keys := terminal.Line(row.keys, keyWidth)
+		keys += strings.Repeat(" ", keyWidth-uniseg.StringWidth(keys))
+		keyStyle, labelStyle, reason := terminal.Accent, terminal.Plain, ""
+		if row.reason != "" {
+			keyStyle, labelStyle, reason = terminal.Muted, terminal.Muted, "  unavailable: "+row.reason
+		}
+		out = append(out, m.segments(width, segment{"  ", terminal.Plain}, segment{keys, keyStyle}, segment{"  ", terminal.Plain}, segment{row.label, labelStyle}, segment{reason, terminal.Muted}))
+	}
+	return out
 }

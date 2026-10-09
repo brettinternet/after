@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/brettinternet/after/internal/evidence"
@@ -145,12 +146,16 @@ func appendPromptReason(reason, input string) string {
 	return reason
 }
 
-func removeLastReasonRune(reason string) string {
-	if reason == "" {
-		return ""
-	}
-	_, size := utf8.DecodeLastRuneInString(reason)
-	return reason[:len(reason)-size]
+// removeLastRune and removeLastWord edit single-line text fields
+// (Backspace/Ctrl-H and Ctrl-W).
+func removeLastRune(text string) string {
+	_, size := utf8.DecodeLastRuneInString(text)
+	return text[:len(text)-size]
+}
+
+func removeLastWord(text string) string {
+	text = strings.TrimRightFunc(text, unicode.IsSpace)
+	return strings.TrimRightFunc(text, func(r rune) bool { return !unicode.IsSpace(r) })
 }
 
 func replacePinRevision(ids []evidence.Digest, old, next evidence.Digest) []evidence.Digest {
@@ -202,8 +207,11 @@ func (m *Model) updatePromptKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.prompt = nil
 		m.screen = prompt.returnTo
 		return m, m.confirmMutation(*prompt)
-	case "backspace", "delete":
-		prompt.reason = removeLastReasonRune(prompt.reason)
+	case "backspace", "delete", "ctrl+h":
+		prompt.reason = removeLastRune(prompt.reason)
+		return m, nil
+	case "ctrl+w":
+		prompt.reason = removeLastWord(prompt.reason)
 		return m, nil
 	case "ctrl+u":
 		prompt.reason = ""

@@ -1,9 +1,40 @@
-AFTER · 004 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
-Overview › sha256:0000000000000000000000000000000000000000000000000000000000000000                         [UNAVAILABLE]
-Section 1/2 | 154 stored bytes | text | pan 0
-data | Card
-── Limitation · 154 B ──
-2 │ stored record sha256:0000000000000000000000000000000000000000000000000000000000000000: Raw content could not be 
-3 │ read safely; raw inventory remains usable.
+   AFTER   004   original base 2d13fdbf (commit 4117af3)  →  candidate 3726afba (working tree)
+  Overview  ›  sha256:0000000000000000000000000000000000000000000000000000000000000000                   [UNAVAILABLE]
+  [Card]   IDs                                                                                             1/2 · 154 B
+  ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page
+  ── Limitation ──
+  │ stored record sha256:0000000000000000000000000000000000000000000000000000000000000000: Raw content could not 
+  │ be read safely; raw inventory remains usable.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Tab shows the next section · Esc goes back                                                                    ? help

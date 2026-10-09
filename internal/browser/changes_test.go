@@ -2,6 +2,7 @@ package browser
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,7 +150,7 @@ func TestChangesGroupsFlagsCountsSectionsAndPreview(t *testing.T) {
 	m.theme.Color = false
 	m.inventory = len(d.Inventory) - 1
 	view := m.View()
-	for _, expected := range []string{"POTENTIAL ORACLES", "CHANGED", "UNKNOWN — not fully captured", "SELECTED PATH", "unsupported:"} {
+	for _, expected := range []string{"POTENTIAL ORACLES", "CHANGED", "UNKNOWN", "not fully captured", "unsupported:"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("Changes view missing %q:\n%s", expected, view)
 		}
@@ -194,7 +195,7 @@ func TestChangesDiffNavigationAndCapturedBytes(t *testing.T) {
 	if !bytes.Equal(m.doc.RawBytes(), d.Diff.Raw) {
 		t.Fatal("gutter projection changed captured patch bytes")
 	}
-	if !strings.Contains(m.View(), "captured patch") || !strings.Contains(m.View(), "file 1 of") {
+	if !strings.Contains(m.View(), "captured patch") || !strings.Contains(m.View(), fmt.Sprintf(" 1/%d ──", len(d.Diff.Files))) {
 		t.Fatal("sticky origin/file header missing", m.View())
 	}
 	beforeFile := diffPosition(d.Diff.Rows, m.top)
@@ -223,11 +224,11 @@ func TestChangesDiffNavigationAndCapturedBytes(t *testing.T) {
 	}
 	foundAdded, foundDeleted := false, false
 	for index, row := range d.Diff.Rows {
-		if row.HasNew && row.Style == terminal.Observed {
+		if row.HasNew && row.Style == terminal.Added {
 			text := m.diffDocumentRow(index)
 			foundAdded = strings.Contains(text, "+")
 		}
-		if row.HasOld && !row.HasNew && row.Style == terminal.Problem {
+		if row.HasOld && !row.HasNew && row.Style == terminal.Removed {
 			text := m.diffDocumentRow(index)
 			foundDeleted = strings.Contains(text, "-")
 		}
@@ -241,7 +242,7 @@ func TestChangesDiffNavigationAndCapturedBytes(t *testing.T) {
 	m.theme.Color = true
 	colored := ""
 	for index, row := range d.Diff.Rows {
-		if row.HasNew && row.Style == terminal.Observed {
+		if row.HasNew && row.Style == terminal.Added {
 			colored = m.diffDocumentRow(index)
 			break
 		}
@@ -334,7 +335,7 @@ func TestPairWithoutSharedPatchNeverUsesAnotherPatch(t *testing.T) {
 	}
 	step(m, key("2"))
 	step(m, key("3"))
-	if m.screen != "patch" || m.doc == nil || !strings.Contains(m.diffStickyHeader(), rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "retentionSeconds = 45") {
+	if m.screen != "patch" || m.doc == nil || !strings.Contains(m.View(), rawdiff.ComputedOrigin) || !strings.Contains(m.View(), "retentionSeconds = 45") {
 		t.Fatal("Diff did not show the computed source diff", m.View())
 	}
 }

@@ -1,10 +1,24 @@
-AFTER · 003 · original base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (wor…
-[1 Overview]   2 Changes 4   3 Diff   4 Activity
-  ▾ REPORTED — imported, not observed by AFTER 2
-  report c10f72a7 · bound to 8ae79385 · imported 19:17 · 1 pass · go version go…
-> [REPORTED]    TestFreeShippingThreshold                reported · pass
-  report e133aee0 · bound to 2d13fdbf · imported 19:18 · 1 fail · go version go…
-  [STALE]       TestFreeShippingThreshold                reported · fail
-CHANGES 4 paths · 1 captured hunk, all unclassified · 0 potential oracles · 2 s…
+   AFTER   003   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae793…
+  [Overview]   Changes 4   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────
 
-q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff
+    ▾ REPORTED  2  imported, not observed by AFTER
+    report c10f72a7 · bound to 8ae79385 · imported 19:17 · 1 pass · go versio…
+  > [REPORTED]    TestFreeShippingThreshold            reported · pass        
+    report e133aee0 · bound to 2d13fdbf · imported 19:18 · 1 fail · go versio…
+    [STALE]       TestFreeShippingThreshold            reported · fail
+
+    CHANGES  4 paths · 1 captured hunk · 0 potential oracles
+
+
+
+
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  Enter opens the full record                                           ? help

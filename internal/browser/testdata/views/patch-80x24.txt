@@ -1,24 +1,24 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (wor…
-1 Overview   2 Changes 6   [3 Diff]   4 Activity
-Section 1/2 | 470 stored bytes | text | pan 0
-data | captured raw diff
-app/config.go · file 1 of 2 · captured patch · modified
-── captured raw diff · 470 B ──
-            │ diff --git a/app/config.go b/app/config.go
-            │ index 41e6150..bb43ab7 100644
-            │ --- a/app/config.go
-            │ +++ b/app/config.go
-    1     1 │ @@ -1,5 +1,2 @@
-    2       │  package main
-    3       │ -
-    4       │ -const retentionSeconds int64 = 24 * 60 * 60
-    5       │ -const deduplicate = true
-          2 │ -const printedCount = "1"
-── binary · binary ──
-            │ +const retentionSeconds = 300
-            │ diff --git a/binary b/binary
-            │ index 8352675d67aed6625ece79af41c27fdb4ee2e867..350ed01038bfaa2fd…
-            │ GIT binary patch
-            │ literal 3
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 3726af…
+  Overview   Changes 6   [Diff]   Activity              captured patch · 470 B
+  ───────────────────────━━━━━━───────────────────────────────────────────────
 
-q quit · ? help · Esc back · / search · 1 Overview · 2 Changes · 3 Diff
+  ── app/config.go · modified  +1  −4 ───────────────────────────────── 1/2 ──
+             │ diff --git a/app/config.go b/app/config.go
+             │ index 41e6150..bb43ab7 100644
+             │ --- a/app/config.go
+             │ +++ b/app/config.go
+             │ @@ -1,5 +1,2 @@
+      1     1│  package main
+      2      │ -                                                              
+      3      │ -const retentionSeconds int64 = 24 * 60 * 60                   
+      4      │ -const deduplicate = true                                      
+      5      │ -const printedCount = "1"                                      
+            2│ +const retentionSeconds = 300                                  
+  ── binary · binary ────────────────────────────────────────────────── 2/2 ──
+             │ diff --git a/binary b/binary
+             │ index 8352675d67aed6625ece79af41c27fdb4ee2e867..350ed01038bfaa…
+             │ GIT binary patch
+             │ literal 3
+             │ KcmZQzVg>*J3IGNG
+  ────────────────────────────────────────────────────────────────────────────
+  ] and [ jump between files · } and { between hunks                    ? help

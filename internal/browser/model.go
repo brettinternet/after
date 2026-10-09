@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/terminal"
@@ -194,16 +192,7 @@ func (m *Model) secondaryRow() bool {
 	return m.screen == "help" || m.screen == "inspector" || m.screen == "plan" || m.screen == "prompt" || (m.height >= 12 && (m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity"))
 }
 func (m *Model) bodyRows() int {
-	_, jobLines := m.frameHeader()
-	reserved := 1 + len(jobLines) // header and overflow indicators
-	if m.secondaryRow() {
-		reserved++
-	}
-	reserved++ // key hints
-	if m.height >= 7 {
-		reserved++ // next/status line
-	}
-	return max(m.height-reserved, 0)
+	return max(m.height-m.topRows()-m.footerRows(), 0)
 }
 func (m *Model) rows() int {
 	rows := m.bodyRows()
@@ -211,7 +200,7 @@ func (m *Model) rows() int {
 		return m.activityRows()
 	}
 	if m.screen == "inventory" {
-		rows -= 2 // inventory summary and one fixed heading row
+		rows -= m.inventoryReserved()
 	}
 	return max(rows, 1)
 }
@@ -220,12 +209,18 @@ func (m *Model) textLimited() bool {
 }
 
 func (m *Model) contentRows() int {
-	reserved := 2 // section metadata and section name
+	reserved := 0
 	if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
 		reserved++ // sticky current-file metadata
 	}
 	if m.textLimited() && !m.hex {
 		reserved++
+	}
+	if m.screen == "plan" && m.summaryUnavailable {
+		reserved++
+	}
+	if !m.hasSectionStrip() && m.screen != "patch" {
+		reserved++ // compact section label
 	}
 	return max(m.bodyRows()-reserved, 1)
 }
@@ -285,8 +280,19 @@ func (m *Model) loadDocument() tea.Cmd {
 		return nil
 	}
 	section := sections[m.section]
-	project, width := m.selected.Project, m.width
+	project, width := m.selected.Project, m.inner()
+	// Diff rows index raw patch lines directly, so the patch document has no
+	// heading divider that would shift every row against its gutter.
+	barePatch := m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil
 	return m.spawn(func() tea.Msg {
+		if barePatch {
+			raw, err := ReadSection(m.ctx, project, section)
+			if err != nil {
+				return documentReady{request: id, err: err}
+			}
+			doc, err := terminal.NewDocument(raw)
+			return documentReady{request: id, doc: doc, err: err}
+		}
 		view, err := readSectionDocument(m.ctx, project, section, width)
 		if err != nil {
 			return documentReady{request: id, err: err}
@@ -739,14 +745,15 @@ func (m *Model) move(action keyAction) tea.Cmd {
 		}
 		m.activityIndex = min(max(m.activityIndex, 0), max(len(m.activity)-1, 0))
 	case "examples":
+		rows := m.overviewRows()
 		position := m.overviewPosition + delta
 		if action == keyStart {
-			position = 0
+			position, delta = 0, 1
 		}
 		if action == keyEnd {
-			position = len(m.overviewRows()) - 1
+			position, delta = len(rows)-1, -1
 		}
-		m.selectOverviewPosition(position)
+		m.selectOverviewPosition(nearestSelectable(rows, position, delta))
 		return m.startOverviewPreview()
 	case "inventory":
 		p := m.cursor()
@@ -805,51 +812,20 @@ func (m *Model) documentRows() int {
 	}
 	return m.doc.Lines()
 }
-func window(raw string, left, width int) string { return terminal.LineAt(raw, left, width) }
 
-func padStyledLine(raw string, width int) string {
-	var visible strings.Builder
-	for i := 0; i < len(raw); {
-		if raw[i] == '\x1b' {
-			if end := strings.IndexByte(raw[i:], 'm'); end >= 0 {
-				i += end + 1
-				continue
-			}
-		}
-		_, size := utf8.DecodeRuneInString(raw[i:])
-		if size == 0 {
-			break
-		}
-		visible.WriteString(raw[i : i+size])
-		i += size
-	}
-	missing := width - uniseg.StringWidth(visible.String())
-	if missing > 0 {
-		return raw + strings.Repeat(" ", missing)
-	}
-	return raw
-}
-
+// headerText is the plain text of the header segments; indicator placement
+// measures it so styled and unstyled frames wrap identically.
 func (m *Model) headerText() string {
-	baseID, candidateID := shortID(m.selected.Pair.Base), shortID(m.selected.Pair.Candidate)
-	mode := reviewModeLabel(m.selected.Mode)
-	if m.width < 60 {
-		return fmt.Sprintf("AFTER · %s %s → %s", mode, baseID, candidateID)
+	var text strings.Builder
+	for _, part := range m.headerSegments() {
+		text.WriteString(part.text)
 	}
-	project := filepath.Base(filepath.Clean(m.selected.Project))
-	if project == "." || project == string(filepath.Separator) || project == "" {
-		project = "project"
-	}
-	baseSource, candidateSource := "source loading", "source loading"
-	if m.data != nil {
-		baseSource = snapshotSource(m.data.BaseSnapshot)
-		candidateSource = snapshotSource(m.data.CandidateSnapshot)
-	}
-	return fmt.Sprintf("AFTER · %s · %s %s (%s) → candidate %s (%s)", project, mode, baseID, baseSource, candidateID, candidateSource)
+	return text.String()
 }
 
 func (m *Model) frameHeader() (string, []string) {
 	header := m.headerText()
+	width := m.inner()
 	if m.height <= 2 {
 		return header, nil
 	}
@@ -869,7 +845,7 @@ func (m *Model) frameHeader() (string, []string) {
 	extra := []string{}
 	for _, indicator := range indicators {
 		candidate := header + " · " + indicator
-		if uniseg.StringWidth(candidate) <= m.width {
+		if uniseg.StringWidth(candidate) <= width {
 			header = candidate
 		} else {
 			extra = append(extra, indicator)
@@ -908,90 +884,20 @@ func elapsed(duration time.Duration) string {
 	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
 }
 
-func (m *Model) tabBar() string {
-	labels := []string{"1 Overview", fmt.Sprintf("2 Changes %d", lenInventory(m.data)), "3 Diff", "4 Activity"}
-	if m.width < 60 {
-		labels = []string{"1 Ov", fmt.Sprintf("2 Ch %d", lenInventory(m.data)), "3 Df", "4 Ac"}
-	}
-	active := map[string]int{"examples": 0, "inventory": 1, "patch": 2, "activity": 3}[m.screen]
-	count := 1
-	if m.data != nil {
-		count = len(labels)
-	}
-	var line strings.Builder
-	used := 0
-	for index := 0; index < count; index++ {
-		label := labels[index]
-		if index == active {
-			label = "[" + label + "]"
-		}
-		separator := ""
-		if used > 0 {
-			separator = "   "
-		}
-		width := uniseg.StringWidth(label)
-		sepWidth := uniseg.StringWidth(separator)
-		if used+sepWidth+width > m.width {
-			break
-		}
-		line.WriteString(separator)
-		style := terminal.Plain
-		if index == active {
-			style = terminal.Reverse
-		}
-		line.WriteString(m.theme.Render(label, width, style, false))
-		used += sepWidth + width
-	}
-	return line.String()
-}
-
-func (m *Model) planBreadcrumb() string {
-	const title = "Run this exact plan?"
-	var line strings.Builder
-	remaining := m.width
-	appendStyled := func(text string, style terminal.Style) bool {
-		if remaining == 0 {
-			return false
-		}
-		width := min(uniseg.StringWidth(text), remaining)
-		line.WriteString(m.theme.Render(text, width, style, false))
-		remaining -= width
-		return width == uniseg.StringWidth(text)
-	}
-	if !appendStyled(title, terminal.Strong) {
-		return line.String()
-	}
-	for index, section := range m.sections() {
-		if !appendStyled("  ", terminal.Plain) {
-			break
-		}
-		label := section.Name
-		if section.Name == "Exact plan" {
-			label += " " + previewSize(len(m.preview))
-		}
-		style := terminal.Plain
-		if index == m.section {
-			label = "[" + label + "]"
-			style = terminal.Reverse
-		}
-		if !appendStyled(label, style) {
-			break
-		}
-	}
-	return line.String()
-}
-
 func (m *Model) breadcrumb() string {
-	if m.screen == "help" {
-		return m.theme.Render("Help", m.width, terminal.Strong, false)
-	}
-	if m.screen == "plan" {
-		return m.planBreadcrumb()
-	}
-	if m.screen == "prompt" && m.prompt != nil {
-		return m.theme.Render(m.prompt.title, m.width, terminal.Strong, false)
-	}
-	if m.screen != "inspector" {
+	width := m.inner()
+	switch m.screen {
+	case "help":
+		return spread(m.theme.Render("Keys", width, terminal.Strong, false), m.theme.Render("Esc closes", width, terminal.Muted, false), width)
+	case "plan":
+		return m.theme.Render("Run this exact plan?", width, terminal.Attention, false)
+	case "prompt":
+		if m.prompt != nil {
+			return m.theme.Render(m.prompt.title, width, terminal.Attention, false)
+		}
+		return ""
+	case "inspector":
+	default:
 		return ""
 	}
 	root := "Overview"
@@ -1000,30 +906,25 @@ func (m *Model) breadcrumb() string {
 	} else if m.returnTo == "activity" {
 		index := len(m.activity) - 1 - m.activityIndex
 		if index >= 0 && index < len(m.activity) {
-			return m.theme.Render("Activity › "+m.activity[index].Kind, m.width, terminal.Strong, false)
+			return m.segments(width, segment{"Activity", terminal.Muted}, segment{"  ›  ", terminal.Rule}, segment{m.activity[index].Kind, terminal.Strong})
 		}
-		return m.theme.Render("Activity", m.width, terminal.Strong, false)
+		return m.theme.Render("Activity", width, terminal.Strong, false)
 	}
 	entries := m.entries()
 	i := *m.cursor()
 	if i >= len(entries) {
-		return m.theme.Render(root, m.width, terminal.Strong, false)
+		return m.theme.Render(root, width, terminal.Strong, false)
 	}
 	entry := entries[i]
-	prefix := root + " › " + entry.Name
 	b := badgeFor(entry)
-	badgeText := "[" + b.word + "]"
+	badgeText := m.badgeText(b)
 	badgeWidth := uniseg.StringWidth(badgeText)
-	prefixWidth := max(m.width-badgeWidth-1, 0)
-	if prefixWidth == 0 {
-		return m.theme.Render(prefix, m.width, terminal.Strong, false)
+	nameWidth := max(width-badgeWidth-2, 0)
+	if nameWidth < 12 {
+		return m.segments(width, segment{root, terminal.Muted}, segment{"  ›  ", terminal.Rule}, segment{entry.Name, terminal.Strong})
 	}
-	safePrefix := terminal.Line(prefix, prefixWidth)
-	used := uniseg.StringWidth(safePrefix)
-	if used+1+badgeWidth > m.width {
-		return m.theme.Render(prefix, m.width, terminal.Strong, false)
-	}
-	return m.theme.Render(safePrefix, prefixWidth, terminal.Strong, true) + " " + m.theme.Render(badgeText, badgeWidth, b.style, false)
+	left := m.segments(nameWidth, segment{root, terminal.Muted}, segment{"  ›  ", terminal.Rule}, segment{entry.Name, terminal.Strong})
+	return spread(left, m.theme.Render(badgeText, badgeWidth, b.style, false), width)
 }
 
 func (m *Model) overviewIsSelected() bool {
@@ -1092,172 +993,170 @@ func (m *Model) View() string {
 	if m.height == 1 {
 		return terminal.Line(m.keyHints(), m.width)
 	}
-	header, indicators := m.frameHeader()
-	lines := []string{m.theme.Render(header, m.width, terminal.Strong, false)}
-	for _, indicator := range indicators {
-		lines = append(lines, m.theme.Render(indicator, m.width, terminal.Attention, false))
-	}
-	if m.secondaryRow() {
-		if m.screen == "examples" || m.screen == "inventory" || m.screen == "patch" || m.screen == "activity" {
-			lines = append(lines, m.tabBar())
+	top := m.frameTop()
+	footer := m.frameFooter()
+	available := max(m.height-len(top)-len(footer), 0)
+	body := m.body()
+	pad := strings.Repeat(" ", m.margin())
+	lines := append([]string(nil), top...)
+	for row := 0; row < available; row++ {
+		if row < len(body) && body[row] != "" {
+			lines = append(lines, pad+body[row])
 		} else {
-			lines = append(lines, m.breadcrumb())
+			lines = append(lines, "")
 		}
 	}
+	lines = append(lines, footer...)
+	if len(lines) > m.height {
+		lines = append(lines[:max(m.height-len(footer), 0)], footer...)
+		lines = lines[:m.height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// body renders the screen content at the inner width; View adds margins and
+// pads it to the full height so the footer stays on the last rows.
+func (m *Model) body() []string {
+	width := m.inner()
 	body := []string{}
-	add := func(s string) { body = append(body, terminal.Line(s, m.width)) }
-	data := func(s string) {
-		prefix := "data | "
-		if m.width <= len(prefix) {
-			add(prefix)
-			return
-		}
-		add(prefix + window(s, m.left, m.width-len(prefix)))
-	}
+	add := func(s string, style terminal.Style) { body = append(body, m.theme.Render(s, width, style, false)) }
 	switch m.screen {
 	case "prompt":
 		body = append(body, m.promptLines()...)
 	case "help":
-		help := m.helpLines()
-		top := min(m.top, max(len(help)-1, 0))
-		for _, line := range help[top:min(top+m.bodyRows(), len(help))] {
-			add(window(line, m.left, m.width))
-		}
+		body = append(body, m.helpView(width)...)
 	case "activity":
-		for _, line := range m.activitySessionLines() {
-			add(line)
-		}
-		add("ACTIVITY")
-		if m.activityDropped > 0 {
-			add(fmt.Sprintf("%d older activity events dropped", m.activityDropped))
-		}
-		if len(m.activity) == 0 {
-			add("No Activity events yet")
-		} else {
-			top := max(0, m.activityIndex-m.activityRows()+1)
-			for index := top; index < min(len(m.activity), top+m.activityRows()); index++ {
-				line := m.activityLine(index, index == m.activityIndex)
-				if m.searchMatchesRow(index) {
-					line = m.theme.Highlight(line, m.searchQuery, m.width)
-				}
-				body = append(body, line)
-			}
-		}
+		body = append(body, m.activityBody(width)...)
 	case "examples":
-		rows := m.overviewRows()
-		position := min(max(m.overviewPosition, 0), max(len(rows)-1, 0))
-		top := max(0, position-m.rows()+1)
-		if m.width >= 110 {
-			listWidth := overviewListWidth(m.width)
-			previewWidth := m.width - listWidth - 1
-			for offset := 0; offset < m.rows(); offset++ {
-				left := strings.Repeat(" ", listWidth)
-				if index := top + offset; index < len(rows) {
-					left = m.overviewRowTextWidth(rows[index], index == position, listWidth)
-					if m.searchMatchesRow(index) {
-						left = m.theme.Highlight(left, m.searchQuery, listWidth)
-					}
-					left = padStyledLine(left, listWidth)
-				}
-				right := padStyledLine(m.overviewPreviewLine(offset, previewWidth), previewWidth)
-				body = append(body, left+"│"+right)
-			}
-		} else {
-			for n := top; n < min(len(rows), top+m.rows()); n++ {
-				line := m.overviewRowText(rows[n], n == position)
-				if m.searchMatchesRow(n) {
-					line = m.theme.Highlight(line, m.searchQuery, m.width)
-				}
-				body = append(body, line)
-			}
-		}
+		body = append(body, m.overviewBody(width)...)
 	case "inventory":
 		body = append(body, m.inventoryBody()...)
 	case "inspector", "patch", "plan":
 		sections := m.sections()
-		if len(sections) > 0 {
-			section := sections[m.section]
-			total := 0
-			if m.doc != nil {
-				total = m.doc.RawLength()
+		if len(sections) == 0 {
+			break
+		}
+		section := sections[m.section]
+		if !m.hasSectionStrip() && m.screen != "patch" {
+			label := section.Name
+			for _, part := range m.documentMeta() {
+				label += " · " + part
 			}
-			mode := "text"
-			if m.hex {
-				mode = "hex"
-			}
-			add(fmt.Sprintf("Section %d/%d | %d stored bytes | %s | pan %d", m.section+1, len(sections), total, mode, m.left))
-			data(section.Name)
-			if m.screen == "plan" && m.summaryUnavailable {
-				add("Summary unavailable; exact preview bytes remain unchanged")
-			}
-			if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+			add(label, terminal.Muted)
+		}
+		if m.screen == "plan" && m.summaryUnavailable {
+			add("Summary unavailable; exact preview bytes remain unchanged", terminal.Attention)
+		}
+		extra := 0
+		if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+			if m.doc != nil && m.diffHeaderAtTop() {
+				extra = 1 // the file bar is already the first row
+			} else {
 				body = append(body, m.diffStickyHeader())
 			}
-			if m.doc == nil {
-				add("Loading complete document off the event loop")
-			} else {
-				if m.textLimited() && !m.hex {
-					add("TEXT LIMITED at 250000 lines; b opens exact hex for every stored byte")
-				}
-				if m.doc.Lines() == 0 && m.doc.HexRows() == 0 {
-					add("(empty captured bytes; not an equality claim)")
-				} else {
-					count := m.documentRows()
-					for n := m.top; n < min(m.top+m.contentRows(), count); n++ {
-						if m.hex {
-							line := m.doc.HexLine(n)
-							if m.searchMatchesRow(n) {
-								line = m.theme.Highlight(line, m.searchQuery, m.width)
-							}
-							add(line)
-							continue
-						}
-						if m.dividerRows[n] {
-							line := m.theme.Render(m.doc.LineAt(n, m.left, m.width), m.width, terminal.Strong, false)
-							if m.searchMatchesRow(n) {
-								line = m.theme.Highlight(line, m.searchQuery, m.width)
-							}
-							body = append(body, line)
-							continue
-						}
-						if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
-							body = append(body, m.diffDocumentRow(n))
-							continue
-						}
-						digits := len(strconv.Itoa(max(m.doc.Lines(), 1)))
-						gutter := fmt.Sprintf("%*d │ ", digits, n+1)
-						gutterWidth := uniseg.StringWidth(gutter)
-						if m.width <= gutterWidth {
-							body = append(body, terminal.Line(gutter, m.width))
-							continue
-						}
-						available := m.width - gutterWidth
-						marker := ""
-						if m.doc.LongLine(n) && available >= 4 {
-							marker = "[b]"
-							available -= len(marker)
-						}
-						row := m.doc.LineAt(n, m.left, available) + marker
-						if m.searchMatchesRow(n) {
-							row = m.theme.Highlight(row, m.searchQuery, available)
-							body = append(body, gutter+row)
-						} else {
-							body = append(body, gutter+row)
-						}
-					}
-				}
-			}
+		}
+		if m.doc == nil {
+			add("Loading the complete document…", terminal.Muted)
+			break
+		}
+		if m.textLimited() && !m.hex {
+			add("Text limited at 250000 lines; b opens exact hex for every stored byte", terminal.Attention)
+		}
+		if m.doc.Lines() == 0 && m.doc.HexRows() == 0 {
+			add("(empty captured bytes; not an equality claim)", terminal.Muted)
+			break
+		}
+		count := m.documentRows()
+		for n := m.top; n < min(m.top+m.contentRows()+extra, count); n++ {
+			body = append(body, m.documentRow(n, section, width))
 		}
 	}
-	footer := []string{}
-	if m.height >= 7 {
-		footer = append(footer, terminal.Line(m.statusLine(), m.width))
+	return body
+}
+
+// documentRow renders one trusted row of an open document. Content always
+// follows a renderer-owned gutter; only typed dividers start at the margin.
+func (m *Model) documentRow(n int, section Section, width int) string {
+	highlight := func(line string, lineWidth int) string {
+		if m.searchMatchesRow(n) {
+			return m.theme.Highlight(line, m.searchQuery, lineWidth)
+		}
+		return line
 	}
-	footer = append(footer, terminal.Line(m.keyHints(), m.width))
-	available := max(m.height-len(lines)-len(footer), 0)
-	lines = append(lines, body[:min(len(body), available)]...)
-	lines = append(lines, footer...)
-	return strings.Join(lines, "\n")
+	if m.hex {
+		return highlight(m.theme.Render(m.doc.HexLine(n), width, terminal.Plain, false), width)
+	}
+	if m.screen == "patch" && m.section == 0 && m.data != nil && m.data.Diff != nil {
+		return m.diffDocumentRow(n)
+	}
+	if m.dividerRows[n] {
+		return highlight(m.theme.Render(m.doc.LineAt(n, m.left, width), width, terminal.Strong, false), width)
+	}
+	if m.dividerRows[n+1] && m.doc.LineAt(n, 0, 1) == "" {
+		return "" // display-only spacing before the next part
+	}
+	gutter := m.theme.Render("│ ", 2, terminal.Rule, false)
+	gutterWidth := 2
+	if !section.Wrap {
+		digits := len(strconv.Itoa(max(m.doc.Lines(), 1)))
+		number := fmt.Sprintf("%*d │ ", digits, n+1)
+		gutterWidth = uniseg.StringWidth(number)
+		gutter = m.theme.Render(number, gutterWidth, terminal.Rule, false)
+	}
+	if width <= gutterWidth {
+		return terminal.Line(terminal.VisibleText(gutter), width)
+	}
+	available := width - gutterWidth
+	marker := ""
+	if m.doc.LongLine(n) && available >= 4 {
+		marker = m.theme.Render("[b]", 3, terminal.Muted, false)
+		available -= 3
+	}
+	text, style, tint := m.doc.LineAt(n, m.left, available), terminal.Plain, false
+	if section.format == formatPatch {
+		style = patchLineStyle([]byte(m.doc.SearchableLine(n)))
+		tint = style == terminal.Added || style == terminal.Removed
+	}
+	if style == terminal.Plain {
+		return gutter + highlight(text, available) + marker
+	}
+	return gutter + highlight(m.theme.Render(text, available, style, tint), available) + marker
+}
+
+// idleHint gently names the primary next step when no status applies.
+func (m *Model) idleHint() string {
+	switch m.screen {
+	case "examples":
+		row, ok := m.currentOverviewRow()
+		switch {
+		case !ok:
+			return ""
+		case row.kind == overviewGroupHeader && m.overviewCollapsed(row.group):
+			return "Enter expands this group"
+		case row.kind == overviewGroupHeader:
+			return "Enter collapses this group"
+		case row.kind == overviewInventory:
+			return "Enter opens this path"
+		case row.kind == overviewEvidence:
+			return "Enter opens the full record"
+		}
+	case "inventory":
+		return "Enter opens this path · 3 shows the whole diff"
+	case "patch":
+		if canNavigateFiles(m) == "" {
+			return "] and [ jump between files · } and { between hunks"
+		}
+	case "activity":
+		if len(m.activity) > 0 {
+			return "Enter shows full IDs and details"
+		}
+	case "inspector":
+		if len(m.sections()) > 1 {
+			return "Tab shows the next section · Esc goes back"
+		}
+		return "Esc goes back"
+	}
+	return ""
 }
 func Run(m *Model, input io.Reader, output io.Writer) error {
 	defer m.Close()

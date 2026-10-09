@@ -1,28 +1,40 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (working tree)
-Overview › 12h same-key retry                                                                                [DIFFERENT]
-Section 2/8 | 606 stored bytes | text | pan 0
-data | Receipt Card
-── Outcome · 49 B ──
- 2 │ observed · completed · not_compared · complete
-── Producer · 6 B ──
- 4 │ runner
-── Binding · 36 B ──
- 6 │ base 2d13fdbf → candidate 8ae79385
-── Events · 43 B ──
- 8 │ 2025-01-02T20:00:00Z–2025-01-02T20:00:00Z
-── Scope · 25 B ──
-10 │ synthetic; not a real run
-── Scenario · 399 B ──
-12 │ sha256:fdffa16b2b3f2a69dd04c379fa4b290aadfda405e880df7bd621b82e6514782e · input 
-13 │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · driver 
-14 │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · observer 
-15 │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · rules 
-16 │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c
-── Boundary · 9 B ──
-18 │ synthetic
-── Comparison · 21 B ──
-20 │ different · complete
-── Witnesses · 18 B ──
-22 │ 8 stored witnesses
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
+  Overview  ›  12h same-key retry                                                                          [DIFFERENT]
+  Card   [Receipt Card]   Witnesses   Artifacts   Receipt   Scenario   Plan   IDs                          2/8 · 606 B
+  ───────━━━━━━━━━━━━━━───────────────────────────────────────────────────────────────────────────────────────────────
 
-q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page
+  ── Outcome ──
+  │ observed · completed · not_compared · complete
+
+  ── Producer ──
+  │ runner
+
+  ── Binding ──
+  │ base 2d13fdbf → candidate 8ae79385
+
+  ── Events ──
+  │ 2025-01-02T20:00:00Z–2025-01-02T20:00:00Z
+
+  ── Scope ──
+  │ synthetic; not a real run
+
+  ── Scenario ──
+  │ sha256:fdffa16b2b3f2a69dd04c379fa4b290aadfda405e880df7bd621b82e6514782e · input 
+  │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · driver 
+  │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · observer 
+  │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c · rules 
+  │ sha256:d86069fc32c571fcf1301087678b69c6fdebb866f05f69e205989242aa8c0d0c
+
+  ── Boundary ──
+  │ synthetic
+
+  ── Comparison ──
+  │ different · complete
+
+  ── Witnesses ──
+  │ 8 stored witnesses
+
+
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Tab shows the next section · Esc goes back                                                                    ? help

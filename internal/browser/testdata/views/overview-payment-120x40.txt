@@ -1,40 +1,40 @@
-AFTER · 004 · original base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (working tree)
-[1 Overview]   2 Changes 4   3 Diff   4 Activity
-  ▾ NEEDS ANOTHER LOOK 2                              │── Expectation · 85 B ──                                         
-> [REOPENED]    Preserve the finite provider-request …│Preserve the finite provider-request count (your words;          
-  [DIFFERENT]   12h same-key retry · provider request…│AFTER does not evaluate them)                                    
-  ▾ AGREES 1                                          │── Scope · 40 B ──                                               
-  [EQUAL]       30s same-key retry · provider request…│finite_example · basis receipt e32608d9                          
-  ▸ EARLIER SNAPSHOTS 2                               │── Reviewing · 35 B ──                                           
-CHANGES 4 paths · 0 captured hunks, all unclassified …│original base 2d13fdbf → 8e9eef34                                
-  computed from captured sources — not Git's patch · …│── Reopened · 70 B ──                                            
-                                                      │incomplete or excluded whole-project footprint; cannot           
-                                                      │establish reuse                                                  
-                                                      │── Current · 57 B ──                                             
-                                                      │receipt 9ff67f12 · completed · not_compared · complete           
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
+   AFTER   004   original base 2d13fdbf (commit 4117af3)  →  candidate 8e9eef34 (working tree)
+  [Overview]   Changes 4   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view
+    ▾ NEEDS ANOTHER LOOK  2                            │ ── Expectation ──
+  > [REOPENED]    Preserve the finite provider-reques… │ Preserve the finite provider-request count (your 
+    [DIFFERENT]   12h same-key retry · provider reque… │ words; AFTER does not evaluate them)
+                                                       │ 
+    ▾ AGREES  1                                        │ ── Scope ──
+    [EQUAL]       30s same-key retry · provider reque… │ finite_example · basis receipt e32608d9
+                                                       │ 
+    ▸ EARLIER SNAPSHOTS  2                             │ ── Reviewing ──
+                                                       │ original base 2d13fdbf → 8e9eef34
+    CHANGES  4 paths · 0 captured hunks · 0 potential… │ 
+    computed from captured sources — not Git's patch … │ ── Reopened ──
+                                                       │ incomplete or excluded whole-project footprint; cannot 
+                                                       │ establish reuse
+                                                       │ 
+                                                       │ ── Current ──
+                                                       │ receipt 9ff67f12 · completed · not_compared · complete
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Enter opens the full record                                                                                   ? help

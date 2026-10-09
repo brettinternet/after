@@ -1,11 +1,24 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (wor…
-1 Overview   2 Changes 6   3 Diff   [4 Activity]
-SESSION
-explicit IDs leave .after/session.json unchanged
-pair       base 2d13fdbf → candidate 3726afba
-loaded     ee52b8bf · b413d37e · 4551059b · +1
-ACTIVITY
-> 20:00:00  session opened  2d13fdbf · 3726afba · opened Activity
-  20:00:00  capture finished  2d13fdbf · 3726afba · candidate ready
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 3726af…
+  Overview   Changes 6   Diff   [Activity]
+  ──────────────────────────────━━━━━━━━━━────────────────────────────────────
 
-q quit · ? help · Esc back · Enter open · / search · 1 Overview
+  SESSION
+  explicit IDs leave .after/session.json unchanged
+  pair       base 2d13fdbf → candidate 3726afba
+  loaded     ee52b8bf · b413d37e · 4551059b · +1
+
+  ACTIVITY
+  > 20:00:00  session opened  2d13fdbf · 3726afba · opened Activity           
+    20:00:00  capture finished  2d13fdbf · 3726afba · candidate ready
+
+
+
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  Enter shows full IDs and details                                      ? help

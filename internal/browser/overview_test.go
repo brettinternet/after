@@ -118,7 +118,7 @@ func TestOverviewRawdiffAndFullNoEvidenceInventory(t *testing.T) {
 		switch row.kind {
 		case overviewChanges:
 			line := m.overviewRowText(row, false)
-			changesFound = strings.Contains(line, "CHANGES 6 paths") && strings.Contains(line, "1 captured hunk") && strings.Contains(line, "0 potential oracles")
+			changesFound = strings.Contains(line, "CHANGES  6 paths") && strings.Contains(line, "1 captured hunk") && strings.Contains(line, "0 potential oracles")
 		case overviewInventory:
 			entry := m.data.Inventory[row.inventoryIndex]
 			inventory[entry.Name] = true
@@ -183,7 +183,17 @@ func TestOverviewReportProvenanceAndOutcomeLines(t *testing.T) {
 	}
 	m.theme = terminal.Theme{Color: true}
 	styled := m.View()
-	if !strings.Contains(styled, "\x1b[34m[REPORTED]") || strings.Contains(styled, "\x1b[32m") {
+	// Added-line counts may be green elsewhere; the reported rows may not.
+	reportedStyled := false
+	for _, line := range strings.Split(styled, "\n") {
+		if strings.Contains(line, "REPORTED") || strings.Contains(line, "TestFreeShippingThreshold") {
+			reportedStyled = reportedStyled || strings.Contains(line, "\x1b[34m[REPORTED]")
+			if strings.Contains(line, "\x1b[32m") {
+				t.Fatal("reported row acquired observed styling", line)
+			}
+		}
+	}
+	if !reportedStyled {
 		t.Fatal("reported outcomes were not styled separately from observations", styled)
 	}
 	m.theme = terminal.Theme{}

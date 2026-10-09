@@ -106,7 +106,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 						}
 						transcript.WriteString(chunk)
 						plain := stripCSI.ReplaceAllString(transcript.String(), "")
-						ready = strings.Contains(plain, shortID(evidence.Digest(sel.Pair.Candidate))) && strings.Contains(plain, "NOT CHECKED") && strings.Contains(plain, "1 Overview")
+						ready = strings.Contains(plain, shortID(evidence.Digest(sel.Pair.Candidate))) && strings.Contains(plain, "NOT CHECKED") && strings.Contains(plain, "Overview")
 					case err := <-done:
 						t.Fatalf("TUI exited before frame: %v", err)
 					case <-deadline:
@@ -185,7 +185,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 				if _, err := master.Write([]byte("3")); err != nil {
 					t.Fatal(err)
 				}
-				waitFor("app/config.go · file", "file 1 of", "@@ -", "retentionSeconds int64 = 45")
+				waitFor("app/config.go · modified", "1/1 ──", "@@ -", "retentionSeconds int64 = 45")
 				searchStart := transcript.Len()
 				if _, err := master.Write([]byte("/")); err != nil {
 					t.Fatal(err)
@@ -212,7 +212,7 @@ func TestResponsiveFramePTY(t *testing.T) {
 				if _, err := master.Write([]byte("s")); err != nil {
 					t.Fatal(err)
 				}
-				waitFor("4 Activity", "SESSION", "ACTIVITY", "capture finished")
+				waitFor("Activity", "SESSION", "ACTIVITY", "capture finished")
 				if _, err := master.Write([]byte("q")); err != nil {
 					t.Fatal(err)
 				}
@@ -238,17 +238,18 @@ func TestResponsiveFramePTY(t *testing.T) {
 					t.Fatal("NO_COLOR PTY emitted SGR styling")
 				}
 				if !noColor {
-					if !strings.Contains(raw, "\x1b[7m[1 Overview]") {
-						t.Fatal("color PTY did not mark the active tab with reverse video")
+					if !strings.Contains(raw, "\x1b[1mOverview\x1b[0m") {
+						t.Fatal("color PTY did not mark the active tab in bold")
 					}
-					for _, style := range []string{"\x1b[32m", "\x1b[1;31m", "\x1b[36m"} {
+					// xterm-256color tints added/removed lines with backgrounds.
+					for _, style := range []string{"\x1b[48;5;22m", "\x1b[48;5;52m", "\x1b[36m"} {
 						if !strings.Contains(raw, style) {
 							t.Fatalf("color PTY missing diff style %q", style)
 						}
 					}
 				}
 				plain := stripCSI.ReplaceAllString(raw, "")
-				last := strings.LastIndex(plain, "AFTER ·")
+				last := strings.LastIndex(plain, " AFTER   ")
 				if last < 0 {
 					t.Fatal("frame header missing from final PTY transcript")
 				}

@@ -1,13 +1,24 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (wor…
-1 Overview   [2 Changes 6]   3 Diff   4 Activity
-6 paths · 1 indexed hunks, all unclassified · hunk index incomplete
-CHANGED 2
-> M  app/config.go  +1 · −4
-  M  binary  binary
-UNKNOWN — not fully captured 4
-  ?  app/main.go  incomplete capture; equal stored content does not establish u…
-  ?  go.mod  incomplete capture; equal stored content does not establish unchan…
-  ?  unknown  excluded: untracked; not selected
-  ?  unsupported  unsupported: symlink or symlink parent unsupported
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 3726af…
+  Overview   [Changes 6]   Diff   Activity
+  ───────────━━━━━━━━━━━──────────────────────────────────────────────────────
 
-q quit · ? help · Esc back · Enter open · / search · 1 Overview
+  6 paths · 1 indexed hunks, all unclassified · hunk index incomplete
+
+    CHANGED  2
+  > M  app/config.go  +1 · −4                                                 
+    M  binary  binary
+
+    UNKNOWN  4  not fully captured
+    ?  app/main.go  incomplete capture; equal stored content does not establi…
+    ?  go.mod  incomplete capture; equal stored content does not establish un…
+    ?  unknown  excluded: untracked; not selected
+    ?  unsupported  unsupported: symlink or symlink parent unsupported
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  Enter opens this path · 3 shows the whole diff                        ? help

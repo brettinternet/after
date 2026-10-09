@@ -1,25 +1,40 @@
-AFTER · 003 · original base 2d13fdbf (commit 4117af3) → candidate 8ae79385 (working tree)
-Overview › TestFreeShippingThreshold                                                                          [REPORTED]
-Section 1/4 | 393 stored bytes | text | pan 0
-data | Card
-── Package · 16 B ──
- 2 │ example.com/cart
-── Test · 38 B ──
- 4 │ TestFreeShippingThreshold · attempt 1
-── Outcome · 74 B ──
- 6 │ pass, as reported by go test JSON. AFTER did not run or observe this test.
-── Producer · 49 B ──
- 8 │ go version go1.27.1 darwin/arm64; candidate suite
-── Bound to · 128 B ──
-10 │ candidate sha256:8ae793852575819878d7b498330b30ce448430281c1b6a38f3893d1d61b66782 (caller-supplied; a digest is 
-11 │ not a signature)
-── Events · 7 B ──
-13 │ unknown
-── Inputs · 59 B ──
-15 │ unavailable; test reports record neither inputs nor effects
-── Expected values · 11 B ──
-17 │ unavailable
-── Effects · 11 B ──
-19 │ unavailable
+   AFTER   003   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
+  Overview  ›  TestFreeShippingThreshold                                                                    [REPORTED]
+  [Card]   Output   Report   IDs                                                                           1/4 · 393 B
+  ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-q quit · ? help · Esc back · / search · Tab next view · Shift+Tab previous · ↓/j down · ↑/k up · PgDn page
+  ── Package ──
+  │ example.com/cart
+
+  ── Test ──
+  │ TestFreeShippingThreshold · attempt 1
+
+  ── Outcome ──
+  │ pass, as reported by go test JSON. AFTER did not run or observe this test.
+
+  ── Producer ──
+  │ go version go1.27.1 darwin/arm64; candidate suite
+
+  ── Bound to ──
+  │ candidate sha256:8ae793852575819878d7b498330b30ce448430281c1b6a38f3893d1d61b66782 (caller-supplied; a digest 
+  │ is not a signature)
+
+  ── Events ──
+  │ unknown
+
+  ── Inputs ──
+  │ unavailable; test reports record neither inputs nor effects
+
+  ── Expected values ──
+  │ unavailable
+
+  ── Effects ──
+  │ unavailable
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Tab shows the next section · Esc goes back                                                                    ? help

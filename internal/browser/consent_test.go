@@ -313,6 +313,9 @@ func consentKeyAllowed(key string) bool {
 		"y": true, "n": true, "b": true, "j": true, "down": true, "k": true, "up": true,
 		"pgdown": true, "pgup": true, "home": true, "g": true, "end": true, "G": true,
 		"h": true, "left": true, "l": true, "right": true,
+		// Emacs navigation aliases only move or leave; none act.
+		"ctrl+g": true, "ctrl+n": true, "ctrl+p": true, "ctrl+d": true, "ctrl+u": true,
+		"ctrl+f": true, "ctrl+b": true, "ctrl+v": true, "alt+v": true, "alt+<": true, "alt+>": true,
 	}
 	return allowed[key]
 }

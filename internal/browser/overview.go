@@ -31,7 +31,13 @@ const (
 	overviewReport
 	overviewInventory
 	overviewChanges
+	overviewSpacer
 )
+
+// selectable rows can hold the cursor; spacers and messages cannot.
+func (row overviewRow) selectable() bool {
+	return row.kind == overviewGroupHeader || row.kind == overviewEvidence || row.kind == overviewInventory
+}
 
 type overviewRow struct {
 	kind           overviewRowKind
@@ -42,20 +48,22 @@ type overviewRow struct {
 	text           string
 }
 
-func overviewGroupName(group overviewGroup) string {
+// overviewGroupLabel returns a group's heading, an optional qualifier and the
+// heading style. Green stays reserved for current complete equality.
+func overviewGroupLabel(group overviewGroup) (string, string, terminal.Style) {
 	switch group {
 	case groupNeedsAnotherLook:
-		return "NEEDS ANOTHER LOOK"
+		return "NEEDS ANOTHER LOOK", "", terminal.Attention
 	case groupPinnedExpectations:
-		return "PINNED EXPECTATIONS"
+		return "PINNED EXPECTATIONS", "", terminal.Decision
 	case groupAgrees:
-		return "AGREES"
+		return "AGREES", "", terminal.Observed
 	case groupReported:
-		return "REPORTED — imported, not observed by AFTER"
+		return "REPORTED", "imported, not observed by AFTER", terminal.Reported
 	case groupEarlierSnapshots:
-		return "EARLIER SNAPSHOTS"
+		return "EARLIER SNAPSHOTS", "", terminal.Muted
 	default:
-		return "OTHER"
+		return "OTHER", "", terminal.Muted
 	}
 }
 
@@ -118,6 +126,7 @@ func (m *Model) overviewRows() []overviewRow {
 		rows := []overviewRow{
 			{kind: overviewMessage, text: "NOT CHECKED — no evidence was loaded for this change"},
 			{kind: overviewMessage, text: "Nothing was run or imported for candidate " + shortID(m.data.Selection.Pair.Candidate) + ". The change is readable below."},
+			{kind: overviewSpacer},
 			{kind: overviewChanges},
 		}
 		if detail := m.overviewChangeDetailLine(); detail != "" {
@@ -145,6 +154,9 @@ func (m *Model) overviewRows() []overviewRow {
 		if len(entries) == 0 {
 			continue
 		}
+		if len(rows) > 0 {
+			rows = append(rows, overviewRow{kind: overviewSpacer})
+		}
 		rows = append(rows, overviewRow{kind: overviewGroupHeader, group: group, count: len(entries)})
 		if m.overviewCollapsed(group) {
 			continue
@@ -166,10 +178,14 @@ func (m *Model) overviewRows() []overviewRow {
 		}
 	}
 	selection := m.data.Selection
+	rows = append(rows, overviewRow{kind: overviewSpacer})
 	if selection.OmittedEvidence > 0 {
 		rows = append(rows, overviewRow{kind: overviewMessage, text: fmt.Sprintf("%d matching records not loaded · after log lists older records", selection.OmittedEvidence)})
 	} else if selection.DiscoveryWarning {
 		rows = append(rows, overviewRow{kind: overviewMessage, text: "Evidence discovery was limited; after log lists older records"})
+	}
+	if selection.OmittedEvidence > 0 || selection.DiscoveryWarning {
+		rows = append(rows, overviewRow{kind: overviewSpacer})
 	}
 	rows = append(rows, overviewRow{kind: overviewChanges})
 	if detail := m.overviewChangeDetailLine(); detail != "" {
@@ -211,24 +227,26 @@ func (m *Model) overviewRowText(row overviewRow, selected bool) string {
 }
 
 func (m *Model) overviewRowTextWidth(row overviewRow, selected bool, width int) string {
-	prefix := "  "
-	if selected {
-		prefix = "> "
-	}
+	prefix := m.cursorPrefix(selected)
 	switch row.kind {
+	case overviewSpacer:
+		return ""
 	case overviewMessage:
-		style := terminal.Muted
-		if strings.HasPrefix(row.text, "NOT CHECKED") {
-			style = terminal.Strong
+		if rest, ok := strings.CutPrefix(row.text, "NOT CHECKED"); ok {
+			return m.segments(width, segment{"  ", terminal.Plain}, segment{"NOT CHECKED", terminal.Attention}, segment{rest, terminal.Muted})
 		}
-		return prefix + m.theme.Render(row.text, max(width-2, 0), style, false)
+		return m.segments(width, segment{"  ", terminal.Plain}, segment{row.text, terminal.Muted})
 	case overviewGroupHeader:
-		marker := "▾"
+		marker := "▾ "
 		if m.overviewCollapsed(row.group) {
-			marker = "▸"
+			marker = "▸ "
 		}
-		text := fmt.Sprintf("%s %s %d", marker, overviewGroupName(row.group), row.count)
-		return prefix + m.theme.Render(text, max(width-2, 0), terminal.Strong, false)
+		name, note, style := overviewGroupLabel(row.group)
+		parts := []segment{{prefix, terminal.Accent}, {marker, terminal.Rule}, {name, style}, {fmt.Sprintf("  %d", row.count), terminal.Muted}}
+		if note != "" {
+			parts = append(parts, segment{"  " + note, terminal.Muted})
+		}
+		return m.segments(width, parts...)
 	case overviewEvidence:
 		if row.entryIndex < 0 || row.entryIndex >= len(m.data.Entries) {
 			return ""
@@ -238,14 +256,15 @@ func (m *Model) overviewRowTextWidth(row overviewRow, selected bool, width int) 
 		if row.entryIndex < 0 || row.entryIndex >= len(m.data.Entries) {
 			return ""
 		}
-		return prefix + m.reportLine(m.data.Entries[row.entryIndex], max(width-2, 0))
+		return "  " + m.reportLine(m.data.Entries[row.entryIndex], max(width-2, 0))
 	case overviewInventory:
 		if row.inventoryIndex < 0 || row.inventoryIndex >= len(m.data.Inventory) {
 			return ""
 		}
 		return m.changeEntryLine(m.data.Inventory[row.inventoryIndex], selected, width)
 	case overviewChanges:
-		return m.theme.Render(m.overviewChangesLine(), width, terminal.Strong, false)
+		heading, counts, _ := strings.Cut(m.overviewChangesLine(), "  ")
+		return m.segments(width, segment{"  ", terminal.Plain}, segment{heading, terminal.Strong}, segment{"  " + counts, terminal.Muted})
 	default:
 		return ""
 	}
@@ -301,13 +320,55 @@ func (m *Model) currentOverviewRow() (overviewRow, bool) {
 
 func overviewListWidth(width int) int { return width * 45 / 100 }
 
+// splitView reports whether lists show a preview pane beside them.
+func (m *Model) splitView() bool { return m.width >= 110 }
+
+// previewWidth is the preview pane width beside a list of listWidth.
+func (m *Model) previewWidth() int { return m.inner() - overviewListWidth(m.inner()) - 3 }
+
+func (m *Model) paneDivider() string { return m.theme.Render(" \u2502 ", 3, terminal.Rule, false) }
+
+func (m *Model) overviewBody(width int) []string {
+	rows := m.overviewRows()
+	position := min(max(m.overviewPosition, 0), max(len(rows)-1, 0))
+	capacity := max(m.rows(), 1)
+	top := max(0, position-capacity+1)
+	line := func(index, lineWidth int) string {
+		text := m.overviewRowTextWidth(rows[index], index == position, lineWidth)
+		if m.searchMatchesRow(index) {
+			text = m.theme.Highlight(text, m.searchQuery, lineWidth)
+		}
+		if index == position && rows[index].selectable() {
+			return m.theme.Bar(text, lineWidth)
+		}
+		return text
+	}
+	body := []string{}
+	if !m.splitView() {
+		for index := top; index < min(len(rows), top+capacity); index++ {
+			body = append(body, line(index, width))
+		}
+		return body
+	}
+	listWidth := overviewListWidth(width)
+	previewWidth := m.previewWidth()
+	for offset := 0; offset < capacity; offset++ {
+		left := ""
+		if index := top + offset; index < len(rows) {
+			left = line(index, listWidth)
+		}
+		body = append(body, padStyled(left, listWidth)+m.paneDivider()+m.overviewPreviewLine(offset, previewWidth))
+	}
+	return body
+}
+
 func (m *Model) startOverviewPreview() tea.Cmd {
 	m.previewRequest++
 	request := m.previewRequest
 	m.previewKey = ""
 	m.previewDoc = nil
 	m.previewDividers = nil
-	if m.screen != "examples" || m.width < 110 {
+	if m.screen != "examples" || !m.splitView() {
 		return nil
 	}
 	row, ok := m.currentOverviewRow()
@@ -319,7 +380,7 @@ func (m *Model) startOverviewPreview() tea.Cmd {
 	m.previewKey = key
 	section := entry.Sections[0]
 	project := m.selected.Project
-	width := m.width - overviewListWidth(m.width) - 1
+	width := m.previewWidth()
 	return m.spawn(func() tea.Msg {
 		view, err := readSectionDocument(m.ctx, project, section, width)
 		if err != nil {
@@ -337,9 +398,9 @@ func (m *Model) overviewPreviewLine(row int, width int) string {
 		}
 		text := "Select an evidence row to preview its Card"
 		if m.previewKey != "" {
-			text = "Loading selected Card preview off the event loop"
+			text = "Loading the Card preview\u2026"
 		}
-		return terminal.Line(text, width)
+		return m.theme.Render(text, width, terminal.Muted, false)
 	}
 	if m.previewDividers[row] {
 		return m.theme.Render(m.previewDoc.LineAt(row, 0, width), width, terminal.Strong, false)
@@ -379,6 +440,27 @@ func (m *Model) selectOverviewPosition(position int) {
 	case overviewInventory:
 		m.inventory = row.inventoryIndex
 	}
+}
+
+// nearestSelectable moves from position in the direction of delta past
+// spacers and messages, then falls back the other way at either end.
+func nearestSelectable(rows []overviewRow, position, delta int) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	position = min(max(position, 0), len(rows)-1)
+	for _, direction := range []int{step, -step} {
+		for index := position; index >= 0 && index < len(rows); index += direction {
+			if rows[index].selectable() {
+				return index
+			}
+		}
+	}
+	return position
 }
 
 func (m *Model) selectFirstOverviewRow() {

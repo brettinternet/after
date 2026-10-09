@@ -37,31 +37,35 @@ The browser discovers pin heads (including forks), newest runs and comparisons f
 
 ## Layout and keys
 
-The header shows the project, comparison mode, short snapshot IDs and source words from each snapshot (`commit <hash>`, `working tree`, `staged`, or `merge base <hash>`). Tabs are Overview, Changes (inventory count), Diff and Activity. A detail replaces tabs with a breadcrumb and badge. The viewport is capped at 240×100.
+The browser fills the terminal. The header shows the project, comparison mode, short snapshot IDs and source words from each snapshot (`commit <hash>`, `working tree`, `staged`, or `merge base <hash>`). Below it, tabs (Overview, Changes with the inventory count, Diff and Activity) sit on a rule that underlines the active tab. A detail replaces tabs with a breadcrumb and badge, then its section tabs with the section position and size on the right. The body is padded by two columns, and a footer rule and status line stay on the last rows. The status line names the next step (for example `Enter opens this path`) or the latest result; shortcuts live in `?` help instead of an always-on hint row. The viewport is capped at 240×100.
 
-| Terminal size        | Layout                                                                           |
-| -------------------- | -------------------------------------------------------------------------------- |
-| At least 110 columns | Overview and Changes show a 45% list and a Card or file preview.                 |
-| Under 60 columns     | Hide project/source words, shorten tab labels and keep only high-priority hints. |
-| Under 12 rows        | Hide the tab bar; number keys still switch views.                                |
-| Under 7 rows         | Hide the status line; hints shrink to `? help · q quit`.                         |
+| Terminal size        | Layout                                                            |
+| -------------------- | ----------------------------------------------------------------- |
+| At least 110 columns | Overview and Changes show a 45% list and a Card or file preview.  |
+| Under 60 columns     | Drop side padding and project/source words.                       |
+| Under 40 columns     | Shorten tab labels.                                               |
+| Under 12 rows        | Hide the tab bar and footer rule; number keys still switch views. |
+| Under 7 rows         | Hide the status line; the footer shows `? help · q quit`.         |
 
-Color is on unless `NO_COLOR` is non-empty or `TERM=dumb`. The active tab is reverse video in color and bracketed in every mode; search matches use `⟦…⟧` without color. Selection uses `>`; narrow rows clip, but Enter opens the full record. At 1×1, `q` still quits even when the frame cannot show a useful hint.
+Color is on unless `NO_COLOR` is non-empty or `TERM=dumb`; `xterm-256color`, `COLORTERM=truecolor` or `COLORTERM=24bit` also enables fixed 256-color backgrounds for Diff tints and the selection bar. Styling uses a closed set of fixed SGR codes and never carries meaning alone: the active tab is bold over a heavy rule in color and bracketed without it, badges keep their brackets, selection is an accent bar (`>` without color), and search matches use `⟦…⟧` without color. Narrow rows clip, but Enter opens the full record. At 1×1, `q` still quits even when the frame cannot show a useful hint.
 
-| Key                                            | Action                                                                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `↑`/`↓`, `j`/`k`, PgUp/PgDn, Home/End, `g`/`G` | Move or scroll.                                                                                                                         |
-| `1`–`4`, Tab/Shift+Tab                         | Switch views; cycle detail/preview sections.                                                                                            |
-| Enter                                          | Open a record or inventory entry; expand/collapse an Overview group.                                                                    |
-| `d` / `2`, `3`, `4`                            | Changes, Diff, Activity.                                                                                                                |
-| `]`/`[`, `}`/`{`                               | Next/previous indexed file or hunk in Diff.                                                                                             |
-| `/`, `n`/`N`                                   | Search current list or document; cycle matches.                                                                                         |
-| `←`/`→`, `h`/`l`, `b`                          | Pan; toggle exact-byte hex view.                                                                                                        |
-| `c`, `i`, `u`, `p`, `r`, `a`                   | Capture, import configured report, use pending capture, pin, prepare run, accept pin. Confirmations apply to `u`, `p`, and `a`.         |
-| Consent: `y` / `n`                             | Run the displayed plan once / deny it.                                                                                                  |
-| `s`, `x`, `?`, Esc, `q`, Ctrl-C                | Activity, cancel an owned job, help, back, quit. During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits. |
+| Key                                                   | Action                                                                                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `↑`/`↓`, `j`/`k`, Ctrl-N/Ctrl-P                       | Move or scroll one row.                                                                                                           |
+| PgDn/PgUp, Ctrl-D/Ctrl-U, Ctrl-F/Ctrl-B, Ctrl-V/Alt-v | Move or scroll one page.                                                                                                          |
+| Home/End, `g`/`G`, Alt-`<`/Alt-`>`                    | Move to the start or end.                                                                                                         |
+| `1`–`4`, Tab/Shift+Tab                                | Switch views; cycle detail/preview sections.                                                                                      |
+| Enter, `l` in lists                                   | Open a record or inventory entry; expand/collapse an Overview group.                                                              |
+| Esc, Ctrl-G, `h` in Changes/Activity                  | Go back.                                                                                                                          |
+| `d` / `2`, `3`, `4`                                   | Changes, Diff, Activity.                                                                                                          |
+| `]`/`[`, `}`/`{`                                      | Next/previous indexed file or hunk in Diff.                                                                                       |
+| `/`, `n`/`N`                                          | Search current list or document; cycle matches.                                                                                   |
+| `←`/`→`, `h`/`l` in documents, `b`                    | Pan; toggle exact-byte hex view.                                                                                                  |
+| `c`, `i`, `u`, `p`, `r`, `a`                          | Capture, import configured report, use pending capture, pin, prepare run, accept pin. Confirmations apply to `u`, `p`, and `a`.   |
+| Consent: `y` / `n`                                    | Run the displayed plan once / deny it.                                                                                            |
+| `s`, `x`, `?`, `q`, Ctrl-C                            | Activity, cancel an owned job, help, quit. During a run, `q` asks for `y` confirmation (`n` continues); Ctrl-C cancels and quits. |
 
-Hints list enabled actions only. `?` also shows disabled actions and why. Bracketed paste is data and never triggers an action.
+`?` lists every key by group, dims unavailable ones and says why. Text fields (search and reasons) accept Backspace/Ctrl-H, Ctrl-W to delete a word and Ctrl-U to clear. Bracketed paste is data and never triggers an action.
 
 ## Overview and evidence
 
@@ -87,7 +91,7 @@ With no evidence, Overview says `NOT CHECKED` and lists every inventory path, in
 
 Changes keeps the full rawdiff inventory: potential-oracle paths first, then other known changes, then unknown paths, each in sorted inventory order. Rows use `A`, `D`, `M`, or `?` and show oracle/binary flags, mode changes, captured line counts and recorded limitations. Enter opens Diff, Base source, Candidate source and Inventory record. Missing source bytes state why; they are not replaced with live files.
 
-Diff shows the captured patch unchanged behind a safe line-number gutter. Binary, mode-only, added and deleted files get trusted summary dividers; their raw patch lines remain visible. `]`/`[` and `}`/`{` use the captured file/hunk index. Green `+`, red `-` and cyan `@@` are optional styling; the prefix characters remain meaningful without color.
+Diff shows the captured patch unchanged behind an aligned old/new line-number gutter. Each file starts with a trusted bar naming the path, change kind (binary, mode-only, added, deleted or modified), potential-oracle flag, line counts and file position; the bar stays pinned while scrolling through that file. Git metadata lines (`diff --git`, `index`, `---`/`+++`, mode and binary headers) are muted but remain visible. `]`/`[` and `}`/`{` use the captured file/hunk index. Added and removed lines are tinted green and red; when a removed line is paired with the added line that replaced it, the changed words are emphasized. With 16 colors the tints are foreground colors; without color the `+`/`-` prefixes carry the meaning. The same styling applies to a changed path's Diff section. Highlighting is built in rather than delegated to an external pager such as `delta`, whose output would cross the safe-rendering boundary.
 
 If the snapshots have no shared captured patch, the browser displays a deterministic unified diff from their stored source manifests. It is labeled `computed from captured sources — not Git's patch` in Diff, Overview and Changes. It is only a presentation: it creates no Git patch, hunk IDs or captured counts. Limits are:
 
@@ -107,7 +111,7 @@ Over-bound files show `too large to diff here — open both sources`; unknown pa
 
 Details use typed Cards. Payment cases show Card, Receipt Card, Witnesses, Artifacts, Receipt, Scenario, Plan and IDs. Receipts without case rows omit Witnesses; pins show History, Current result and Basis receipt; reports show Output and Report; changed paths show Diff, both sources and Inventory record. Unexpected stored shapes remain raw content with a limitation, not a guessed conclusion. Full IDs remain available in details and Activity.
 
-Every document uses one trusted row per captured line. Payload newlines cannot create headings or chrome. Tabs expand to four-column stops; controls, bidi formats, invalid UTF-8 and leading combining marks are rendered safely. Long lines show `[b]` after the first 4 KiB; pan does not split graphemes. A NUL in the first 8,000 bytes opens hex view automatically. `b` toggles text/hex for any document; hex offsets expose every stored byte, including CR, BOM and trailing whitespace. Stored bytes do not change. Only typed observation, sample, comparison-detail and execution-plan JSON is indented; source, diagnostics and imported output stay verbatim.
+Every document uses one trusted row per captured line. Multi-part documents separate parts with a blank line and a `── Part ──` heading. Payload newlines cannot create headings or chrome. Tabs expand to four-column stops; controls, bidi formats, invalid UTF-8 and leading combining marks are rendered safely. Long lines show `[b]` after the first 4 KiB; pan does not split graphemes. A NUL in the first 8,000 bytes opens hex view automatically. `b` toggles text/hex for any document; hex offsets expose every stored byte, including CR, BOM and trailing whitespace. Stored bytes do not change. Only typed observation, sample, comparison-detail and execution-plan JSON is indented; source, diagnostics and imported output stay verbatim.
 
 Documents are limited to 16 MiB and 250,000 indexed text lines. Past the line limit, the text view shows a limitation; hex still reaches the full bounded blob. Artifact reads verify the bounded blob before indexing; an unavailable artifact shows a limitation, not an empty result. Search `/` scans sanitized displayed text on Overview, Changes, Activity, details and Diff; it is unavailable on consent. Queries are limited to 512 sanitized bytes and use case-insensitive matching unless they contain uppercase. Enter jumps to the next match, `n`/`N` wrap, and Esc clears search before leaving a detail. The status shows `match k of n` or `no matches`; hits use reverse video in color and `⟦…⟧` without color, and document navigation pans to off-screen hits. Scans run in cancellable background work; query/view changes cancel them and late results are discarded.
 
@@ -121,7 +125,7 @@ Documents are limited to 16 MiB and 250,000 indexed text lines. Past the line li
 - `r` prepares an offline execution plan; it does not run it. The modal Summary strictly decodes the same retained preview bytes whose digest is approved. It lists the pair, run counts/concurrency, argv, environment, images, topology, mounts, Docker policy and limits. Values are JSON-escaped plan data; only counts are derived. Unknown fields or malformed data show `Summary unavailable`; Exact plan remains available and its bytes/digest do not change.
 - In consent, only `y`, `n`, Esc, Tab/Shift+Tab, scrolling, `b`, `?`, `q` and Ctrl-C act. `y` approves those bytes once; `n`, Esc, quit or Ctrl-C denies. Paste cannot approve. Builds are execution and run only as part of the approved plan. Execution requires explicit `AFTER_DOCKER_BINARY` and `AFTER_DOCKER_HOST`; configuration grants no consent and there is no host fallback. `x` requests cancellation; an incomplete receipt is kept. A successful run adds measured evidence but never accepts behavior.
 
-Reasons for `p`, `u` and `a` are prefilled, editable and required; Ctrl-U clears them. Sanitized text is capped at 4,096 bytes and recorded in pin history. Confirmation names the exact IDs and effect.
+Reasons for `p`, `u` and `a` are prefilled, editable and required; Ctrl-W deletes a word and Ctrl-U clears them. Sanitized text is capped at 4,096 bytes and recorded in pin history. Confirmation names the exact IDs and effect.
 
 ## Activity, session and background work
 

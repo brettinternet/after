@@ -85,7 +85,7 @@ func TestBrowserPTY(t *testing.T) {
 		for {
 			found := true
 			for _, want := range wants {
-				found = found && strings.Contains(unread.String(), want)
+				found = found && strings.Contains(stripThemeSGR(unread.String()), want)
 			}
 			if found {
 				unread.Reset()
@@ -115,21 +115,21 @@ func TestBrowserPTY(t *testing.T) {
 		done <- run(t.Context(), []string{"review", strings.ToUpper(captured.Data.Base.ID[7:19]), strings.ToUpper(captured.Data.Candidate.ID[7:19]), strings.ToUpper(imported.Data.ID[7:19]), "--project", project, "--import-file", report, "--json"}, &stdout, slave, slave, true)
 	}()
 	expect("[REPORTED]")
-	if !strings.Contains(transcript.String(), "1 Overview") {
+	if !strings.Contains(stripThemeSGR(transcript.String()), "Diff   Activity") {
 		t.Fatal("overview tab missing from the initial PTY frame")
 	}
 	send("\r")
 	expect("pty-case (package)")
 	send("\x1b")
-	expect("1 Overview")
+	expect("Diff   Activity")
 	send("d")
-	expect("2 Changes")
+	expect("CHANGED")
 	send("\t")
-	expect("captured raw diff")
+	expect("diff --git")
 	send("?")
-	expect("Help")
+	expect("Keys")
 	send("\x1b")
-	expect("1 Overview")
+	expect("Diff   Activity")
 	send("c")
 	expect("u reviews it")
 	if !strings.Contains(transcript.String(), "New capture ") {
@@ -144,14 +144,14 @@ func TestBrowserPTY(t *testing.T) {
 	send("1")
 	expect("[STALE]", "[REPORTED]")
 	send("s")
-	expect("4 Activity", "SESSION", "import finished")
+	expect("ACTIVITY", "SESSION", "import finished")
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 8, Cols: 32}); err != nil {
 		t.Fatal(err)
 	}
 	if err := syscall.Kill(os.Getpid(), syscall.SIGWINCH); err != nil {
 		t.Fatal(err)
 	}
-	expect("AFTER ·")
+	expect("AFTER  ")
 	send("q")
 	select {
 	case code := <-done:

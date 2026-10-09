@@ -344,7 +344,7 @@ func TestFrameThemeSequences(t *testing.T) {
 			m.screen = screen
 			m.doc, _ = terminal.NewDocument([]byte(hostile))
 			frame := m.View()
-			re := regexp.MustCompile("\x1b\\[(?:0|32|1;35|1;33|1;31|34|36|2|1|7)m")
+			re := regexp.MustCompile("\x1b\\[(?:0|1|2|7|1;7|31|32|34|36|90|1;31|1;32|1;33|1;35|1;36|48;5;(?:22|52|237)|1;48;5;(?:28|124))m")
 			plain := re.ReplaceAllString(frame, "")
 			if strings.ContainsAny(plain, "\x1b\a\r") || strings.ContainsAny(plain, "\u009b\u009d") {
 				t.Fatal("non-theme control", screen, frame)

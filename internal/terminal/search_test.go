@@ -57,7 +57,7 @@ func TestThemeHighlightIsSafeAndKeepsRowsBounded(t *testing.T) {
 		if strings.Count(highlighted, "\n") != strings.Count(rendered, "\n") {
 			t.Fatalf("highlight changed row count: %q", highlighted)
 		}
-		plain := regexp.MustCompile("\\x1b\\[(?:0|32|1;35|1;33|1;31|34|36|2|1|7)m").ReplaceAllString(highlighted, "")
+		plain := regexp.MustCompile("\\x1b\\[(?:0|1|2|7|1;7|31|32|34|36|90|1;31|1;32|1;33|1;35|1;36|48;5;(?:22|52|237)|1;48;5;(?:28|124))m").ReplaceAllString(highlighted, "")
 		if strings.ContainsAny(plain, "\x1b\a\r") {
 			t.Fatalf("unsafe control escaped in highlight: %q", highlighted)
 		}

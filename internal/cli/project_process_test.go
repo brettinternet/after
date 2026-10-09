@@ -431,7 +431,7 @@ func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answ
 				continue
 			}
 			output.Write(chunk)
-			if !sent && prompt != "" && strings.Contains(output.String(), prompt) {
+			if !sent && prompt != "" && strings.Contains(stripThemeSGR(output.String()), prompt) {
 				if _, err := master.Write([]byte(answer)); err != nil {
 					_ = cmd.Process.Kill()
 					return -1, output.String(), err
@@ -479,7 +479,11 @@ func processExitCode(err error) (int, error) {
 }
 
 func stripThemeSGR(value string) string {
-	for _, sequence := range []string{"\x1b[0m", "\x1b[32m", "\x1b[1;35m", "\x1b[1;33m", "\x1b[1;31m", "\x1b[34m", "\x1b[36m", "\x1b[2m", "\x1b[1m", "\x1b[7m"} {
+	for _, sequence := range []string{
+		"\x1b[0m", "\x1b[32m", "\x1b[1;35m", "\x1b[1;33m", "\x1b[1;31m", "\x1b[34m", "\x1b[36m", "\x1b[2m", "\x1b[1m", "\x1b[7m",
+		"\x1b[1;7m", "\x1b[90m", "\x1b[1;36m", "\x1b[31m", "\x1b[1;32m",
+		"\x1b[48;5;22m", "\x1b[48;5;52m", "\x1b[1;48;5;28m", "\x1b[1;48;5;124m", "\x1b[48;5;237m",
+	} {
 		value = strings.ReplaceAll(value, sequence, "")
 	}
 	return value

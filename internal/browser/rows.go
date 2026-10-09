@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -93,43 +94,91 @@ func (m *Model) trailing(e Entry) string {
 // Each column is separately sanitized before styling. No payload can consume
 // the badge/selection column, even when it starts with combining marks or tabs.
 func (m *Model) entryLine(e Entry, selected bool) string {
-	return m.entryLineWidth(e, selected, m.width)
+	return m.entryLineWidth(e, selected, m.inner())
+}
+
+// cursorPrefix is the two-cell selection column: an accent bar in color and
+// '>' without color, so the selection never depends on styling.
+func (m *Model) cursorPrefix(selected bool) string {
+	switch {
+	case !selected:
+		return "  "
+	case m.theme.Color:
+		return "▌ "
+	default:
+		return "> "
+	}
+}
+
+// badgeText brackets the state word in every mode, matching CLI output, so
+// the state survives copying and NO_COLOR alike.
+func (m *Model) badgeText(b badge) string {
+	return "[" + b.word + "]"
+}
+
+func changeLetter(change string) (string, terminal.Style) {
+	switch change {
+	case "added":
+		return "A", terminal.AddedText
+	case "deleted":
+		return "D", terminal.RemovedText
+	case "modified":
+		return "M", terminal.Hunk
+	default:
+		return "?", terminal.Attention
+	}
 }
 
 func (m *Model) changeEntryLine(e Entry, selected bool, width int) string {
-	prefix, style := "  ", terminal.Plain
+	nameStyle := terminal.Plain
 	if selected {
-		prefix, style = "> ", terminal.Strong
+		nameStyle = terminal.Strong
 	}
-	letter := "?"
-	switch e.Change {
-	case "added":
-		letter = "A"
-	case "deleted":
-		letter = "D"
-	case "modified":
-		letter = "M"
+	letter, letterStyle := changeLetter(e.Change)
+	parts := []segment{{m.cursorPrefix(selected), terminal.Accent}, {letter, letterStyle}, {"  ", terminal.Plain}, {e.Name, nameStyle}}
+	flags := []segment{}
+	if e.PotentialOracle {
+		flags = append(flags, segment{"oracle", terminal.Attention})
 	}
-	if width <= len(prefix) {
-		return terminal.Line(prefix, width)
+	if e.Binary {
+		flags = append(flags, segment{"binary", terminal.Muted})
 	}
-	body := letter + "  " + e.Name
-	if e.Summary != "" {
-		body += "  " + e.Summary
+	if e.BaseMode != "" && e.CandidateMode != "" && e.BaseMode != e.CandidateMode {
+		flags = append(flags, segment{"mode " + e.BaseMode + " → " + e.CandidateMode, terminal.Muted})
 	}
-	return prefix + m.theme.Render(body, width-len(prefix), style, false)
+	if e.Added > 0 {
+		flags = append(flags, segment{fmt.Sprintf("+%d", e.Added), terminal.AddedText})
+	}
+	if e.Deleted > 0 {
+		flags = append(flags, segment{fmt.Sprintf("−%d", e.Deleted), terminal.RemovedText})
+	}
+	for _, limit := range e.Limits {
+		flags = append(flags, segment{limit, terminal.Muted})
+	}
+	if len(flags) == 0 && e.Summary != "" {
+		flags = append(flags, segment{e.Summary, terminal.Muted})
+	}
+	for index, flag := range flags {
+		separator := " · "
+		if index == 0 {
+			separator = "  "
+		}
+		parts = append(parts, segment{separator, terminal.Rule}, flag)
+	}
+	return m.segments(width, parts...)
 }
 
 func (m *Model) entryLineWidth(e Entry, selected bool, width int) string {
-	prefix, nameStyle := "  ", terminal.Plain
+	nameStyle := terminal.Plain
 	if selected {
-		prefix, nameStyle = "> ", terminal.Strong
+		nameStyle = terminal.Strong
 	}
+	prefix := m.cursorPrefix(selected)
 	b := badgeFor(e)
 	if width <= 2 {
 		return terminal.Line(prefix, width)
 	}
-	out := prefix + m.theme.Render("["+b.word+"]", min(14, width-2), b.style, true)
+	out := m.theme.Render(prefix, 2, terminal.Accent, false) + m.theme.Render(m.badgeText(b), min(14, width-2), b.style, true)
 	if width <= 16 {
 		return out
 	}
@@ -137,25 +186,26 @@ func (m *Model) entryLineWidth(e Entry, selected bool, width int) string {
 	tail := m.trailing(e)
 	tailWidth := 0
 	// Narrow terminals preserve the badge and name; details retain all fields.
-	if width >= 80 && tail != "" {
+	if width >= 76 && tail != "" {
 		tailWidth = 23
 	}
 	bodyWidth := available - tailWidth
-	body := e.Name
-	if e.Summary != "" {
-		body += " · " + e.Summary
+	if tailWidth == 0 {
+		return out + m.segments(bodyWidth, segment{e.Name, nameStyle}, segment{entrySummary(e), terminal.Muted})
 	}
-	if tailWidth > 0 {
-		out += m.theme.Render(body, bodyWidth-1, nameStyle, true) + " "
-		style := terminal.Muted
-		if e.State.Kind == evidence.Reported && e.State.Report == evidence.ReportFail {
-			style = terminal.Problem
-		}
-		out += m.theme.Render(tail, tailWidth, style, false)
-	} else {
-		out += m.theme.Render(body, bodyWidth, nameStyle, false)
+	out += padStyled(m.segments(bodyWidth-1, segment{e.Name, nameStyle}, segment{entrySummary(e), terminal.Muted}), bodyWidth-1) + " "
+	style := terminal.Muted
+	if e.State.Kind == evidence.Reported && e.State.Report == evidence.ReportFail {
+		style = terminal.Problem
 	}
-	return out
+	return out + m.theme.Render(tail, tailWidth, style, false)
+}
+
+func entrySummary(e Entry) string {
+	if e.Summary == "" {
+		return ""
+	}
+	return " · " + e.Summary
 }
 
 // Rendering time is injected for deterministic views; engine timestamps remain

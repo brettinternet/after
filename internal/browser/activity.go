@@ -2,6 +2,7 @@ package browser
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -166,4 +167,39 @@ func activitySessionDetail(selection Selection, results []evidence.Digest, saved
 		Results     []evidence.Digest `json:"retained_run_comparisons,omitempty"`
 	}{SavedReview: savedReview, Selection: selection, Results: append([]evidence.Digest(nil), results...)}, "", "  ")
 	return string(raw)
+}
+
+// activityBody renders the session block and the newest-first event list.
+func (m *Model) activityBody(width int) []string {
+	out := []string{}
+	for index, line := range m.activitySessionLines() {
+		switch {
+		case index == 0:
+			out = append(out, m.theme.Render(line, width, terminal.Strong, false))
+		case index == 1:
+			out = append(out, m.theme.Render(line, width, terminal.Muted, false))
+		default:
+			label, value := line[:min(11, len(line))], line[min(11, len(line)):]
+			out = append(out, m.segments(width, segment{label, terminal.Muted}, segment{value, terminal.Plain}))
+		}
+	}
+	out = append(out, "", m.theme.Render("ACTIVITY", width, terminal.Strong, false))
+	if m.activityDropped > 0 {
+		out = append(out, m.theme.Render(fmt.Sprintf("%d older activity events dropped", m.activityDropped), width, terminal.Muted, false))
+	}
+	if len(m.activity) == 0 {
+		return append(out, m.theme.Render("No Activity events yet", width, terminal.Muted, false))
+	}
+	top := max(0, m.activityIndex-m.activityRows()+1)
+	for index := top; index < min(len(m.activity), top+m.activityRows()); index++ {
+		line := m.activityLine(index, index == m.activityIndex)
+		if m.searchMatchesRow(index) {
+			line = m.theme.Highlight(line, m.searchQuery, width)
+		}
+		if index == m.activityIndex {
+			line = m.theme.Bar(line, width)
+		}
+		out = append(out, line)
+	}
+	return out
 }

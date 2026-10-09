@@ -21,6 +21,10 @@ type DiffRow struct {
 	HasNew    bool
 	HasGutter bool
 	Style     terminal.Style
+	// Pair links a removed line to the added line that replaced it, so the
+	// renderer can emphasize the changed span. Only set when Paired.
+	Pair   int
+	Paired bool
 }
 
 type DiffFile struct {
@@ -35,7 +39,9 @@ type DiffFile struct {
 	Start, End      int
 	StartRow        int
 	Summary         string
-	Flags           []string
+	// Kinds are the trusted header words: added, deleted, binary, mode-only,
+	// computed-diff limits, or the plain change kind.
+	Kinds []string
 }
 
 type DiffView struct {
@@ -108,24 +114,7 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 			if entry.Candidate != nil {
 				file.CandidateMode = entry.Candidate.Mode
 			}
-			if file.PotentialOracle {
-				file.Flags = append(file.Flags, "oracle")
-			}
-			if file.Binary {
-				file.Flags = append(file.Flags, "binary")
-			}
-			if file.BaseMode != "" && file.CandidateMode != "" && file.BaseMode != file.CandidateMode {
-				file.Flags = append(file.Flags, "mode "+file.BaseMode+" → "+file.CandidateMode)
-			}
 			modeOnly := entry.Change == "modified" && entry.Base != nil && entry.Candidate != nil && entry.Base.Content == entry.Candidate.Content && entry.Base.Mode != entry.Candidate.Mode
-			switch {
-			case entry.Change == "added":
-				file.Flags = append(file.Flags, "added")
-			case entry.Change == "deleted":
-				file.Flags = append(file.Flags, "deleted")
-			case modeOnly:
-				file.Flags = append(file.Flags, "mode-only")
-			}
 			var summaries []string
 			if file.Binary {
 				summaries = append(summaries, "binary")
@@ -146,10 +135,12 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 					summaries = append(summaries, "captured source unavailable; no computed diff")
 				}
 			}
-			if len(summaries) > 0 {
-				file.Summary = "── " + strings.Join(summaries, " · ") + " · " + file.Path + " ──"
-			}
+			file.Kinds = summaries
 		}
+		if len(file.Kinds) == 0 && file.Change != "unknown" {
+			file.Kinds = []string{file.Change}
+		}
+		file.Summary = "── " + strings.Join(append([]string{file.Path}, file.Kinds...), " · ") + " ──"
 		view.Files[i] = file
 		if file.Path != "" {
 			view.FileByPath[file.Path] = i
@@ -165,6 +156,11 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 		fileAt[file.Start] = i
 	}
 	currentFile, oldLine, newLine, inHunk := -1, 0, 0, false
+	// removed holds the row indexes of the current run of '-' lines; added
+	// counts the '+' lines that followed it. Pairs are positional.
+	var removed []int
+	added, lastKind := 0, byte(0)
+	resetRun := func() { removed, added, lastKind = removed[:0], 0, 0 }
 	for rawLine, start := 0, 0; start < len(raw); rawLine++ {
 		end := bytes.IndexByte(raw[start:], '\n')
 		if end < 0 {
@@ -175,22 +171,18 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 		line := raw[start:end]
 		if fileIndex, ok := fileAt[start]; ok {
 			currentFile, inHunk = fileIndex, false
-			if summary := view.Files[fileIndex].Summary; summary != "" {
-				if len(view.Rows) < terminal.MaxLines {
-					view.Rows = append(view.Rows, DiffRow{File: fileIndex, Summary: summary, Style: terminal.Muted})
-				} else {
-					view.Limited = true
-				}
-			}
+			resetRun()
 			if len(view.Rows) < terminal.MaxLines {
 				view.Files[fileIndex].StartRow = len(view.Rows)
+				view.Rows = append(view.Rows, DiffRow{File: fileIndex, Summary: view.Files[fileIndex].Summary, Style: terminal.Muted})
 				view.VisibleFiles++
 			} else {
 				view.Limited = true
 			}
 		}
-		row := DiffRow{RawLine: rawLine, File: currentFile, Style: terminal.DiffStyle(line)}
+		row := DiffRow{RawLine: rawLine, File: currentFile, Style: patchLineStyle(line)}
 		if _, ok := hunkAt[start]; ok {
+			resetRun()
 			if currentFile >= 0 {
 				row.File = currentFile
 			}
@@ -206,23 +198,34 @@ func buildDiffAt(raw []byte, patchFiles []rawdiff.PatchFile, hunkOffsets []int, 
 		} else if inHunk {
 			switch {
 			case len(line) > 0 && line[0] == ' ':
-				row.OldLine, row.NewLine, row.HasOld, row.HasNew, row.HasGutter = oldLine, newLine, true, true, true
+				resetRun()
+				row.OldLine, row.NewLine, row.HasOld, row.HasNew, row.HasGutter, row.Style = oldLine, newLine, true, true, true, terminal.Plain
 				oldLine++
 				newLine++
 			case len(line) > 0 && line[0] == '-':
-				row.OldLine, row.HasOld, row.HasGutter = oldLine, true, true
+				if lastKind == '+' {
+					resetRun()
+				}
+				removed, added, lastKind = append(removed, len(view.Rows)), 0, '-'
+				row.OldLine, row.HasOld, row.HasGutter, row.Style = oldLine, true, true, terminal.Removed
 				oldLine++
 				if currentFile >= 0 {
 					view.Files[currentFile].Deleted++
 				}
 			case len(line) > 0 && line[0] == '+':
-				row.NewLine, row.HasNew, row.HasGutter = newLine, true, true
+				if added < len(removed) && removed[added] < len(view.Rows) {
+					row.Pair, row.Paired = removed[added], true
+					view.Rows[removed[added]].Pair, view.Rows[removed[added]].Paired = len(view.Rows), true
+				}
+				added, lastKind = added+1, '+'
+				row.NewLine, row.HasNew, row.HasGutter, row.Style = newLine, true, true, terminal.Added
 				newLine++
 				if currentFile >= 0 {
 					view.Files[currentFile].Added++
 				}
 			case len(line) > 0 && line[0] == '\\':
 			default:
+				resetRun()
 				inHunk = false
 			}
 		}
@@ -349,25 +352,37 @@ type inventoryRecord struct {
 	Limits          []string `json:"recorded_limitations,omitempty"`
 }
 
-func diffHeader(file DiffFile, position, total int, origin string) string {
-	name := file.Path
-	if name == "" {
-		name = "unmatched captured patch path"
-	}
-	flags := append([]string(nil), file.Flags...)
-	if file.Change != "" && file.Change != "unknown" {
-		flags = append([]string{file.Change}, flags...)
-	}
-	if origin == rawdiff.ComputedOrigin {
-		return fmt.Sprintf("%s · %s · file %d of %d · %s", origin, name, position+1, total, strings.Join(flags, " · "))
-	}
-	return fmt.Sprintf("%s · file %d of %d · %s · %s", name, position+1, total, origin, strings.Join(flags, " · "))
-}
-
 func diffPosition(rows []DiffRow, row int) int {
 	if len(rows) == 0 {
 		return -1
 	}
 	row = min(max(row, 0), len(rows)-1)
 	return rows[row].File
+}
+
+// patchMetadata prefixes are Git's per-file header lines. They stay visible
+// but recede so the changed lines carry the eye.
+var patchMetadata = [][]byte{
+	[]byte("diff --git "), []byte("index "), []byte("--- "), []byte("+++ "), []byte("old mode "), []byte("new mode "),
+	[]byte("new file mode "), []byte("deleted file mode "), []byte("similarity index "), []byte("rename from "),
+	[]byte("rename to "), []byte("Binary files "), []byte("GIT binary patch"), []byte("literal "), []byte("delta "), []byte(`\ `),
+}
+
+// patchLineStyle classifies one raw patch line for the browser's Diff view.
+func patchLineStyle(line []byte) terminal.Style {
+	for _, prefix := range patchMetadata {
+		if bytes.HasPrefix(line, prefix) {
+			return terminal.Muted
+		}
+	}
+	switch {
+	case bytes.HasPrefix(line, []byte("@@")):
+		return terminal.Hunk
+	case len(line) > 0 && line[0] == '+':
+		return terminal.Added
+	case len(line) > 0 && line[0] == '-':
+		return terminal.Removed
+	default:
+		return terminal.Plain
+	}
 }

@@ -221,6 +221,26 @@ func styleCode(style Style) string {
 		return "1"
 	case Reverse:
 		return "7"
+	case Brand:
+		return "1;7"
+	case Rule:
+		return "90"
+	case Accent:
+		return "1;36"
+	case Added:
+		return "32"
+	case Removed:
+		return "31"
+	case AddedEmphasis:
+		return "1;32"
+	case RemovedEmphasis:
+		return "1;31"
+	case Hunk:
+		return "36"
+	case AddedText:
+		return "32"
+	case RemovedText:
+		return "31"
 	default:
 		return ""
 	}

@@ -30,8 +30,8 @@ func TestNewReviewPTYAndSuggestions(t *testing.T) {
 				t.Helper()
 				args = append(args, "--project", project, "--json")
 				p := startLoopPTYSize(t, args, 80, 24)
-				p.expect("AFTER · project")
-				p.expect("[1 Overview]")
+				p.expect("AFTER   project")
+				p.expect("Diff   Activity")
 				selected, _ := p.finish()
 				return selected.Pair, p.transcript.String()
 			}
@@ -85,7 +85,7 @@ func TestNewReviewPTYAndSuggestions(t *testing.T) {
 			s.Close()
 			// Activity displays exactly which immutable records discovery loaded.
 			p := startLoopPTYSize(t, []string{"review", "--project", project, "--json"}, 80, 24)
-			p.expect("AFTER · project")
+			p.expect("AFTER   project")
 			p.expect("keep the old review expectation")
 			p.send("s")
 			p.expect(shortID(pin.ID))
@@ -152,7 +152,7 @@ func TestNewReviewPTYAndSuggestions(t *testing.T) {
 					t.Fatalf("suggestion=%q want=%q", command, want)
 				}
 				p := startLoopPTYSize(t, append(strings.Fields(strings.TrimPrefix(command, "after ")), "--json"), 80, 24)
-				p.expect("AFTER · project")
+				p.expect("AFTER   project")
 				selected, _ := p.finish()
 				expected := second // Plain review resumes, never silently switches to newest.
 				if pair == first {

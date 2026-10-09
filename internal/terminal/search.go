@@ -293,15 +293,13 @@ func themeSGR(raw string, offset int) (string, int) {
 		return "", offset
 	}
 	end := strings.IndexByte(raw[offset+2:], 'm')
-	if end < 0 || end > 8 {
+	if end < 0 || end > 16 {
 		return "", offset
 	}
 	end += offset + 2
 	candidate := raw[offset : end+1]
-	switch candidate {
-	case "\x1b[0m", "\x1b[32m", "\x1b[1;35m", "\x1b[1;33m", "\x1b[1;31m", "\x1b[34m", "\x1b[36m", "\x1b[2m", "\x1b[1m", "\x1b[7m":
+	if themeCodes[candidate] {
 		return candidate, end + 1
-	default:
-		return "", offset
 	}
+	return "", offset
 }

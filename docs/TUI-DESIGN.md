@@ -27,20 +27,24 @@ The TUI turns a snapshot pair and its immutable evidence into a reviewable list.
 ## Frame
 
 ```text
-AFTER · payment · original base a750186b (commit 3f2a1c9) → candidate 784eb013 (working tree)
- 1 Overview   2 Changes 1   3 Diff   4 Activity
- NEEDS ANOTHER LOOK 1
- > [DIFFERENT] 12h same-key retry · provider requests 1 → 2 · responses same
- CHANGES 1 path · 1 captured hunk, all unclassified · 0 potential oracles
+   AFTER   payment   original base a750186b (commit 3f2a1c9)  →  candidate 784eb013 (working tree)
+  [Overview]   Changes 1   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────────────
 
-Nothing has run. y runs this exact plan once · n denies
-↑↓ move  enter open  r rerun  2 changes  / search  ? help  q quit
+    ▾ NEEDS ANOTHER LOOK  1
+  > [DIFFERENT]   12h same-key retry · provider requests 1 → 2 · responses same
+
+    CHANGES  1 path · 1 captured hunk · 0 potential oracles
+
+  ────────────────────────────────────────────────────────────────────────────────────
+  Enter opens the full record                                                   ? help
 ```
 
-- Header, tabs/breadcrumb, body, next/status line and key hints appear in that order. There are no horizontal rules. The header uses the sanitized project directory, short IDs and source values from the snapshots: `commit <hash>`, `working tree`, `staged` or `merge base <hash>`. Follow-up mode names the left side `last inspected`.
+- The frame fills the terminal: header, tabs (or breadcrumb and section tabs) over a rule, a blank spacer, the padded body, then a footer rule and status line pinned to the last rows. The header uses the sanitized project directory, short IDs and source values from the snapshots: `commit <hash>`, `working tree`, `staged` or `merge base <hash>`. Follow-up mode names the left side `last inspected`.
+- The footer shows the status or Next line, or else a gentle idle hint for the selected row (`Enter opens this path`, `] and [ jump between files`), with `? help` on the right. Shortcuts are not listed in the frame; the footer names editing keys only while a text field has focus.
 - A pending capture shows `new capture <id> · u`; active capture/import/run shows elapsed time, updated once per second, never a percentage.
-- Under 12 rows, hide tabs (number keys still work). Under 7, hide the status line and reduce hints to `? help · q quit`. The viewport is capped at 240×100.
-- At 110 columns, Overview and Changes split into a 45% list and preview; narrower screens use one pane and Enter opens details. Under 60 columns, omit project/source words, shorten tabs and keep only high-priority hints.
+- Under 12 rows, hide tabs and the rules (number keys still work). Under 7, hide the status line and show `? help · q quit`. The viewport is capped at 240×100.
+- At 110 columns, Overview and Changes split into a 45% list and preview; narrower screens use one pane and Enter opens details. Under 60 columns, drop the side padding and project/source words; under 40, shorten tabs.
 
 ## Badges and formatting
 
@@ -64,7 +68,7 @@ Badges occupy a fixed 14-cell column. The first applicable rule wins; all are de
 
 Payment outcomes use each case's witnesses, not the receipt aggregate: a differing repetition makes that case `UNSTABLE`; otherwise a differing paired witness makes it `DIFFERENT`; otherwise a complete comparable case is `EQUAL`. Incomplete or incomparable cases cannot be equal. The trailing column (shown at widths of 80 or more) identifies evidence and freshness: `observed · current`, `ran on <id>`, `reported · fail`, `no current result`, `current result attached` or `accepted <time>`.
 
-Color is on unless `NO_COLOR` is non-empty or `TERM=dumb`. `internal/terminal` uses fixed SGR sequences. Green is reserved for current complete equality outside Diff; reported passes and human acceptance are not green. Diff uses green `+`, red `-`, cyan `@@`, bold file headers, and meaningful `+`/`-` characters without color. Selection uses `>` and bold; badges retain brackets in every mode.
+Color is on unless `NO_COLOR` is non-empty or `TERM=dumb`. `internal/terminal` uses fixed SGR sequences; 256-color terminals (`TERM` containing `256color`, or `COLORTERM=truecolor`/`24bit`) also get fixed backgrounds for Diff tints and the selection bar. Chrome styles (brand, rules, accent, Diff tints) never carry evidence meaning. Green evidence styling is reserved for current complete equality; reported passes and human acceptance are not green, and green/red line counts and Diff tints describe text, not results. Selection is an accent bar with a background in color and `>` without it; badges retain brackets in every mode. Group headings are bold with a muted count; secondary text is faint.
 
 ### Formatting
 
@@ -150,7 +154,9 @@ This is an illustrative layout. The inventory groups potential-oracle paths, oth
 
 ## Diff
 
-Diff shows every captured patch line after a safe old/new line-number gutter. The sticky header names the current file, position, flags and origin. `]`/`[` navigate indexed files; `}`/`{` navigate indexed hunks. Opening Diff from a Changes path selects that file. Binary, mode-only, added and deleted files get trusted summary dividers while their raw lines remain visible. Captured patch bytes are unchanged.
+Diff shows every captured patch line after a safe, aligned old/new line-number gutter; display rows map one-to-one to patch lines plus one trusted bar per file. The bar names the path, its change kinds (binary, mode-only, added, deleted, modified or computed-diff limits), potential-oracle flag, `+`/`−` counts and `k/n` position, and is repeated as a sticky header while scrolling within the file. The tab strip shows the origin and size. `]`/`[` navigate indexed files; `}`/`{` navigate indexed hunks. Opening Diff from a Changes path selects that file. Git metadata lines are faint; `@@` lines are cyan. Added and removed lines get green and red tints. Removed lines are paired positionally with the added lines that follow them in the same run, and the differing middle after the shared prefix and suffix (widened to whole words and graphemes) is emphasized; lines sharing too little are tinted without emphasis, and lines over 4 KiB are not compared. Captured patch bytes are unchanged, and a changed path's Diff section uses the same line styles.
+
+Highlighting is built in. An external pager such as `delta` would reintroduce foreign escape sequences and process execution into the safe-rendering boundary, so AFTER does not invoke one. Language-aware token coloring is not implemented.
 
 ### Computed diffs (AFTER-32)
 
@@ -224,19 +230,20 @@ Discovery loads pin heads (forks separately), newest pair runs/comparisons and r
 
 `p`, `u` and `a` always confirm exact IDs and effect; navigation, selection and paste never mutate state. Prompts prefill a reason. The reviewer may edit or clear it with Ctrl-U; sanitized, bracketed-pasted text is data, capped at 4,096 bytes, recorded in pin history, and cannot be empty. `p` refuses an existing pin with the same basis receipt and expectation. `u` counts changed paths, warns that pins may reopen and history remains, and offers original-base (default) or last-inspected mode. `a` is available only for a pin with a current complete result on the selected pair; the engine enforces this too. See [REVIEW.md](REVIEW.md) for immutable pin revisions.
 
-| Key                                            | Context                      | Action                                                                        |
-| ---------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
-| `↑`/`↓`, `j`/`k`, PgUp/PgDn, Home/End, `g`/`G` | Lists/documents              | Move, page, first/last.                                                       |
-| Enter, Esc                                     | Lists/overlays               | Open or expand; return or cancel (deny in consent).                           |
-| `1`–`4`, Tab/Shift+Tab                         | Views/details                | Switch top-level view or detail section.                                      |
-| `←`/`→`, `h`/`l`, `b`                          | Documents                    | Pan; toggle hex.                                                              |
-| `/`, `n`/`N`                                   | Lists/documents, not consent | Search, next/previous match.                                                  |
-| `]`/`[`, `}`/`{`                               | Diff                         | Next/previous file and hunk.                                                  |
-| `d`, `c`, `i`, `u`, `p`, `a`, `r`              | Available review state       | Changes, capture, import, select candidate, pin, accept pin, prepare preview. |
-| `y`, `n`                                       | Consent only                 | Approve once; deny.                                                           |
-| `s`, `x`, `?`, `q`, Ctrl-C                     | Session/jobs/any view        | Activity; cancel; help; quit. During a run `q` confirms, Ctrl-C quits now.    |
+| Key                                                                         | Context                      | Action                                                                        |
+| --------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
+| `↑`/`↓`, `j`/`k`, Ctrl-N/P                                                  | Lists/documents              | Move one row.                                                                 |
+| PgUp/PgDn, Ctrl-D/U, Ctrl-F/B, Ctrl-V/Alt-v, Home/End, `g`/`G`, Alt-`<`/`>` | Lists/documents              | Page, first/last.                                                             |
+| Enter (`l` in lists), Esc (Ctrl-G; `h` in Changes/Activity)                 | Lists/overlays               | Open or expand; return or cancel (deny in consent).                           |
+| `1`–`4`, Tab/Shift+Tab                                                      | Views/details                | Switch top-level view or detail section.                                      |
+| `←`/`→`, `h`/`l`, `b`                                                       | Documents                    | Pan; toggle hex.                                                              |
+| `/`, `n`/`N`                                                                | Lists/documents, not consent | Search, next/previous match.                                                  |
+| `]`/`[`, `}`/`{`                                                            | Diff                         | Next/previous file and hunk.                                                  |
+| `d`, `c`, `i`, `u`, `p`, `a`, `r`                                           | Available review state       | Changes, capture, import, select candidate, pin, accept pin, prepare preview. |
+| `y`, `n`                                                                    | Consent only                 | Approve once; deny.                                                           |
+| `s`, `x`, `?`, `q`, Ctrl-C                                                  | Session/jobs/any view        | Activity; cancel; help; quit. During a run `q` confirms, Ctrl-C quits now.    |
 
-The single key map drives dispatch, footer hints and grouped help. Hints show enabled actions that fit; `?` lists disabled actions with their reason. While search or a reason field is focused, printable keys and paste are text; only Enter, Esc, Backspace, Ctrl-U and Ctrl-C act.
+The single key map drives dispatch and grouped help. `?` lists every binding by group in an aligned key column, merges aliases of the same action, and dims unavailable ones with their reason. Emacs aliases in consent only move or leave. While search or a reason field is focused, printable keys and paste are text; only Enter, Esc, Backspace/Ctrl-H, Ctrl-W, Ctrl-U and Ctrl-C act.
 
 ## Safe rendering and verification
 
@@ -248,7 +255,7 @@ The single key map drives dispatch, footer hints and grouped help. Hints show en
 
 `internal/browser/testdata/views/` holds deterministic 120×40, 80×24 and 40×12 golden views from synthetic stores; no Docker is needed. The test-only `-update` flag regenerates them. Tests inject timestamps/time zones, check theme sequences and hostile-content placement, and exercise PTY restoration and search at 80×24/120×40 with and without `NO_COLOR`. `task test:terminal` includes the 100,000-line search/input budget; `task test:views`, `task test:terminal` and `task test:cli` are local checks. `task tui:proof`, `task cli:proof` and `task test:poc` are Docker-gated synthetic execution proofs (the POC gate includes the TUI PTY proof); run them only with explicit plan authorization. Keep docs/TUI.md, docs/DEMO.md, examples/README.md and the `examples/tui` hints in step with screen changes. [AFTER-18's human study](EVALUATION.md) freezes the commit and binary checksum; changing the TUI after a freeze requires a refreeze and rehearsal.
 
-Not in this design: mouse input, configurable themes, side-by-side diffs, syntax highlighting, rename detection, divergence-signature grouping, automatic capture/file watching, clipboard writes, soft-wrapped documents, GitHub or browser UI.
+Not in this design: mouse input, configurable themes, side-by-side diffs, language-aware syntax highlighting, external diff pagers, rename detection, divergence-signature grouping, automatic capture/file watching, clipboard writes, soft-wrapped documents, GitHub or browser UI.
 
 ## Delivery order
 

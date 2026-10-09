@@ -243,7 +243,7 @@ func TestAllBytesReachableAndLateDocuments(t *testing.T) {
 	m.width, m.height, m.screen = 80, 12, "inspector"
 	m.data = &Data{Entries: []Entry{{Sections: []Section{{Name: "line-limited document"}}}}}
 	m.doc = limited
-	if !strings.Contains(m.View(), "TEXT LIMITED at 250000 lines") {
+	if !strings.Contains(m.View(), "Text limited at 250000 lines") {
 		t.Fatal("line-index limitation was not visible", m.View())
 	}
 	step(m, key("b"))

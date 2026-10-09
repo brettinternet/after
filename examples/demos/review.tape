@@ -1,5 +1,6 @@
 # The review TUI on a messy change with no evidence: every path stays visible,
-# the edited golden file is flagged, and the untracked secret is never captured.
+# the edited golden file is flagged, the untracked secret is never captured,
+# Diff highlights changed lines, and ? lists every key.
 
 Output examples/demos/review.gif
 Source examples/demos/style.tape
@@ -24,5 +25,15 @@ Down
 Sleep 2s
 Down 3
 Sleep 3s
+Type "3"
+Sleep 3s
+Type "]"
+Sleep 2s
+Type "]"
+Sleep 3s
+Type "?"
+Sleep 3s
+Escape
+Sleep 1s
 Type "q"
 Sleep 1s

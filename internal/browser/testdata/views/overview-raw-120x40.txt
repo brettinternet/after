@@ -1,40 +1,40 @@
-AFTER · 002 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (working tree)
-[1 Overview]   2 Changes 6   3 Diff   4 Activity
-  NOT CHECKED — no evidence was loaded for this change│Select an evidence row to preview its Card                       
-  Nothing was run or imported for candidate 3726afba.…│                                                                 
-CHANGES 6 paths · 1 captured hunk, all unclassified ·…│                                                                 
-> M  app/config.go  +1 · −4                           │                                                                 
-  ?  app/main.go  incomplete capture; equal stored co…│                                                                 
-  M  binary  binary                                   │                                                                 
-  ?  go.mod  incomplete capture; equal stored content…│                                                                 
-  ?  unknown  excluded: untracked; not selected       │                                                                 
-  ?  unsupported  unsupported: symlink or symlink par…│                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-                                                      │                                                                 
-Not checked — read the change, or c captures again after editing
-q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff · 4 Activity · Tab next view
+   AFTER   002   original base 2d13fdbf (commit 4117af3)  →  candidate 3726afba (working tree)
+  [Overview]   Changes 6   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    NOT CHECKED — no evidence was loaded for this cha… │ Select an evidence row to preview its Card
+    Nothing was run or imported for candidate 3726afb… │ 
+                                                       │ 
+    CHANGES  6 paths · 1 captured hunk · 0 potential … │ 
+  > M  app/config.go  +1 · −4                          │ 
+    ?  app/main.go  incomplete capture; equal stored … │ 
+    M  binary  binary                                  │ 
+    ?  go.mod  incomplete capture; equal stored conte… │ 
+    ?  unknown  excluded: untracked; not selected      │ 
+    ?  unsupported  unsupported: symlink or symlink p… │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+                                                       │ 
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Not checked — read the change, or c captures again after editing                                              ? help

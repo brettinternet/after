@@ -1,16 +1,24 @@
-AFTER · 001 · original base 2d13fdbf (commit 4117af3) → candidate 3726afba (wor…
-[1 Overview]   2 Changes 6   3 Diff   4 Activity
-  ▾ NEEDS ANOTHER LOOK 2
-> [UNAVAILABLE] sha256:00000000000000000000000000000000000000000000000000000000…
-  [DIFFERENT]   12h same-key retry · provider requests … observed · current
-  ▾ AGREES 1
-  [EQUAL]       30s same-key retry · provider requests … observed · current
-  ▾ REPORTED — imported, not observed by AFTER 3
-  report b413d37e · bound to unbound · imported 20:00 · 1 pass · 1 fail · synth…
-  [REPORTED]    example.com/cart (package)               reported · pass
-  [REPORTED]    TestThreshold                            reported · fail
-  report 4551059b · bound to 3726afba · imported Jan 1 00:00 · 1 pass · go test…
-  [REPORTED]    example                                  reported · pass
-CHANGES 6 paths · 1 captured hunk, all unclassified · 0 potential oracles · 2 s…
+   AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 3726af…
+  [Overview]   Changes 6   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────
 
-q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff
+    ▾ NEEDS ANOTHER LOOK  2
+  > [UNAVAILABLE] sha256:0000000000000000000000000000000000000000000000000000…
+    [DIFFERENT]   12h same-key retry · provider reque… observed · current
+
+    ▾ AGREES  1
+    [EQUAL]       30s same-key retry · provider reque… observed · current
+
+    ▾ REPORTED  3  imported, not observed by AFTER
+    report b413d37e · bound to unbound · imported 20:00 · 1 pass · 1 fail · s…
+    [REPORTED]    example.com/cart (package)           reported · pass
+    [REPORTED]    TestThreshold                        reported · fail
+    report 4551059b · bound to 3726afba · imported Jan 1 00:00 · 1 pass · go …
+    [REPORTED]    example                              reported · pass
+
+    CHANGES  6 paths · 1 captured hunk · 0 potential oracles
+
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  Enter opens the full record                                           ? help

@@ -53,7 +53,7 @@ retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
 | Keys                | Action                                              |
 | ------------------- | --------------------------------------------------- |
 | `1`–`4`, Tab        | Overview, Changes, Diff, Activity                   |
-| `j`/`k`, Enter, Esc | Move, open, back                                    |
+| `j`/`k`, Enter, Esc | Move, open, back (also `l`/`h` and Emacs keys)      |
 | `/`, `n`/`N`        | Search, next/previous match                         |
 | `]`/`[`, `}`/`{`    | Next/previous file, hunk (Diff)                     |
 | `c`, `u`            | Capture after an edit, review the new capture       |

@@ -1,12 +1,24 @@
-AFTER · 004 · original base 2d13fdbf (commit 4117af3) → candidate 8e9eef34 (wor…
-[1 Overview]   2 Changes 4   3 Diff   4 Activity
-  ▾ NEEDS ANOTHER LOOK 2
-> [REOPENED]    Preserve the finite provider-request co… current result attached
-  [DIFFERENT]   12h same-key retry · provider requests … observed · current
-  ▾ AGREES 1
-  [EQUAL]       30s same-key retry · provider requests … observed · current
-  ▸ EARLIER SNAPSHOTS 2
-CHANGES 4 paths · 0 captured hunks, all unclassified · 0 potential oracles · 2 …
-  computed from captured sources — not Git's patch · limited inventory
+   AFTER   004   original base 2d13fdbf (commit 4117af3)  →  candidate 8e9eef…
+  [Overview]   Changes 4   Diff   Activity
+  ━━━━━━━━━━──────────────────────────────────────────────────────────────────
 
-q quit · ? help · Enter open · / search · 1 Overview · 2 Changes · 3 Diff
+    ▾ NEEDS ANOTHER LOOK  2
+  > [REOPENED]    Preserve the finite provider-reques… current result attached
+    [DIFFERENT]   12h same-key retry · provider reque… observed · current
+
+    ▾ AGREES  1
+    [EQUAL]       30s same-key retry · provider reque… observed · current
+
+    ▸ EARLIER SNAPSHOTS  2
+
+    CHANGES  4 paths · 0 captured hunks · 0 potential oracles
+    computed from captured sources — not Git's patch · limited inventory
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  Enter opens the full record                                           ? help
