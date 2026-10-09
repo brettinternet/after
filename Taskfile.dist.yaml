@@ -138,6 +138,10 @@ tasks:
     desc: Run focused CLI, configuration, and native entry point tests
     cmd: go test -race ./internal/config ./internal/cli ./cmd/after
 
+  cli:help:update:
+    desc: Regenerate readable CLI help goldens after reviewing help text changes
+    cmd: go test -race ./internal/cli -run '^TestCommandHelpGoldens$' -update
+
   test:terminal:
     desc: Check terminal safety, computed/captured diffs, browser budgets and actual PTY restoration
     cmd: go test -race -v ./internal/terminal ./internal/rawdiff ./internal/browser
@@ -217,6 +221,16 @@ tasks:
     env:
       AFTER_HTTP_PROOF: "1"
     cmd: go test -v -count=1 -timeout=15m ./internal/compare -run TestPythonHTTPServiceProof
+
+  command:check:
+    desc: Check bounded command definition, consent plan, and comparison regressions without Docker
+    cmd: go test -race ./internal/runner ./internal/compare ./internal/cli -run '^TestCommand'
+
+  command:proof:
+    desc: Authorize the synthetic command CLI comparison and pin/reopen flow on the provisioned Go image
+    env:
+      AFTER_COMMAND_PROOF: "1"
+    cmd: go test -v -count=1 -timeout=15m ./internal/cli -run '^TestCommandCLIProof$'
 
   comparison:fuzz:
     desc: Exercise bounded exact JSON comparison properties

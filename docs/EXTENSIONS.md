@@ -1,10 +1,10 @@
 # Extension design
 
-Status: plugin proposal, not implemented. Native [JUnit XML import](JUNIT-REPORTS.md) is implemented by AFTER-48; AFTER-49 adds one narrow data-defined v1 `http-service` scenario kind. The POC has no plugin system or universal adapter; see the [implementation contract](IMPLEMENTATION.md). This page records how AFTER could accept future community and private integrations without weakening its evidence labels. Follow-up tasks AFTER-48–50 in the [backlog](../backlog/tasks) build concrete cases.
+Status: plugin proposal, not implemented. Native [JUnit XML import](JUNIT-REPORTS.md) is implemented by AFTER-48; AFTER-49 adds one narrow data-defined v1 `http-service` scenario kind; AFTER-50 adds bounded direct-argv v1 `command` scenarios. The POC has no plugin system or universal adapter; see the [implementation contract](IMPLEMENTATION.md). This page records how AFTER could accept future community and private integrations without weakening its evidence labels. AFTER-48–50 delivered bounded built-in cases without introducing a plugin framework; the scenario definitions are not a plugin API.
 
 ## The problem
 
-Each language, test runner, application type and observation channel can be a separate integration. [Behavior and evidence](behavior-and-evidence.md#11-preferred-implementation-language) says language facts should come from existing tools. AFTER-49 replaces the runner's former payment-only ABI with a deliberately narrow versioned `http-service` data contract; its two exercised instances are built-in payment and a separately pinned standard-library Python service. Go still owns the trusted launcher, observer, evidence validation and comparison.
+Each language, test runner, application type and observation channel can be a separate integration. [Behavior and evidence](behavior-and-evidence.md#11-preferred-implementation-language) says language facts should come from existing tools. AFTER-49 replaces the runner's former payment-only ABI with a deliberately narrow versioned `http-service` data contract; its exercised instances are built-in payment and a separately pinned standard-library Python service. AFTER-50 adds a distinct `command` contract for direct argv, base64 stdin/files, fixed environment, exit status and separate streams. Go owns both trusted launchers, evidence validation and comparison; command scenarios need no observer container.
 
 ## Why not copy Pi's model
 
@@ -28,15 +28,15 @@ Plugins may move state only in the conservative direction: add a limitation, vet
 
 ## Extension points
 
-| Point                      | Examples                                          | Runs in                                    | Best label   | Bound as                             |
-| -------------------------- | ------------------------------------------------- | ------------------------------------------ | ------------ | ------------------------------------ |
-| Report importer            | Vitest JSON, pytest, cargo-nextest                | WASM, no host capabilities                 | Reported     | producer name and digest             |
-| Static fact provider       | tree-sitter symbol diff, OpenAPI or schema diff   | WASM over captured bytes                   | Structural   | producer digest                      |
-| Scenario kind (driver)     | v1 HTTP service; future CLI argv to exit/output   | Sandbox container after exact-plan consent | None (input) | definition/driver digests in preview |
-| Observer                   | Fake HTTP upstream, SMTP sink, DB dump, file diff | Separate container in the run topology     | Observed     | observer digest                      |
-| Comparison rules           | Masks, unordered arrays, numeric tolerance        | Declarative data                           | None         | rules digest; masks stay visible     |
-| Suggester                  | Boundary sampling, model proposals                | Any tier                                   | Inferred     | never evidence                       |
-| Commands, views, exporters | GitHub sync, HTML report, extra TUI tab           | `after-<name>` on `PATH`, reading `--json` | None         | writes only through `after import`   |
+| Point                      | Examples                                               | Runs in                                    | Best label   | Bound as                             |
+| -------------------------- | ------------------------------------------------------ | ------------------------------------------ | ------------ | ------------------------------------ |
+| Report importer            | Vitest JSON, pytest, cargo-nextest                     | WASM, no host capabilities                 | Reported     | producer name and digest             |
+| Static fact provider       | tree-sitter symbol diff, OpenAPI or schema diff        | WASM over captured bytes                   | Structural   | producer digest                      |
+| Scenario kind (driver)     | v1 HTTP service; v1 command argv to exit/stdout/stderr | Sandbox container after exact-plan consent | None (input) | definition/driver digests in preview |
+| Observer                   | Fake HTTP upstream, SMTP sink, DB dump, file diff      | Separate container in the run topology     | Observed     | observer digest                      |
+| Comparison rules           | Masks, unordered arrays, numeric tolerance             | Declarative data                           | None         | rules digest; masks stay visible     |
+| Suggester                  | Boundary sampling, model proposals                     | Any tier                                   | Inferred     | never evidence                       |
+| Commands, views, exporters | GitHub sync, HTML report, extra TUI tab                | `after-<name>` on `PATH`, reading `--json` | None         | writes only through `after import`   |
 
 `internal/evidence` would replace the closed `Producer` enum (`importer`, `runner`) with a producer class plus plugin name and digest. That is a schema version change. Scenarios and receipts already bind driver, observer and rules digests, and pins bind their scenario.
 
@@ -46,7 +46,7 @@ Go's [`plugin`](https://pkg.go.dev/plugin) package requires cgo and an exact too
 
 1. **Data.** AFTER-49 implements only a closed v1 `http-service` definition selected explicitly by the operator. It declares an independently frozen source digest, pinned image/platform, direct optional build and required start argv, fd3 readiness, fixed epoch and ordered requests, observer-owned fake endpoints, supported channels, repetitions and bounded limits. The definition is fully shown in exact-plan consent; unknown fields, shell strings, unsupported images/protocols and bounds fail before preparation. A selected repository-contained definition that differs between snapshots is surfaced as a changed oracle, never discovered or replaced automatically. The compiler prepares only AFTER's static launcher; this does not download or install service dependencies.
 2. **Sandboxed code** for importers, fact providers and rule functions: either WASM through [wazero](https://wazero.io) (pure Go, no cgo) or an embedded hermetic interpreter such as [Starlark](https://github.com/google/starlark-go). Plugins get no clock, filesystem or network unless granted and run under memory and time limits. WASM accepts any language that compiles to it; Starlark needs no build step. A bake-off chooses one (see [next decisions](#next-decisions)). Import and inspection still execute nothing with host authority.
-3. **Containers** for drivers and observers, through the existing [sandbox](SANDBOX.md) and exact-plan consent. The trusted observer stays outside the app's PID, filesystem and scratch namespaces.
+3. **Containers** for drivers and observers, through the existing [sandbox](SANDBOX.md) and exact-plan consent. HTTP's trusted observer stays outside the app's PID, filesystem and scratch namespaces; command scenarios use the Docker boundary directly without an observer.
 4. **`after-<name>` executables**, discovered git-style, for workflows, exporters and integrations. Any language, full user permissions, no API approval. They read `--json` output and write only through `after import`, so they cannot forge labels.
 
 ## Distribution
@@ -82,7 +82,7 @@ The POC contract rules out a plugin framework without a demonstrated requirement
 
 1. **AFTER-48: native JUnit XML import (implemented).** The bounded [dialect](JUNIT-REPORTS.md) is tested against captured pytest, Vitest and Maven Surefire output. Other producers may emit compatible XML but are not certified.
 2. **AFTER-49: declarative `http-service` scenarios (implemented).** The built-in payment experiment is an ordinary definition; a separate Python standard-library service runs on its own pinned image. Its language difference is only data and image; offline dependencies, arbitrary readiness APIs, protocols and plugin hooks remain unsupported.
-3. **AFTER-50: declarative `command` scenarios.** Exit status, stdout and stderr cover CLIs, generators and library harnesses.
+3. **AFTER-50: declarative `command` scenarios (implemented).** Exact container exit status, stdout and stderr cover finite CLI, generator and library-harness cases; TTY and output trees remain out of scope.
 
 These are operator-selected follow-up tasks, not POC queue items. Each records its extension seams in task notes: what needed code rather than data, and what differed from the existing instance.
 

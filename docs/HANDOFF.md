@@ -6,14 +6,14 @@ This page gives developers and agents the current product direction, safety rule
 
 AFTER is an independent local Go CLI/TUI for reviewing concrete changes and their evidence. It has no required editor, model, account, or GitHub dependency. Local Git review comes first; GitHub PR sync and browser comparison remain deferred. The presentation is a concept simulation. Read the [proposal](README.md), [behavior and evidence design](behavior-and-evidence.md), and [research](research.md) for product rationale.
 
-The working POC includes native capture, private versioned storage, stock `go test -json` and [JUnit XML](JUNIT-REPORTS.md) import, raw diff/inventory inspection, the [payment fixture](../internal/paymentfixture/README.md), offline runner, exact comparison, persistent pins, and a terminal evidence browser. See [CLI](CLI.md), [TUI](TUI.md), [schema](SCHEMA.md), and the [implementation contract](IMPLEMENTATION.md) for current behavior.
+The working POC includes native capture, private versioned storage, stock `go test -json` and [JUnit XML](JUNIT-REPORTS.md) import, raw diff/inventory inspection, the [payment fixture](../internal/paymentfixture/README.md), bounded offline HTTP-service and command runners, exact comparison, persistent pins, and a terminal evidence browser. See [CLI](CLI.md), [TUI](TUI.md), [schema](SCHEMA.md), and the [implementation contract](IMPLEMENTATION.md) for current behavior.
 
 Start implementation from [AGENTS.md](../AGENTS.md), [IMPLEMENTATION.md](IMPLEMENTATION.md), and the dependency-ready task in the [Backlog](../backlog/tasks). Work only on ready M1/M2 tasks. M3 tasks AFTER-18–20 are gated; AFTER-18 requires explicit human-study authorization. Do not select follow-up work automatically.
 
 ## Safety rules
 
 - Opening, importing, inspecting, comparing, and pinning do not execute project code. A build is execution too.
-- `after run` supports the built-in synthetic payment definition and an explicitly selected, bounded v1 `http-service` JSON definition. Every build/preparation and service run needs consent for its exact preview; there is no image pull or host-execution fallback. Provision the trusted Go and selected service images separately; see [SANDBOX.md](SANDBOX.md).
+- `after run` supports the built-in synthetic payment definition and explicitly selected, bounded v1 `http-service` or direct-argv `command` JSON definitions. Every build/preparation and run needs consent for its exact preview; there is no image pull or host-execution fallback. Provision the trusted Go and selected service images separately; see [SANDBOX.md](SANDBOX.md).
 - An imported test report is reported evidence, not an observation or proof that tests ran on a captured snapshot. A changed snapshot or test oracle does not establish observed behavior.
 - Evidence applicability, execution outcome, comparison result, and human acceptance are separate. Missing, stale, incomplete, unstable, or incomparable evidence stays visible.
 - The ordinary diff and unknown/unsupported inventory remain usable when richer evidence is missing or fails.
@@ -42,6 +42,6 @@ Use `task check:go` for build, race tests, vet, unused code (staticcheck U1000),
 
 ## Scope boundary
 
-The runner exercises finite operator-selected HTTP-service definitions through a language-neutral fd3 readiness ABI and independent fake-upstream observer. Its built-in instance exercises same-key payment requests at twelve hours and thirty seconds; a separate proof runs a dependency-free Python service on its own pinned image. This is not a general application adapter, dependency-preparation system, production billing test, universal correctness claim, or usability result. AFTER-18 requires recruited consenting engineers, a facilitator, and a second scorer; see the [evaluation kit](EVALUATION.md).
+The runner exercises finite operator-selected HTTP-service definitions through a language-neutral fd3 readiness ABI and independent fake-upstream observer, plus direct-argv command definitions compared at the Docker exit/stdout/stderr boundary. Its built-in instance exercises same-key payment requests at twelve hours and thirty seconds; a separate proof runs a dependency-free Python service on its own pinned image. This is not a general application adapter, dependency-preparation system, production billing test, universal correctness claim, or usability result. AFTER-18 requires recruited consenting engineers, a facilitator, and a second scorer; see the [evaluation kit](EVALUATION.md).
 
 Do not commit private `.after/` data, credentials, participant data, or local paths. Never weaken execution isolation to work around a missing Docker daemon or unsupported project.

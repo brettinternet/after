@@ -30,6 +30,9 @@ var preparer []byte
 //go:embed runtime/observer.go
 var observer []byte
 
+//go:embed runtime/command.go
+var commandRunner []byte
+
 // ComparisonRules is immutable supported policy text retained with receipts.
 const ComparisonRules = `{"version":1,"responses":"ordered HTTP status and body; JSON bodies structural, otherwise exact text","provider_calls":"ordered observer-received timestamp, endpoint, method, path, idempotency key and body","json":"exact decimal values, object key order ignored, arrays ordered, null distinct from missing; reject duplicate keys and invalid Unicode","masks":[],"normalization":[],"scope":"finite controlled-clock definition-declared requests only"}`
 
@@ -57,6 +60,9 @@ type Plan struct {
 	definitionRaw    []byte
 	definitionDigest evidence.Digest
 	definitionSource DefinitionSource
+	command          *CommandDefinition
+	commandTemplates [2][]*sandbox.Plan
+	commandConfigs   [][]byte
 	repetitions      int
 	limits           sandbox.Limits
 	preparation      *sandbox.Plan
@@ -126,6 +132,29 @@ func Prepare(s *store.Store, pair evidence.SnapshotPair, repetitions int, limits
 func PrepareDefinition(s *store.Store, pair evidence.SnapshotPair, raw []byte, source DefinitionSource) (*Plan, error) {
 	if source.Kind != "operator-selected-file" {
 		return nil, errors.New("a custom definition must come from an explicitly operator-selected file")
+	}
+	return prepare(s, pair, raw, source, "")
+}
+
+// PrepareCommandDefinition accepts only an explicitly selected command v1 file.
+func PrepareCommandDefinition(s *store.Store, pair evidence.SnapshotPair, raw []byte, source DefinitionSource) (*Plan, error) {
+	if source.Kind != "operator-selected-file" {
+		return nil, errors.New("a command definition must come from an explicitly operator-selected file")
+	}
+	return prepareCommand(s, pair, raw, source, "")
+}
+
+// PrepareSelectedDefinition dispatches only between the two closed v1 schemas.
+func PrepareSelectedDefinition(s *store.Store, pair evidence.SnapshotPair, raw []byte, source DefinitionSource) (*Plan, error) {
+	kind, err := ParseSelectedDefinition(raw)
+	if err != nil {
+		return nil, err
+	}
+	if source.Kind != "operator-selected-file" {
+		return nil, errors.New("a custom definition must come from an explicitly operator-selected file")
+	}
+	if kind == "command" {
+		return prepareCommand(s, pair, raw, source, "")
 	}
 	return prepare(s, pair, raw, source, "")
 }
@@ -349,7 +378,21 @@ func PrepareFromPreview(s *store.Store, preview []byte) (*Plan, error) {
 	if err := decoder.Decode(&fields); err != nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, errors.New("invalid saved execution plan")
 	}
-	allowed := map[string]bool{"version": true, "request": true, "snapshots": true, "scenario": true, "definition_digest": true, "definition": true, "definition_source": true, "service_config": true, "repetitions": true, "limits": true, "preparation": true, "preparation_budget": true, "concurrency": true, "experiments": true}
+	var previewDefinition struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(fields["definition"], &previewDefinition); err != nil {
+		return nil, errors.New("saved execution plan definition is invalid")
+	}
+	allowed := map[string]bool{"version": true, "request": true, "snapshots": true, "scenario": true, "definition_digest": true, "definition": true, "definition_source": true, "repetitions": true, "limits": true, "preparation": true, "preparation_budget": true, "concurrency": true, "experiments": true}
+	switch previewDefinition.Kind {
+	case "http-service":
+		allowed["service_config"] = true
+	case "command":
+		allowed["command_configs"] = true
+	default:
+		return nil, errors.New("saved execution plan kind is unsupported")
+	}
 	if len(fields) != len(allowed) {
 		return nil, errors.New("saved execution plan has missing or unknown fields")
 	}
@@ -370,11 +413,24 @@ func PrepareFromPreview(s *store.Store, preview []byte) (*Plan, error) {
 	if err != nil || hash(raw) != saved.DefinitionDigest {
 		return nil, errors.New("saved definition is missing or changed")
 	}
-	definition, err := ParseDefinition(raw)
-	if err != nil || definition.Repetitions != saved.Repetitions || definition.Limits.Seconds != saved.Limits.Seconds || definition.Limits.OutputBytes != saved.Limits.OutputBytes {
+	kind, err := ParseSelectedDefinition(raw)
+	if err != nil {
 		return nil, errors.New("saved definition bindings are invalid")
 	}
-	p, err := prepare(s, saved.Snapshots, raw, saved.DefinitionSource, saved.Request)
+	var p *Plan
+	if kind == "command" {
+		definition, parseErr := ParseCommandDefinition(raw)
+		if parseErr != nil || definition.Repetitions != saved.Repetitions || definition.Limits.Seconds != saved.Limits.Seconds || definition.Limits.OutputBytes != saved.Limits.OutputBytes {
+			return nil, errors.New("saved command definition bindings are invalid")
+		}
+		p, err = prepareCommand(s, saved.Snapshots, raw, saved.DefinitionSource, saved.Request)
+	} else {
+		definition, parseErr := ParseDefinition(raw)
+		if parseErr != nil || definition.Repetitions != saved.Repetitions || definition.Limits.Seconds != saved.Limits.Seconds || definition.Limits.OutputBytes != saved.Limits.OutputBytes {
+			return nil, errors.New("saved http-service definition bindings are invalid")
+		}
+		p, err = prepare(s, saved.Snapshots, raw, saved.DefinitionSource, saved.Request)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -386,8 +442,10 @@ func PrepareFromPreview(s *store.Store, preview []byte) (*Plan, error) {
 
 func checkSnapshot(snap evidence.Snapshot) error {
 	paths := map[string]bool{}
+	reserved := false
 	for _, file := range snap.Files {
 		paths[file.Path] = true
+		reserved = reserved || file.Path == "after-launch.go" || pathConflictsRuntime(file.Path)
 	}
 	switch {
 	case snap.Completeness != evidence.Complete:
@@ -396,7 +454,7 @@ func checkSnapshot(snap evidence.Snapshot) error {
 		return ErrUnsupportedProject
 	case len(snap.Files) > 255:
 		return ErrSnapshotBudget
-	case paths["after/launcher"] || paths["after/service.json"] || paths["after-launch.go"]:
+	case reserved:
 		return ErrReservedPath
 	}
 	return nil

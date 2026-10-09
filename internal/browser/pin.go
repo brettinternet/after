@@ -22,6 +22,13 @@ func PinSuggestions(s *store.Store, receipt evidence.Receipt) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	if definition, parseErr := runner.ParseCommandDefinition(definitionRaw); parseErr == nil && scenario.Author == "AFTER operator-selected command v1" {
+		suggestions := make([]string, 0, len(definition.Cases))
+		for _, scenarioCase := range definition.Cases {
+			suggestions = append(suggestions, fmt.Sprintf("For %s, preserve the declared exit status, stdout and stderr in case %s.", definition.Name, scenarioCase.Title))
+		}
+		return suggestions, nil
+	}
 	if definition, parseErr := runner.ParseDefinition(definitionRaw); parseErr == nil && scenario.Author == "AFTER operator-selected http-service v1" {
 		suggestions := make([]string, 0, len(definition.Cases))
 		for _, scenarioCase := range definition.Cases {

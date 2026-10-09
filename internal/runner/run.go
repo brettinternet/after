@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"debug/elf"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ type Executor struct {
 	// Private test seams cannot be selected by production callers.
 	prepareLauncher func(context.Context, *sandbox.Plan) (sandbox.Result, []byte, error)
 	observe         func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error)
+	executeCommand  func(context.Context, *sandbox.Plan, string) (sandbox.Result, error)
 }
 
 type Response struct {
@@ -130,6 +132,9 @@ func status(err error, r sandbox.ExperimentResult) string {
 func (e Executor) Run(ctx context.Context, s *store.Store, p *Plan, approved string) (result Result, err error) {
 	if p == nil {
 		return result, sandbox.ErrConsent
+	}
+	if p.command != nil {
+		return e.runCommand(ctx, s, p, approved)
 	}
 	started := time.Now().UTC()
 	allowed := approved == p.id
@@ -297,6 +302,188 @@ func (e Executor) Run(ctx context.Context, s *store.Store, p *Plan, approved str
 	return result, errors.Join(runErrors...)
 }
 
+func commandStatus(err error, execution sandbox.Result) string {
+	switch {
+	case errors.Is(err, sandbox.ErrConsent):
+		return "permission_denied"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case execution.Truncated || errors.Is(err, sandbox.ErrOutput):
+		return "output_truncated"
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	case errors.Is(err, sandbox.ErrCommandStatus):
+		return "signal_or_reserved_exit"
+	case err != nil:
+		return "execution_failed"
+	case !execution.Cleaned:
+		return "cleanup_failed"
+	case execution.ExitCode < 0 || execution.ExitCode >= 125:
+		return "signal_or_reserved_exit"
+	default:
+		return "completed"
+	}
+}
+
+func (e Executor) runCommand(ctx context.Context, s *store.Store, p *Plan, approved string) (result Result, err error) {
+	started := time.Now().UTC()
+	allowed := approved == p.id
+	acquired := false
+	if allowed {
+		select {
+		case executionGate <- struct{}{}:
+			acquired = true
+			defer func() { <-executionGate }()
+		case <-ctx.Done():
+		}
+	}
+	planArtifact, err := s.PutArtifact(p.preview, "execution-plan", 1<<20)
+	if err != nil {
+		return result, err
+	}
+	policyArtifact, err := s.PutArtifact([]byte(CommandComparisonRules), "comparison-rules", 4096)
+	if err != nil {
+		return result, err
+	}
+	artifacts := []evidence.Artifact{planArtifact, policyArtifact}
+	allComplete := allowed && acquired && planArtifact.Completeness == evidence.Complete && policyArtifact.Completeness == evidence.Complete
+	preparationGood := false
+	cleanupBlocked := false
+	var runErrors []error
+	materialized := [2][]*sandbox.Plan{}
+	if allComplete {
+		binary, nextArtifacts, prepareErr := e.compileAndRecord(ctx, s, p, artifacts)
+		artifacts = nextArtifacts
+		if prepareErr != nil {
+			runErrors = append(runErrors, fmt.Errorf("command launcher preparation failed: %s", safeRunError(prepareErr)))
+			allComplete = false
+		} else {
+			preparationGood, allComplete = true, true
+			for side := range p.commandTemplates {
+				materialized[side] = make([]*sandbox.Plan, len(p.commandTemplates[side]))
+				for caseIndex, template := range p.commandTemplates[side] {
+					materialized[side][caseIndex], err = template.Materialize(p.runtimeFiles(caseIndex, binary))
+					if err != nil {
+						preparationGood, allComplete = false, false
+						runErrors = append(runErrors, errors.New("approved command template could not be materialized"))
+						break
+					}
+				}
+			}
+		}
+	}
+	previous := map[string]evidence.Digest{}
+	unstable := false
+	for repetition := 0; repetition < p.repetitions; repetition++ {
+		for side, label := range []string{"base", "candidate"} {
+			for caseIndex, scenarioCase := range p.command.Cases {
+				sample := Sample{RequestID: p.request, Snapshots: p.pair, Side: label, CaseID: scenarioCase.ID, Repetition: repetition, StartedAt: time.Now().UTC()}
+				var executionErr error
+				switch {
+				case !allowed:
+					executionErr = sandbox.ErrConsent
+				case ctx.Err() != nil:
+					executionErr = ctx.Err()
+				case !preparationGood:
+					executionErr = errors.New("command launcher preparation unavailable; sample not started")
+				case cleanupBlocked:
+					executionErr = errors.New("prior cleanup requires reconciliation")
+				default:
+					_, consent := materialized[side][caseIndex].Preview()
+					if e.executeCommand != nil {
+						sample.Execution.App, executionErr = e.executeCommand(ctx, materialized[side][caseIndex], consent)
+					} else {
+						sample.Execution.App, executionErr = e.Docker.ExecuteCommand(ctx, materialized[side][caseIndex], consent)
+					}
+				}
+				if sample.Execution.App.Container != "" && !sample.Execution.App.Cleaned {
+					cleanupBlocked = true
+				}
+				sample.FinishedAt = time.Now().UTC()
+				sample.Status = commandStatus(executionErr, sample.Execution.App)
+				if sample.Status == "execution_failed" && !preparationGood {
+					sample.Status = "preparation_failed"
+				}
+				prefix := sampleChannel(label, scenarioCase.ID, repetition, "")
+				for _, channel := range []struct {
+					name string
+					data string
+				}{{"stdout", sample.Execution.App.Stdout}, {"stderr", sample.Execution.App.Stderr}} {
+					a, storeErr := s.PutArtifact([]byte(channel.data), prefix+channel.name, int64(p.limits.OutputBytes))
+					if storeErr != nil {
+						return result, storeErr
+					}
+					sample.Artifacts = append(sample.Artifacts, a)
+					if a.Completeness != evidence.Complete {
+						allComplete = false
+					}
+				}
+				if sample.Status == "completed" {
+					key := fmt.Sprintf("%s/%s", label, scenarioCase.ID)
+					var statusBytes [4]byte
+					binary.BigEndian.PutUint32(statusBytes[:], uint32(sample.Execution.App.ExitCode))
+					var stdoutLength, stderrLength [4]byte
+					binary.BigEndian.PutUint32(stdoutLength[:], uint32(len(sample.Execution.App.Stdout)))
+					binary.BigEndian.PutUint32(stderrLength[:], uint32(len(sample.Execution.App.Stderr)))
+					signature := append([]byte(nil), statusBytes[:]...)
+					signature = append(signature, stdoutLength[:]...)
+					signature = append(signature, sample.Execution.App.Stdout...)
+					signature = append(signature, stderrLength[:]...)
+					signature = append(signature, sample.Execution.App.Stderr...)
+					current := hash(signature)
+					if prior, exists := previous[key]; exists && prior != current {
+						unstable = true
+					}
+					previous[key] = current
+				}
+				sample.Execution.App.Output = ""
+				sample.Execution.App.Stdout, sample.Execution.App.Stderr = "", ""
+				if sample.Status != "completed" {
+					allComplete = false
+					runErrors = append(runErrors, fmt.Errorf("%s/%s/%d: %s", label, scenarioCase.ID, repetition, sample.Status))
+				}
+				artifacts = append(artifacts, sample.Artifacts...)
+				metadata, marshalErr := json.Marshal(sample)
+				if marshalErr != nil {
+					return result, marshalErr
+				}
+				metadataArtifact, storeErr := s.PutArtifact(metadata, sampleChannel(label, scenarioCase.ID, repetition, "sample"), 1<<20)
+				if storeErr != nil {
+					return result, storeErr
+				}
+				artifacts = append(artifacts, metadataArtifact)
+				if metadataArtifact.Completeness != evidence.Complete {
+					allComplete = false
+				}
+				result.Samples = append(result.Samples, sample)
+			}
+		}
+	}
+	b := p.scenario
+	receipt := evidence.Receipt{RequestID: p.request, SchemaVersion: 1, State: evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.NoEvidence, Applicability: evidence.Unknown, Execution: evidence.Failed, Comparison: evidence.Incomparable, Report: evidence.NoReport}, Snapshots: p.pair, Bindings: &evidence.Bindings{Scenario: b.ID, Input: b.Input, Driver: b.Driver, Observer: b.Observer, Rules: b.Rules}, BaseEnvironment: &p.environments[0], CandidateEnvironment: &p.environments[1], Authorization: evidence.Digest(p.id), StartedAt: started, FinishedAt: time.Now().UTC(), Completeness: evidence.Incomplete, Artifacts: artifacts, Limits: commandLimits(*p.command)}
+	if !allowed {
+		receipt.State.Execution = evidence.NotRun
+	}
+	if ctx.Err() != nil {
+		receipt.State.Execution = evidence.Cancelled
+	}
+	if allComplete {
+		receipt.State.Kind = evidence.Observed
+		receipt.State.Execution = evidence.Completed
+		receipt.State.Applicability = evidence.Current
+		receipt.State.Comparison = evidence.NotCompared
+		receipt.Completeness = evidence.Complete
+		if unstable {
+			receipt.State.Comparison = evidence.Unstable
+		}
+	}
+	result.Receipt, err = store.Put(s, receipt)
+	if err != nil {
+		return result, err
+	}
+	return result, errors.Join(runErrors...)
+}
+
 func (p *Plan) serviceConfigBytes() []byte {
 	config := launcherConfig{Version: 1, BuildArgv: append([]string(nil), p.definition.BuildArgv...), StartArgv: append([]string(nil), p.definition.StartArgv...), Environment: append([]string(nil), p.definition.Environment...), ReadinessProtocol: readinessABI, ReadinessTimeoutSecond: p.definition.Readiness.TimeoutSeconds, ReservedPorts: reservedPorts(p.definition)}
 	for _, route := range p.definition.routeKeys() {
@@ -347,7 +534,7 @@ func (e Executor) compileAndRecord(ctx context.Context, s *store.Store, p *Plan,
 	}
 	var launcherArtifact evidence.Artifact
 	if runErr == nil && result.Plan == prepID && result.ExitCode == 0 && result.Cleaned && !result.Truncated && diagnostics.Completeness == evidence.Complete {
-		if err = validateStaticELF(binary, p.definition.Platform); err == nil {
+		if err = validateStaticELF(binary, p.commandPlatform()); err == nil {
 			launcherArtifact, err = s.PutArtifact(binary, "launcher-executable", launcherMaxBytes)
 			if err == nil && launcherArtifact.Completeness == evidence.Complete && !launcherArtifact.Redacted && !launcherArtifact.Truncated {
 				var stored []byte
@@ -372,7 +559,7 @@ func (e Executor) compileAndRecord(ctx context.Context, s *store.Store, p *Plan,
 	if runErr == nil {
 		status = "completed"
 	}
-	record := preparationEvidence{Version: 1, Status: status, Plan: prepID, DefinitionDigest: p.definitionDigest, Platform: p.definition.Platform, Image: sandbox.Image, ExitCode: result.ExitCode, Cleaned: result.Cleaned, Truncated: result.Truncated}
+	record := preparationEvidence{Version: 1, Status: status, Plan: prepID, DefinitionDigest: p.definitionDigest, Platform: p.commandPlatform(), Image: sandbox.Image, ExitCode: result.ExitCode, Cleaned: result.Cleaned, Truncated: result.Truncated}
 	if launcherArtifact.Content != "" {
 		record.Launcher = launcherArtifact.Content
 		record.Bytes = len(binary)

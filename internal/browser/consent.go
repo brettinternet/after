@@ -47,6 +47,7 @@ type consentSandboxPlan struct {
 	Platform       string                  `json:"platform"`
 	Snapshot       string                  `json:"snapshot"`
 	Input          string                  `json:"input_archive"`
+	StdinDigest    string                  `json:"stdin_digest,omitempty"`
 	GeneratedSlots []sandbox.GeneratedFile `json:"generated_slots,omitempty"`
 	Materialized   []sandbox.GeneratedFile `json:"materialized_files,omitempty"`
 	Argv           []string                `json:"argv"`
@@ -127,6 +128,9 @@ func validateSandboxPreview(plan consentSandboxPlan) error {
 }
 
 func ConsentSummary(raw []byte) ([]byte, error) {
+	if commandPlanPreview(raw) {
+		return commandConsentSummary(raw)
+	}
 	preview, err := decodeConsentPreview(raw)
 	if err != nil {
 		return nil, err

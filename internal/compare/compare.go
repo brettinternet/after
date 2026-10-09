@@ -116,6 +116,9 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 	if err != nil {
 		return err
 	}
+	if basis.Command != nil {
+		return compareCommandReceipt(s, r, report, basis)
+	}
 	reps := basis.Repetitions
 	for _, scenarioCase := range basis.Cases {
 		report.Cases = append(report.Cases, scenarioCase.ID)

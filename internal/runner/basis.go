@@ -18,11 +18,26 @@ type ComparisonBasis struct {
 	DefinitionName string
 	BuiltInPayment bool
 	Cases          []Case
+	Command        *CommandDefinition
+	CommandCases   []CommandCase
 	Channels       []string
 	planIDs        map[string][2][]string // side -> case ID -> app/observer
+	commandPlanIDs map[string][]string    // side -> case ID -> app
 }
 
 func (b ComparisonBasis) MatchesSample(sample Sample) bool {
+	if b.Command != nil {
+		ids, ok := b.commandPlanIDs[sample.Side]
+		if !ok {
+			return false
+		}
+		for index, scenarioCase := range b.CommandCases {
+			if scenarioCase.ID == sample.CaseID {
+				return sample.Execution.App.Plan == ids[index]
+			}
+		}
+		return false
+	}
 	ids, ok := b.planIDs[sample.Side]
 	if !ok {
 		return false
@@ -72,6 +87,21 @@ func ValidateComparisonBasis(s *store.Store, receipt evidence.Receipt) (basis Co
 	if err != nil {
 		return basis, bad
 	}
+	if plan.command != nil {
+		basis = ComparisonBasis{Repetitions: plan.repetitions, DefinitionName: plan.command.Name, Command: plan.command, CommandCases: append([]CommandCase(nil), plan.command.Cases...), Channels: []string{"exit_status", "stdout", "stderr"}, commandPlanIDs: map[string][]string{}}
+		for side, label := range []string{"base", "candidate"} {
+			ids := make([]string, len(plan.command.Cases))
+			for caseIndex, template := range plan.commandTemplates[side] {
+				concrete, materializeErr := template.Materialize(plan.runtimeFiles(caseIndex, launcherBytes))
+				if materializeErr != nil {
+					return ComparisonBasis{}, bad
+				}
+				_, ids[caseIndex] = concrete.Preview()
+			}
+			basis.commandPlanIDs[label] = ids
+		}
+		return basis, nil
+	}
 	generated := map[string][]byte{"after/launcher": launcherBytes, "after/service.json": plan.serviceConfigBytes()}
 	basis = ComparisonBasis{Repetitions: plan.repetitions, DefinitionName: plan.definition.Name, BuiltInPayment: plan.definitionSource.Kind == "built-in-payment", Cases: append([]Case(nil), plan.definition.Cases...), Channels: append([]string(nil), plan.definition.Channels...), planIDs: map[string][2][]string{}}
 	for side, label := range []string{"base", "candidate"} {
@@ -115,7 +145,7 @@ func verifiedLauncher(s *store.Store, artifacts map[string]evidence.Artifact, pl
 	var record preparationEvidence
 	decoder := json.NewDecoder(bytes.NewReader(metadata))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&record) != nil || record.Version != 1 || record.Status != "completed" || record.Plan == "" || record.DefinitionDigest != plan.definitionDigest || record.Platform != plan.definition.Platform || record.Image != sandbox.Image || record.ExitCode != 0 || !record.Cleaned || record.Truncated || record.Launcher == "" || record.Bytes < 64 || record.Bytes > launcherMaxBytes {
+	if decoder.Decode(&record) != nil || record.Version != 1 || record.Status != "completed" || record.Plan == "" || record.DefinitionDigest != plan.definitionDigest || record.Platform != plan.commandPlatform() || record.Image != sandbox.Image || record.ExitCode != 0 || !record.Cleaned || record.Truncated || record.Launcher == "" || record.Bytes < 64 || record.Bytes > launcherMaxBytes {
 		return nil, bad
 	}
 	preparationPreview, preparationID := plan.preparation.Preview()
@@ -131,7 +161,7 @@ func verifiedLauncher(s *store.Store, artifacts map[string]evidence.Artifact, pl
 	if err != nil {
 		return nil, err
 	}
-	if len(binary) != record.Bytes || hash(binary) != record.Launcher || validateStaticELF(binary, plan.definition.Platform) != nil {
+	if len(binary) != record.Bytes || hash(binary) != record.Launcher || validateStaticELF(binary, plan.commandPlatform()) != nil {
 		return nil, bad
 	}
 	return binary, nil

@@ -2,7 +2,7 @@
 
 `CLI.md` documents the commands shipped in `after`; [CLI-DESIGN.md](CLI-DESIGN.md) records their interaction contract. Use `after --help` and `after COMMAND --help` for the installed binary's syntax.
 
-`after` is a Go CLI over local capture, private storage, Go test JSON/JUnit XML report import, diff, the frozen payment runner, comparison and pins. It has no model, account, GitHub or editor dependency. Help, version and configuration display do not run repository code. Data commands print readable text by default; `--json` requests the version-1 `schema_version` / `kind` / `data` envelope, while `export` always emits JSON. Diagnostics go to stderr. See [DEMO.md](DEMO.md) for packaging and a prepared-checkout walkthrough.
+`after` is a Go CLI over local capture, private storage, Go test JSON/JUnit XML report import, diff, the frozen payment and explicitly selected HTTP-service/command runners, comparison and pins. It has no model, account, GitHub or editor dependency. Help, version and configuration display do not run repository code. Data commands print readable text by default; `--json` requests the version-1 `schema_version` / `kind` / `data` envelope, while `export` always emits JSON. Diagnostics go to stderr. See [DEMO.md](DEMO.md) for packaging and a prepared-checkout walkthrough.
 
 Build with `task build`. These commands show the usual capture-to-review path:
 
@@ -125,9 +125,9 @@ On a terminal, `after pin RECEIPT` without `--expectation` shows the scope, basi
 
 ## Run and exact consent
 
-`after run` prepares the payment-specific frozen plan for the newest capture; an explicit `BASE CANDIDATE` pair also works. Preparation does not execute project code. The readable preview shows the resolved snapshots, exact consent summary, plan size and full authorization digest. A plan is stored immutably in `.after/` with mode `0600`; `inspect PLAN` shows its consent summary and sanitized plan, and JSON includes the exact bytes as base64.
+`after run` prepares the built-in payment plan for the newest capture, or an explicitly selected version-1 `http-service` or `command` definition with `--definition FILE`; an explicit `BASE CANDIDATE` pair also works. Preparation does not execute project code. The readable preview shows the resolved snapshots, selected definition bytes/digest, exact consent summary, plan size and full authorization digest. A definition inside the project that differs between the captured snapshots is disclosed as a changed oracle; neither snapshot selects a replacement. A plan is stored immutably in `.after/` with mode `0600`; `inspect PLAN` shows its consent summary and sanitized plan, and JSON includes the exact bytes as base64.
 
-The runner supports only the offline payment fixture: captures must be complete, contain `go.mod` and `app/main.go`, exclude reserved `after-launch.go`, and fit 255 files / 8 MiB. Preparation fails with an actionable reason before saving a plan if they do not. `--plan-out FILE` creates another private `0600` file without overwriting; `--plan-file FILE` reconstructs it. Both paths rebuild from immutable snapshots and compare exact bytes. Each plan has a random request ID, so preparing again does not authorize an earlier plan.
+HTTP-service scenarios require complete captures and a bounded source tree (255 files / 8 MiB); they retain the v1 fd3 readiness and observer contract. Command scenarios support direct argv only, a digest-pinned image/platform, optional build argv, 1–4 cases, 1–5 repetitions, bounded seconds/output/preparation, per-case argv, base64 `stdin_base64` bytes, a fixed `environment` array and optional additive `input_files` with base64 `content_base64`. Input paths cannot traverse, overlap one another, collide with snapshots or reserved runtime files. Command stdout/stderr may each be exact-byte `text` (including invalid UTF-8) or definition-declared structural `json`; invalid JSON is incomparable. Every case/side/repetition gets fresh offline sandbox state; build and target run in that same container, without shell, image pulls, TTY, output-tree comparison, host fallback or an observer container. Build output is discarded. Exit statuses 125–255 are incomplete (helper/build/exec failure or possible signal); intentional application exits in that range are unsupported. Preparation fails with an actionable reason before saving a plan if inputs exceed bounds. `--plan-out FILE` creates another private `0600` file without overwriting; `--plan-file FILE` reconstructs it. Both paths rebuild from immutable snapshots and compare exact bytes. Each plan has a random request ID, so preparing again does not authorize an earlier plan.
 
 On a terminal, type `yes` to authorize exactly the displayed plan bytes. The consent summary is decoded from those bytes; if decoding fails, the error is shown but the digest still binds the exact plan. A non-TTY preview does not read stdin, reports `authorization_required` and exits 3. `--interactive false` disables the prompt but grants no authority. `--approve` accepts only the full digest from the exact preview; a mismatch exits 3. Approval is not a setting and cannot be a prefix.
 
@@ -140,7 +140,7 @@ AFTER_DOCKER_HOST=unix:///var/run/docker.sock \\
   --approve sha256:<full-digest> --project /work/payment
 ```
 
-No help, config, capture, import, inspection, comparison, pin, review, preview or setup diagnostic runs project code, contacts Docker, builds the project on the host or pulls an image. There is no Docker-context or host-process fallback. Provision the pinned image separately; see [SANDBOX.md](SANDBOX.md) and [RUNNER.md](RUNNER.md). A TTY run reports elapsed time on stderr after one second, without a percentage.
+No help, config, capture, import, inspection, comparison, pin, review, preview or setup diagnostic runs project code, contacts Docker, builds the project on the host or pulls an image. There is no Docker-context or host-process fallback. Provision the pinned target and Go compiler images separately; see [SANDBOX.md](SANDBOX.md) and [RUNNER.md](RUNNER.md). A TTY run reports elapsed time on stderr after one second, without a percentage.
 
 ## Configuration
 
@@ -176,7 +176,7 @@ On a terminal, readable output uses the AFTER theme unless `NO_COLOR` is set or 
 | 3    | Run declined, lacks exact authorization or has a digest mismatch                    |
 | 4    | Comparison finding: `different` or `unstable`; not an automatic regression judgment |
 
-`run`, `compare`, `inspect` and `export` preserve JSON evidence on finding/incomplete outcomes. Capture/import that remain active for one second report elapsed time to terminal stderr; pipes receive no progress notice. `task test:cli` runs focused CLI/config/native-entry tests. `task cli:proof` runs the real subprocess payment proof and requires the pinned image plus explicit Docker settings; it executes the synthetic fixture.
+`run`, `compare`, `inspect` and `export` preserve JSON evidence on finding/incomplete outcomes. Capture/import that remain active for one second report elapsed time to terminal stderr; pipes receive no progress notice. `task test:cli` runs focused CLI/config/native-entry tests. `task command:check` verifies command definition/plan/comparison regressions without Docker; `task command:proof` runs the real capture/consent/run/compare/pin/reopen command fixture on the provisioned image. `task cli:proof` runs the real subprocess payment proof and requires the pinned image plus explicit Docker settings.
 
 ## Shell completion
 

@@ -147,9 +147,22 @@ func (d Docker) ExecuteBinary(ctx context.Context, p *Plan, approved string) (Re
 	return result, []byte(result.Stdout), err
 }
 
-func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error, binaryOutput bool) (result Result, err error) {
+// ExecuteCommand returns the actual inspected container exit status and separate
+// attached streams. The plan digest also binds its private frozen stdin bytes.
+func (d Docker) ExecuteCommand(ctx context.Context, p *Plan, approved string) (Result, error) {
+	if p == nil || p.spec.StdinDigest == "" || p.spec.StdinDigest != digest(p.stdin) {
+		return Result{ExitCode: -1}, ErrConsent
+	}
+	return d.executeMode(ctx, p, approved, "", nil, false, true)
+}
+
+func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error, binaryOutput bool) (Result, error) {
+	return d.executeMode(ctx, p, approved, network, observe, binaryOutput, false)
+}
+
+func (d Docker) executeMode(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error, binaryOutput, commandMode bool) (result Result, err error) {
 	result.ExitCode = -1
-	if p == nil {
+	if p == nil || (p.spec.StdinDigest != "" && !commandMode) || (commandMode && p.spec.StdinDigest == "") {
 		return result, ErrConsent
 	}
 	_, id := p.Preview()
@@ -239,6 +252,9 @@ func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, 
 	if binaryOutput {
 		return d.runBinary(ctx, config, name, p, result)
 	}
+	if commandMode {
+		return d.runCommand(ctx, config, name, p, result)
+	}
 	return d.run(ctx, config, name, p, result)
 }
 
@@ -297,6 +313,87 @@ func (d Docker) runBinary(ctx context.Context, config, name string, p *Plan, res
 	result.OOMKilled = state.OOMKilled
 	if state.Running || state.Error != "" || state.OOMKilled || state.ExitCode != 0 || runErr != nil {
 		return result, fmt.Errorf("sandbox binary preparation failed (exit=%d, oom=%t, attach=%v)", state.ExitCode, state.OOMKilled, runErr)
+	}
+	return result, nil
+}
+
+type commandOutput struct {
+	mu        sync.Mutex
+	stdout    bytes.Buffer
+	stderr    bytes.Buffer
+	max       int
+	truncated bool
+	cancel    context.CancelFunc
+}
+
+type commandStream struct {
+	owner  *commandOutput
+	stderr bool
+}
+
+func (s commandStream) Write(data []byte) (int, error) {
+	o := s.owner
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	n := len(data)
+	remaining := o.max - o.stdout.Len() - o.stderr.Len()
+	if remaining < len(data) {
+		if remaining < 0 {
+			remaining = 0
+		}
+		data = data[:remaining]
+		o.truncated = true
+		if o.cancel != nil {
+			o.cancel()
+		}
+	}
+	if s.stderr {
+		_, _ = o.stderr.Write(data)
+	} else {
+		_, _ = o.stdout.Write(data)
+	}
+	return n, nil
+}
+
+func (d Docker) runCommand(ctx context.Context, config, name string, p *Plan, result Result) (Result, error) {
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	out := &commandOutput{max: p.spec.Limits.OutputBytes, cancel: stop}
+	runErr := d.commandStreams(runCtx, config, p.stdin, commandStream{owner: out}, commandStream{owner: out, stderr: true}, "start", "--attach", "--interactive", name)
+	out.mu.Lock()
+	result.Stdout, result.Stderr = out.stdout.String(), out.stderr.String()
+	result.Truncated = out.truncated
+	out.mu.Unlock()
+	if result.Truncated {
+		return result, ErrOutput
+	}
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
+	b, err := d.query(ctx, config, nil, "inspect", "--format", "{{json .State}}", name)
+	if err != nil {
+		return result, err
+	}
+	var state struct {
+		ExitCode           int
+		OOMKilled, Running bool
+		Error              string
+	}
+	if err = json.Unmarshal(b, &state); err != nil {
+		return result, err
+	}
+	result.ExitCode, result.OOMKilled = state.ExitCode, state.OOMKilled
+	if state.Running || state.Error != "" || state.OOMKilled || state.ExitCode < 0 || state.ExitCode > 255 {
+		return result, fmt.Errorf("sandbox command boundary failed (exit=%d, oom=%t)", state.ExitCode, state.OOMKilled)
+	}
+	if runErr != nil {
+		var exitError *exec.ExitError
+		if !errors.As(runErr, &exitError) || exitError.ExitCode() != state.ExitCode {
+			return result, errors.New("Docker attachment did not match the inspected container exit status")
+		}
+	}
+	if state.ExitCode >= 125 {
+		return result, ErrCommandStatus
 	}
 	return result, nil
 }

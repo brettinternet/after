@@ -127,11 +127,11 @@ func commands(state *invocation) []*ucli.Command {
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, true) },
 		},
 		{
-			Name: "run", Usage: "preview and explicitly authorize a frozen offline HTTP-service definition",
+			Name: "run", Usage: "preview and explicitly authorize a frozen offline scenario definition",
 			Before:    outputBefore(state),
 			ArgsUsage: "[<base-snapshot-id> <candidate-snapshot-id>] (or --approve DIGEST or --plan-file FILE)",
 			Flags: append(runFlags(),
-				&ucli.StringFlag{Name: "definition", Usage: "explicit operator-selected version-1 http-service JSON file; defaults to the built-in payment definition"},
+				&ucli.StringFlag{Name: "definition", Usage: "explicit operator-selected version-1 http-service or command JSON file; defaults to synthetic payment"},
 				&ucli.StringFlag{Name: "plan-file", Usage: "reconstruct an exact previously saved execution preview"},
 				&ucli.StringFlag{Name: "plan-out", Usage: "create a private file containing the exact preview for later approval"},
 				&ucli.StringFlag{Name: "approve", Usage: "approve only this exact preview digest; never a blanket consent"},
@@ -1119,13 +1119,13 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 		if definitionSet {
 			rawDefinition, readErr := readBounded(definitionPath, runner.MaxDefinitionBytes)
 			if readErr != nil {
-				return invalid("cannot read the explicitly selected http-service definition")
+				return invalid("cannot read the explicitly selected scenario definition")
 			}
-			if _, parseErr := runner.ParseDefinition(rawDefinition); parseErr != nil {
+			if _, parseErr := runner.ParseSelectedDefinition(rawDefinition); parseErr != nil {
 				return invalid(parseErr.Error())
 			}
 			source := selectedDefinitionSource(cfg.Project, definitionPath)
-			plan, err = runner.PrepareDefinition(s, pair, rawDefinition, source)
+			plan, err = runner.PrepareSelectedDefinition(s, pair, rawDefinition, source)
 		} else {
 			plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
 		}
@@ -1235,7 +1235,7 @@ func selectedDefinitionSource(project, selected string) runner.DefinitionSource 
 func preparationFailure(err error) error {
 	switch {
 	case errors.Is(err, runner.ErrUnsupportedProject):
-		return invalidWithFix("the captured pair has no complete regular-file source tree for the selected service", "capture a supported HTTP service or use after review to inspect without running it")
+		return invalidWithFix("the captured pair has no complete regular-file source tree for the selected definition", "capture a supported project tree or use after review to inspect without running it")
 	case errors.Is(err, runner.ErrReservedPath):
 		return invalidWithFix("the capture contains a reserved AFTER runtime path", "rename the reserved path, capture again, then retry after run")
 	case errors.Is(err, runner.ErrIncompleteSnapshot):
@@ -1243,7 +1243,7 @@ func preparationFailure(err error) error {
 	case errors.Is(err, runner.ErrSnapshotBudget):
 		return invalidWithFix("the capture exceeds the sandbox budget of 255 files and 8 MiB", "select a smaller captured service tree or inspect the capture without running it")
 	}
-	return operational("cannot prepare the bounded HTTP-service execution plan")
+	return operational("cannot prepare the bounded offline execution plan")
 }
 
 func ensureReceipt(receipt evidence.Receipt) error {

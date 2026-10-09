@@ -11,7 +11,7 @@ Everyday
   after inspect                 inspect the newest capture or a stored record
 
 Evidence
-  after run                     prepare a consented offline http-service run
+  after run                     prepare a consented offline scenario run
   after import                  read a go test -json file or pipe
   after compare                 compare the newest stored run
   after pin                     list pin heads or create an expectation

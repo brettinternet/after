@@ -395,7 +395,24 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 			}
 			rows = append(rows, row)
 		}
-		if scenario != nil && scenario.Author != "AFTER operator-selected http-service v1" && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+		if scenario != nil && scenario.Author == "AFTER operator-selected command v1" && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+			definitionRaw, readErr := s.ReadBlob(scenario.Input)
+			if readErr != nil {
+				return nil, readErr
+			}
+			definition, definitionErr := runner.ParseCommandDefinition(definitionRaw)
+			if definitionErr != nil {
+				return nil, errors.New("stored command definition is invalid")
+			}
+			row := e
+			row.Name = definition.Name + " command"
+			row.Summary = fmt.Sprintf("%d declared case(s) · stdout %s · stderr %s · %s", len(definition.Cases), definition.Comparison.Stdout, definition.Comparison.Stderr, state.Comparison)
+			row.Sections = sections
+			row.Receipt = r.ID
+			row.Expectation = fmt.Sprintf("For %s, preserve the declared container exit status and output streams for its finite command cases.", definition.Name)
+			rows = append(rows, row)
+		}
+		if scenario != nil && scenario.Author != "AFTER operator-selected http-service v1" && scenario.Author != "AFTER operator-selected command v1" && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
 			for _, sec := range []int64{43200, 30} {
 				observations, samples, err := caseObservations(s, r, sec)
 				if err != nil {

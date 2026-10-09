@@ -99,7 +99,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
-		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports the built-in payment case and explicitly selected bounded offline http-service definitions with exact consent.\n   No dependency preparation, external network, host access, plugin framework, or universal behavior guarantee.\n   Stored IDs accept unique 4+ hex prefixes (optional sha256:, any case).\n   --approve requires the full lowercase sha256: digest; prefixes never authorize execution.",
+		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports the built-in payment case and explicitly selected bounded offline http-service or command definitions with exact consent.\n   No dependency preparation, external network, host access, plugin framework, or universal behavior guarantee.\n   Stored IDs accept unique 4+ hex prefixes (optional sha256:, any case).\n   --approve requires the full lowercase sha256: digest; prefixes never authorize execution.",
 		Version:                   Version,
 		Writer:                    stdout,
 		ErrWriter:                 stderr,
@@ -192,7 +192,7 @@ func normalizeArgs(args []string) []string {
 		"--producer": true, "--captured-at": true, "--format": true,
 		"--offset": true, "--limit": true, "-n": true, "--n": true, "--diff-offset": true, "--diff-size": true,
 		"--inventory-offset": true, "--inventory-limit": true, "--card-offset": true,
-		"--card-limit": true, "--plan-file": true, "--plan-out": true, "--approve": true,
+		"--card-limit": true, "--definition": true, "--plan-file": true, "--plan-out": true, "--approve": true,
 		"--artifact-offset": true, "--artifact-size": true,
 		"--evidence": true, "--import-file": true,
 		"--expectation": true, "--scope": true, "--reason": true, "--select": true, "--mode": true, "--receipt": true, "--attach": true,

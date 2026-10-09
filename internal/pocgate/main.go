@@ -21,6 +21,7 @@ const module = "github.com/brettinternet/after/"
 var required = []string{
 	"internal/compare/TestComparisonProof",
 	"internal/compare/TestPythonHTTPServiceProof",
+	"internal/cli/TestCommandCLIProof",
 	"internal/runner/TestRunnerProof",
 	"internal/rawdiff/TestCapturedModesInventoryAndFrozenContext",
 	"internal/review/TestInvalidationMatrix",
@@ -154,7 +155,7 @@ func run() error {
 	if !filepath.IsAbs(os.Getenv("AFTER_DOCKER_BINARY")) || !strings.HasPrefix(os.Getenv("AFTER_DOCKER_HOST"), "unix:///") {
 		return errors.New("explicit AFTER_DOCKER_BINARY and local AFTER_DOCKER_HOST required; provision the pinned image separately (docs/SANDBOX.md)")
 	}
-	for _, flag := range []string{"SANDBOX", "PAYMENT", "RUNNER", "COMPARISON", "HTTP", "CLI", "TUI"} {
+	for _, flag := range []string{"SANDBOX", "PAYMENT", "RUNNER", "COMPARISON", "HTTP", "COMMAND", "CLI", "TUI"} {
 		if err := os.Setenv("AFTER_"+flag+"_PROOF", "1"); err != nil {
 			return err
 		}
