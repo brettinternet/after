@@ -1,18 +1,31 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestGateRequiresExecutedProofs(t *testing.T) {
+	if _, err := requiredForPackage("internal/typo"); err == nil {
+		t.Fatal("unknown package would pass without running a proof")
+	}
+	if names, err := requiredForPackage(""); err != nil || !slices.Equal(names, required) {
+		t.Fatal("default gate lost required proofs")
+	}
 	for _, kind := range []string{"missing", "skip", "fail", "pass", "package-only"} {
 		t.Run(kind, func(t *testing.T) {
+			names, err := requiredForPackage("internal/review")
+			if err != nil || !slices.Equal(names, []string{"internal/review/TestInvalidationMatrix"}) {
+				t.Fatalf("wrong package requirements: %v: %v", names, err)
+			}
 			r := results{passed: map[string]bool{}, failed: map[string]bool{}}
-			e := event{Package: module + "internal/runner", Test: "TestRunnerProof", Action: kind}
+			e := event{Package: module + "internal/review", Test: "TestInvalidationMatrix", Action: kind}
 			if kind == "package-only" {
 				e.Test = ""
 				e.Action = "pass"
 			}
 			r.add(e)
-			err := r.require([]string{"internal/runner/TestRunnerProof"})
+			err = r.require(names)
 			if (err == nil) != (kind == "pass") {
 				t.Fatalf("%s: %v", kind, err)
 			}

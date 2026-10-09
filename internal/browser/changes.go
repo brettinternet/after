@@ -341,7 +341,9 @@ func (m *Model) diffDocumentRow(rowIndex int) string {
 	text := m.doc.LineAt(row.RawLine, m.left, available)
 	tinted := row.Style == terminal.Added || row.Style == terminal.Removed
 	content := m.theme.Render(text, available, row.Style, tinted)
-	if tinted && row.Paired && row.Pair >= 0 && row.Pair < len(m.data.Diff.Rows) {
+	// Span emphasis is purely color styling; avoid comparing entire paired
+	// lines when the terminal cannot display it.
+	if m.theme.Color && tinted && row.Paired && row.Pair >= 0 && row.Pair < len(m.data.Diff.Rows) {
 		content = m.emphasizedRow(row, text, available)
 	}
 	content = highlight(content, available)

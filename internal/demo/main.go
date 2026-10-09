@@ -336,6 +336,7 @@ func run() (err error) {
 	// An explicit flag, never ambient environment, so a leftover export cannot skip consent.
 	authorize := flag.Bool("authorize-synthetic-plans", false, "authorize generated synthetic plans without prompts (proof tasks only)")
 	study := flag.Bool("study", false, "generate study v1 cases (author rehearsal, not human research)")
+	studyCaseID := flag.String("study-case", "", "run only study case A, B, or C (requires --study)")
 	binary := flag.String("binary", "bin/after", "native AFTER binary")
 	assignmentSeed := flag.String("assign-seed", "", "print reproducible anonymous study assignments; no workspace or execution")
 	participants := flag.Int("participants", 12, "anonymous assignment slots (1–18)")
@@ -349,6 +350,9 @@ func run() (err error) {
 	}
 	if flag.NArg() != 0 {
 		return errors.New("unexpected arguments")
+	}
+	if *studyCaseID != "" && (!*study || (*studyCaseID != "A" && *studyCaseID != "B" && *studyCaseID != "C")) {
+		return errors.New("--study-case must be A, B, or C and requires --study")
 	}
 	exe, err := filepath.Abs(*binary)
 	if err != nil {
@@ -381,7 +385,7 @@ func run() (err error) {
 	}
 	d := demo{root: w.root, project: filepath.Join(w.root, "payment"), binary: exe, env: env, input: bufio.NewReader(io.LimitReader(os.Stdin, 1024)), proof: *authorize}
 	if *study {
-		return d.study(*execute)
+		return d.study(*execute, *studyCaseID)
 	}
 	return d.walk(*execute)
 }

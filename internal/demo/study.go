@@ -120,9 +120,12 @@ func (d *demo) studyDiff(name string) error {
 	}
 	return put(d.root, name, raw)
 }
-func (d *demo) study(execute bool) error {
+func (d *demo) study(execute bool, selected string) error {
 	fmt.Println("Study kit v1: AUTHOR REHEARSAL ONLY; no participants or usability results.")
 	for _, c := range studyCases {
+		if selected != "" && c.ID != selected {
+			continue
+		}
 		child := *d
 		child.root = filepath.Join(d.root, c.ID)
 		child.project = filepath.Join(child.root, "payment")

@@ -30,8 +30,8 @@ tasks:
     cmds:
       - task: check:tools
       - task: format:check
-      - task: test
       - task: check:go
+      - task: test:docs
       - task: secrets
 
   check:tools:
@@ -121,14 +121,19 @@ tasks:
 
   test:go:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
-    # Keep other package binaries from competing with terminal latency budgets.
-    cmd: go test -race -p=1 ./...
+    cmds:
+      - go test -race -failfast -timeout=5m ./... -skip "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
+      - task: test:budgets
+
+  test:budgets:
+    desc: Run latency and allocation gates without competing package test binaries
+    cmd: go test -race -failfast -timeout=5m -p=1 ./internal/browser ./internal/terminal -run "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
 
   test:poc:
     desc: Authorize the complete synthetic adversarial Docker/PTY gate and mutation controls (no skips)
     env:
       AFTER_POC_PROOF: "1"
-    cmd: go run ./internal/pocgate
+    cmd: go run ./internal/pocgate {{.CLI_ARGS}}
 
   test:reports:
     desc: Verify offline report parsing, CLI import and shared CLI/TUI cards
@@ -138,7 +143,7 @@ tasks:
 
   test:cli:
     desc: Run focused CLI, configuration, and native entry point tests
-    cmd: go test -race ./internal/config ./internal/cli ./cmd/after
+    cmd: go test -race -failfast -timeout=5m ./internal/config ./internal/cli ./cmd/after {{.CLI_ARGS}}
 
   cli:help:update:
     desc: Regenerate readable CLI help goldens after reviewing help text changes
@@ -266,6 +271,11 @@ tasks:
     desc: Test Go, documentation links and the executable backlog graph
     cmds:
       - task: test:go
+      - task: test:docs
+
+  test:docs:
+    desc: Check documentation links and backlog integrity without repeating Go tests
+    cmds:
       - bun scripts/check-docs.mjs
       - bun scripts/check-backlog.mjs
 

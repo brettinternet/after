@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -77,7 +78,7 @@ func (r results) require(names []string) error {
 
 func tests(ctx context.Context, args ...string) (results, error) {
 	r := results{passed: map[string]bool{}, failed: map[string]bool{}}
-	cmd := exec.CommandContext(ctx, "go", append([]string{"test", "-json", "-count=1", "-p=1", "-timeout=20m"}, args...)...)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"test", "-json", "-count=1", "-p=1", "-failfast", "-timeout=12m"}, args...)...)
 	cmd.Stderr = os.Stderr
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -148,7 +149,31 @@ func mutation(ctx context.Context, file, old, replacement, pkg, test, diagnostic
 	return nil
 }
 
+// CI runs these package slices independently; the default still checks all
+// anchors together. Reject unknown slices rather than succeeding with no proof.
+func requiredForPackage(pkg string) ([]string, error) {
+	if pkg == "" {
+		return required, nil
+	}
+	var names []string
+	for _, name := range required {
+		if strings.HasPrefix(name, pkg+"/") {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no required proofs in package %q", pkg)
+	}
+	return names, nil
+}
+
 func run() error {
+	pkg := flag.String("package", "", "run one required proof package; empty runs the complete gate")
+	flag.Parse()
+	names, err := requiredForPackage(*pkg)
+	if err != nil || flag.NArg() != 0 {
+		return errors.New("select a required proof package with --package; no positional arguments")
+	}
 	if os.Getenv("AFTER_POC_PROOF") != "1" {
 		return errors.New("use task test:poc to authorize synthetic Docker proofs")
 	}
@@ -160,24 +185,34 @@ func run() error {
 			return err
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	budget := 60 * time.Minute
+	pattern := "./..."
+	if *pkg != "" {
+		budget = 13 * time.Minute
+		pattern = "./" + *pkg
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	r, err := tests(ctx, "./...")
+	r, err := tests(ctx, pattern)
 	if err != nil {
 		return err
 	}
-	if err = r.require(required); err != nil {
+	if err = r.require(names); err != nil {
 		return err
 	}
-	if err = mutation(ctx, "internal/review/review.go", "case old.Snapshots != b.Snapshots:", "case false:", "internal/review", "TestInvalidationMatrix", "snapshot freshness binding", "bad reopening:"); err != nil {
-		return err
+	if *pkg == "" || *pkg == "internal/review" {
+		if err = mutation(ctx, "internal/review/review.go", "case old.Snapshots != b.Snapshots:", "case false:", "internal/review", "TestInvalidationMatrix", "snapshot freshness binding", "bad reopening:"); err != nil {
+			return err
+		}
 	}
 	// Go overlays apply to embedded files too: mutate the actual frozen observer,
 	// not application stdout or the expected observation.
-	if err = mutation(ctx, "internal/runner/runtime/observer.go", "calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)})", "if len(calls) == 0 { calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)}) }", "internal/runner", "TestRunnerProof", "observer drops repeated provider requests", "calls want 2"); err != nil {
-		return err
+	if *pkg == "" || *pkg == "internal/runner" {
+		if err = mutation(ctx, "internal/runner/runtime/observer.go", "calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)})", "if len(calls) == 0 { calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)}) }", "internal/runner", "TestRunnerProof", "observer drops repeated provider requests", "calls want 2"); err != nil {
+			return err
+		}
 	}
-	fmt.Println("POC GATE PASSED: required proofs ran without skips; binding and observer negative controls failed as expected. Finite synthetic evidence only.")
+	fmt.Printf("POC GATE PASSED (%s): selected required proofs ran without skips; applicable negative controls failed as expected. Finite synthetic evidence only.\n", pattern)
 	return nil
 }
 func main() {

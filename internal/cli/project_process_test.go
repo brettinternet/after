@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -338,9 +339,12 @@ func processDigest(char string) evidence.Digest {
 }
 
 func runCLIPipe(dir, home string, noColor bool, args []string) (int, string, string, error) {
-	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = cliProcessEnv(home, noColor)
+	cmd.WaitDelay = time.Second
 	cmd.Stdin = strings.NewReader("")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -350,6 +354,8 @@ func runCLIPipe(dir, home string, noColor bool, args []string) (int, string, str
 }
 
 func runCLIPTY(dir, home string, noColor bool, args []string) (int, string, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	master, slave, err := pty.Open()
 	if err != nil {
 		return -1, "", "", err
@@ -359,7 +365,7 @@ func runCLIPTY(dir, home string, noColor bool, args []string) (int, string, stri
 		slave.Close()
 		return -1, "", "", err
 	}
-	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
+	cmd := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = cliProcessEnv(home, noColor)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
@@ -384,6 +390,8 @@ func runCLIPTY(dir, home string, noColor bool, args []string) (int, string, stri
 }
 
 func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answer string) (int, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
 	master, slave, err := pty.Open()
 	if err != nil {
 		return -1, "", err
@@ -393,7 +401,7 @@ func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answ
 		slave.Close()
 		return -1, "", err
 	}
-	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
+	cmd := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = cliProcessEnv(home, noColor)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
@@ -460,6 +468,9 @@ func cliProcessEnv(home string, noColor bool) []string {
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + home,
 		cliProcessHelperEnv + "=1",
+		// These short-lived helpers otherwise each sleep a second on exit.
+		// Keep race detection and its failure exit code; omit only that delay.
+		"GORACE=atexit_sleep_ms=0",
 	}
 	if noColor {
 		env = append(env, "NO_COLOR=1")

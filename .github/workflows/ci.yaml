@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -13,6 +16,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -32,7 +36,42 @@ jobs:
   poc:
     # The Python proof pins an arm64 manifest; use a native matching host.
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 65
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: cli-entry
+            task: test:poc -- --package cmd/after
+          - name: browser
+            task: test:poc -- --package internal/browser
+          - name: capture
+            task: test:poc -- --package internal/capture
+          - name: cli
+            task: test:poc -- --package internal/cli
+          - name: compare
+            task: test:poc -- --package internal/compare
+          - name: payment
+            task: test:poc -- --package internal/paymentfixture
+          - name: rawdiff
+            task: test:poc -- --package internal/rawdiff
+          - name: review
+            task: test:poc -- --package internal/review
+          - name: runner
+            task: test:poc -- --package internal/runner
+          - name: sandbox
+            task: test:poc -- --package internal/sandbox
+          - name: terminal
+            task: test:poc -- --package internal/terminal
+          - name: demo
+            task: demo:proof
+          - name: study-A
+            task: study:proof -- --study-case A
+          - name: study-B
+            task: study:proof -- --study-case B
+          - name: study-C
+            task: study:proof -- --study-case C
+    name: poc (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -42,7 +81,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
       # Trusted CI setup, separate from AFTER execution. Runs never pull images.
       - name: Provision the pinned offline images
-        timeout-minutes: 10
+        timeout-minutes: 3
         run: |
           for image in \
             docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 \
@@ -51,7 +90,8 @@ jobs:
               docker pull --platform linux/arm64 "$image" ||
               docker pull --platform linux/arm64 "$image" || exit 1
           done
-      - name: Execute every POC proof and negative control
+      - name: Execute bounded proof slice
+        timeout-minutes: 13
         shell: bash
         run: |
           mkdir -p artifacts/poc
@@ -60,16 +100,15 @@ jobs:
           mise exec -- go version
           docker version
           docker image inspect docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 --format '{{.Id}} {{.RepoDigests}}'
-          mise exec -- task demo:proof 2>&1 | tee artifacts/poc/demo.log
-          mise exec -- task study:proof 2>&1 | tee artifacts/poc/study.log
-          mise exec -- task test:poc 2>&1 | tee artifacts/poc/gate.log
+          mise exec -- task ${{ matrix.task }} 2>&1 | tee artifacts/poc/gate.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: poc-gate
+          name: poc-${{ matrix.name }}
           path: artifacts/poc
   tooling-and-docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,7 +119,7 @@ jobs:
       - name: Install completion test shell
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: mise exec -- bun install --frozen-lockfile
-      - run: mise exec -- task check
+      - run: mise exec -- task check:tools format:check test:docs secrets
       - run: mise exec -- bunx --no-install playwright install --with-deps chromium
       - run: mise exec -- task docs:check
       - uses: actions/upload-artifact@v4
