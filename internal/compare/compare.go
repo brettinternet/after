@@ -76,7 +76,9 @@ func Run(s *store.Store, receipt evidence.Digest) (evidence.Comparison, error) {
 	if err != nil {
 		report.Outcome = evidence.Incomparable
 		completeness = evidence.Incomplete
-		report.Limits = append(report.Limits, err.Error())
+		if !contains(report.Limits, err.Error()) {
+			report.Limits = append(report.Limits, err.Error())
+		}
 	}
 	raw, err := json.Marshal(report)
 	if err != nil {

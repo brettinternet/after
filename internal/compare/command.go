@@ -124,6 +124,20 @@ func compareCommandReceipt(s *store.Store, receipt evidence.Receipt, report *Rep
 	}
 	report.Outcome = evidence.Equal
 	changesTotal := 0
+	var invalidJSON error
+	incomparableJSON := func(before, after commandSample, beforeRef, afterRef evidence.Digest, relation, channel string) error {
+		diagnostic := "declared " + channel + " JSON is invalid or over budget"
+		if invalidJSON == nil {
+			invalidJSON = errors.New(diagnostic)
+		}
+		if !contains(report.Limits, diagnostic) {
+			report.Limits = append(report.Limits, diagnostic)
+		}
+		before.ref.Observation = beforeRef
+		after.ref.Observation = afterRef
+		report.Witnesses = append(report.Witnesses, Witness{Relation: relation, Channel: channel, Before: before.ref, After: after.ref, Outcome: evidence.Incomparable, Changes: []Change{}})
+		return nil
+	}
 	compare := func(before, after commandSample, relation, channel string) error {
 		var a, b any
 		var beforeRef, afterRef evidence.Digest
@@ -137,11 +151,11 @@ func compareCommandReceipt(s *store.Store, receipt evidence.Receipt, report *Rep
 				var err error
 				a, err = parse(before.stdout)
 				if err != nil {
-					return errors.New("declared stdout JSON is invalid or over budget")
+					return incomparableJSON(before, after, beforeRef, afterRef, relation, channel)
 				}
 				b, err = parse(after.stdout)
 				if err != nil {
-					return errors.New("declared stdout JSON is invalid or over budget")
+					return incomparableJSON(before, after, beforeRef, afterRef, relation, channel)
 				}
 			} else {
 				changes := exactBytes(before.stdout, after.stdout)
@@ -153,11 +167,11 @@ func compareCommandReceipt(s *store.Store, receipt evidence.Receipt, report *Rep
 				var err error
 				a, err = parse(before.stderr)
 				if err != nil {
-					return errors.New("declared stderr JSON is invalid or over budget")
+					return incomparableJSON(before, after, beforeRef, afterRef, relation, channel)
 				}
 				b, err = parse(after.stderr)
 				if err != nil {
-					return errors.New("declared stderr JSON is invalid or over budget")
+					return incomparableJSON(before, after, beforeRef, afterRef, relation, channel)
 				}
 			} else {
 				changes := exactBytes(before.stderr, after.stderr)
@@ -194,7 +208,12 @@ func compareCommandReceipt(s *store.Store, receipt evidence.Receipt, report *Rep
 			}
 		}
 	}
-	return nil
+	// Keep the aggregate incomplete/incomparable, as for older receipts, but
+	// finish every valid witness before Run applies that conservative result.
+	if invalidJSON != nil {
+		report.Outcome = evidence.Incomparable
+	}
+	return invalidJSON
 }
 
 func commandExitStatusPresent(raw []byte) bool {

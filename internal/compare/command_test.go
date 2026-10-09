@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,6 +163,77 @@ func TestCommandComparisonFailsClosedForMissingRedactedInvalidExitAndChangedRule
 	}
 }
 
+func TestCommandComparisonRetainsWitnessesAroundInvalidJSON(t *testing.T) {
+	for _, channel := range []string{"stdout", "stderr"} {
+		t.Run(channel, func(t *testing.T) {
+			s, pair := setup(t)
+			definition := testCommandDefinition("json", "json", []runner.CommandCase{
+				commandCase("invalid", []string{"/work/fixture", "invalid"}),
+				commandCase("changed", []string{"/work/fixture", "changed"}),
+				commandCase("equal", []string{"/work/fixture", "equal"}),
+				commandCase("unstable", []string{"/work/fixture", "unstable"}),
+			})
+			receipt := commandReceiptStreams(t, s, pair, definition, func(side, caseID string, repetition int) ([]byte, []byte) {
+				value := []byte(`{"value":1}`)
+				switch {
+				case caseID == "invalid" && side == "base":
+					value = nil // A normal CLI error path may leave this stream empty.
+				case caseID == "invalid" && repetition == 1:
+					value = []byte("not JSON: untrusted diagnostic")
+				case caseID == "changed" && side == "candidate", caseID == "unstable" && repetition == 1:
+					value = []byte(`{"value":2}`)
+				}
+				if channel == "stderr" {
+					return []byte(`null`), value
+				}
+				return value, []byte(`null`)
+			})
+			comparison, report := result(t, s, receipt)
+			if comparison.Outcome != evidence.Incomparable || comparison.Completeness != evidence.Incomplete || report.Outcome != evidence.Incomparable {
+				t.Fatalf("invalid JSON must dominate both changes and repetition drift: %+v", comparison)
+			}
+			if len(report.Witnesses) != 48 || report.Version != 1 || comparison.Details.Channel != "comparison-details-v1" || report.Rules != receipt.Bindings.Rules {
+				t.Fatalf("lost witnesses or versioned bindings: %+v", report)
+			}
+			artifacts := map[evidence.Digest]string{}
+			for _, artifact := range receipt.Artifacts {
+				artifacts[artifact.Content] = artifact.Channel
+			}
+			for _, witness := range report.Witnesses {
+				want := evidence.Equal
+				if witness.Channel == channel {
+					switch witness.Before.CaseID {
+					case "invalid":
+						want = evidence.Incomparable
+					case "changed":
+						if witness.Relation == "paired" {
+							want = evidence.Different
+						}
+					case "unstable":
+						if witness.Relation == "repetition" {
+							want = evidence.Different
+						}
+					}
+				}
+				if witness.Outcome != want || artifacts[witness.Before.Metadata] == "" || artifacts[witness.After.Metadata] == "" || artifacts[witness.Before.Observation] == "" || artifacts[witness.After.Observation] == "" {
+					t.Fatalf("unexpected or unbound witness (want %s): %+v", want, witness)
+				}
+				if want == evidence.Incomparable && len(witness.Changes) != 0 {
+					t.Fatalf("invalid JSON fabricated changes: %+v", witness)
+				}
+			}
+			diagnostic := "declared " + channel + " JSON is invalid or over budget"
+			if !contains(report.Limits, diagnostic) || strings.Contains(strings.Join(report.Limits, " "), "untrusted diagnostic") {
+				t.Fatalf("missing fixed diagnostic or leaked output: %v", report.Limits)
+			}
+			again, err := Run(s, comparison.Receipt)
+			if err != nil || !reflect.DeepEqual(comparison, again) {
+				t.Fatalf("stored receipt re-derivation changed: %+v, %v", again, err)
+			}
+		})
+	}
+}
+
 func testCommandDefinition(stdout, stderr string, cases []runner.CommandCase) runner.CommandDefinition {
 	return runner.CommandDefinition{
 		Version: 1, Kind: "command", Name: "compare-fixture", Platform: "linux/" + runtime.GOARCH, Image: sandbox.Image,
@@ -175,6 +248,13 @@ func commandCase(id string, argv []string) runner.CommandCase {
 }
 
 func commandReceipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, definition runner.CommandDefinition, output func(side, caseID string, repetition int) []byte) evidence.Receipt {
+	t.Helper()
+	return commandReceiptStreams(t, s, pair, definition, func(side, caseID string, repetition int) ([]byte, []byte) {
+		return output(side, caseID, repetition), []byte{}
+	})
+}
+
+func commandReceiptStreams(t *testing.T, s *store.Store, pair evidence.SnapshotPair, definition runner.CommandDefinition, output func(side, caseID string, repetition int) ([]byte, []byte)) evidence.Receipt {
 	t.Helper()
 	raw, err := json.Marshal(definition)
 	if err != nil {
@@ -238,8 +318,7 @@ func commandReceipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, de
 	for repetition := 0; repetition < frozen.Definition.Repetitions; repetition++ {
 		for sideIndex, side := range []string{"base", "candidate"} {
 			for caseIndex, scenarioCase := range frozen.Definition.Cases {
-				stdout := output(side, scenarioCase.ID, repetition)
-				stderr := []byte{}
+				stdout, stderr := output(side, scenarioCase.ID, repetition)
 				stdoutArtifact, err := s.PutArtifact(stdout, fmt.Sprintf("%s/%s/%d/stdout", side, scenarioCase.ID, repetition), int64(frozen.Definition.Limits.OutputBytes))
 				if err != nil {
 					t.Fatal(err)
