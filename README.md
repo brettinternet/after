@@ -1,5 +1,7 @@
 # AFTER
 
+[![CI](https://github.com/brettinternet/after/actions/workflows/ci.yaml/badge.svg)](https://github.com/brettinternet/after/actions/workflows/ci.yaml)
+
 See what your code does differently, not just how it reads differently.
 
 ![after run: identical responses, but the 12h retry charges twice](examples/demos/payment.gif)
