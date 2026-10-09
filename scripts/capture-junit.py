@@ -38,9 +38,11 @@ with tempfile.TemporaryDirectory(prefix="after-junit-capture-") as directory:
     run(["bun", "install"], work)
     run(["bunx", "--no-install", "vitest", "run", "--reporter=junit", "--outputFile=vitest.xml"], work, 1)
     capture(work / "vitest.xml", "vitest.xml", work)
+    run(["bun", "test", "./bun_report_test.js", "--reporter=junit", "--reporter-outfile=bun.xml"], work, 1)
+    capture(work / "bun.xml", "bun.xml", work)
     tests = work / "src/test/java"
     tests.mkdir(parents=True)
     shutil.copy(work / "ReportTest.java", tests)
     run(["mise", "exec", "java@temurin-21.0.8+9", "maven@3.9.11", "--", "mvn", "-B", "test"], work, 1)
     capture(work / "target/surefire-reports/TEST-ReportTest.xml", "surefire.xml", work)
-print("Captured pytest 8.4.2, Vitest 3.2.4, Maven Surefire 3.5.4 / JUnit Jupiter 5.13.4 (Maven 3.9.11, Temurin 21.0.8+9).")
+print("Captured pytest 8.4.2, Vitest 3.2.4, Bun 1.4.2, Maven Surefire 3.5.4 / JUnit Jupiter 5.13.4 (Maven 3.9.11, Temurin 21.0.8+9).")

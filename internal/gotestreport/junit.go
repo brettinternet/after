@@ -363,7 +363,7 @@ func junitAttribute(element, attribute string) bool {
 	var allowed string
 	switch element {
 	case "testsuites", "testsuite":
-		allowed = " name tests failures errors skipped disabled time timestamp hostname id package assertions version "
+		allowed = " name tests failures errors skipped disabled time timestamp hostname id package assertions version file line "
 	case "testcase":
 		allowed = " name classname time file line assertions "
 	case "failure", "error", "skipped":

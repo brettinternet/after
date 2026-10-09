@@ -30,6 +30,8 @@ exploring. `task examples` smoke-tests everything that needs no Docker.
 | [05-payment-experiment](cli/05-payment-experiment.sh) 🐳 | Payment idempotency change (four variants below)            | Same HTTP responses, different provider charges                    |
 | [06-pin-reopen-rerun](cli/06-pin-reopen-rerun.sh) 🐳     | Reviewer pins "one charge per retry"; the author fixes it   | The pin reopens on the edit until a rerun is attached and accepted |
 | [07-command-scenario](cli/07-command-scenario.sh) 🐳     | A quote CLI is "tidied": struct output, shorter JSON decode | Valid quote equal as JSON; a misspelled field now exits 0 with $0  |
+| [08-junit-report](cli/08-junit-report.sh)                | Shipping threshold moves; Bun writes a JUnit report         | One reported failure and pass, never an observation                |
+| [09-http-service](cli/09-http-service.sh) 🐳             | An echo proxy starts uppercasing request bodies             | Equal HTTP responses; the upstream received a changed body         |
 
 `examples/cli/05-payment-experiment.sh VARIANT` sends `POST /payments`, then
 retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
@@ -46,9 +48,8 @@ on a synthetic JavaScript shipping change and imports its freshly generated JUni
 XML. One unchanged test fails and one passes. `inspect` shows reported-only cards
 alongside `diff`; import success does not mean test success or observed behavior.
 Run with `mise exec -- examples/cli/08-junit-report.sh`. No packages are downloaded;
-Bun is example tooling, not an AFTER runtime dependency. Bun 1.4.2's suite-level
-`file` attribute is unsupported: the unmodified report is marked incomplete with
-`unsupported_attribute`, while both closed test cards remain visible.
+Bun is example tooling, not an AFTER runtime dependency. The unmodified report
+imports complete.
 
 Example [09-http-service](cli/09-http-service.sh) 🐳 selects a non-payment Python
 stdlib echo proxy definition with `--definition`. Uppercasing a request body leaves

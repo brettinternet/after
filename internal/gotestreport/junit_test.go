@@ -35,7 +35,15 @@ func TestJUnitCapturedProducers(t *testing.T) {
 	for _, tc := range []struct {
 		file             string
 		pass, fail, skip int
-	}{{"pytest.xml", 2, 2, 1}, {"vitest.xml", 2, 2, 1}, {"surefire.xml", 1, 2, 1}, {"pytest-empty.xml", 0, 0, 0}} {
+		output           []string
+	}{
+		{"pytest.xml", 2, 2, 1, []string{"synthetic stdout", "synthetic stderr"}},
+		{"vitest.xml", 2, 2, 1, []string{"synthetic stdout", "synthetic stderr"}},
+		{"surefire.xml", 1, 2, 1, []string{"synthetic stdout", "synthetic stderr"}},
+		// Bun 1.4.2 omits console output; suite file/line attributes are inert.
+		{"bun.xml", 2, 2, 1, []string{"synthetic runtime error"}},
+		{"pytest-empty.xml", 0, 0, 0, nil},
+	} {
 		t.Run(tc.file, func(t *testing.T) {
 			raw, err := os.ReadFile("testdata/junit/" + tc.file)
 			if err != nil {
@@ -55,8 +63,13 @@ func TestJUnitCapturedProducers(t *testing.T) {
 				if r.Completeness != evidence.Incomplete || len(r.Cards) != 0 || r.Diagnostics[0].Code != "no_cases" {
 					t.Fatalf("empty report: %+v", r)
 				}
-			} else if r.Completeness != evidence.Complete || !strings.Contains(output, "synthetic stdout") || !strings.Contains(output, "synthetic stderr") {
+			} else if r.Completeness != evidence.Complete {
 				t.Fatalf("capture: %+v", r)
+			}
+			for _, want := range tc.output {
+				if !strings.Contains(output, want) {
+					t.Fatalf("capture output lacks %q: %+v", want, r)
+				}
 			}
 		})
 	}

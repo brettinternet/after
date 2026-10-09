@@ -17,9 +17,8 @@ For a live, dependency-free walkthrough, run
 It explicitly runs the mise-pinned Bun test runner on synthetic JavaScript tests,
 imports the generated XML, and displays reported-only cards beside the diff.
 It downloads no producer dependencies and does not replay a canned report.
-Bun 1.4.2 emits an unsupported suite-level `file` attribute, so the original XML
-imports as incomplete (`unsupported_attribute`) while retaining both closed test
-cards. The example does not strip the attribute or imply full dialect support.
+Bun 1.4.2's suite-level `file` and `line` attributes are accepted as inert
+metadata, so the unmodified XML imports as a complete report.
 
 ## Evidence contract
 
@@ -35,12 +34,12 @@ A single `testsuites` or `testsuite` root; nested `testsuites`, nested `testsuit
 
 Allowed attributes:
 
-| Element                       | Attributes                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `testsuites`, `testsuite`     | name, tests, failures, errors, skipped, disabled, time, timestamp, hostname, id, package, assertions, version |
-| `testcase`                    | name, classname, time, file, line, assertions                                                                 |
-| `failure`, `error`, `skipped` | message, type                                                                                                 |
-| `property`                    | name, value                                                                                                   |
+| Element                       | Attributes                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `testsuites`, `testsuite`     | name, tests, failures, errors, skipped, disabled, time, timestamp, hostname, id, package, assertions, version, file, line |
+| `testcase`                    | name, classname, time, file, line, assertions                                                                             |
+| `failure`, `error`, `skipped` | message, type                                                                                                             |
+| `property`                    | name, value                                                                                                               |
 
 Surefire's `xmlns:xsi` declaration and `xsi:noNamespaceSchemaLocation` on suite elements are accepted as inert metadata; the referenced schema is **never fetched or validated**. Other namespace-qualified elements/attributes, XInclude, producer-specific rerun/flaky extensions and unknown attributes/elements are unsupported. This is not a universal JUnit specification or certification of every producer/version.
 
@@ -73,6 +72,7 @@ Synthetic producer captures are in `internal/gotestreport/testdata/junit/`:
 - `pytest.xml`: pytest **8.4.2**, pass, assertion failure, fixture-setup error, skip, duplicate short test names in different classes, stdout/stderr.
 - `pytest-empty.xml`: pytest **8.4.2**, all tests deselected; no outcome inferred.
 - `vitest.xml`: Vitest **3.2.4**, pass, assertion/runtime failures, skip, nested describe names, stdout/stderr. Vitest flattens describe nesting into testcase names.
+- `bun.xml`: Bun **1.4.2** built-in runner, pass, assertion/runtime failures, skip, nested `describe` suites with `file`/`line` attributes. Bun records no console output.
 - `surefire.xml`: Maven Surefire **3.5.4**, JUnit Jupiter **5.13.4**, Maven **3.9.11**, Temurin **21.0.8+9**; pass, failure, error, skip and CDATA output.
 
 These are actual captured XML, not hand-authored expected reports. Capture normalizes the temporary source directory to `/synthetic/junit` and hostname to `synthetic-host`; it removes Surefire's JVM/system-property block to avoid committing machine paths and ambient settings. Test content/outcomes, XML structure, timestamps and timings otherwise remain producer output. Sources and the capture script are committed. Supplemental parser tests construct literal nested suite trees, duplicate names in separate suites, unknown extensions, malicious XML and boundary violations; those tests are not claimed as producer captures.

@@ -34,9 +34,7 @@ after 0 import ../report.xml --format junit --producer "$producer"
 step "Read the reported cards alongside the captured change"
 after 0 inspect "$(newest report)"
 after 0 diff
-note "Bun 1.4.2 emits a suite-level file attribute outside this importer's dialect."
-note "The report stays incomplete (unsupported_attribute); both closed test cards survive."
-note "The example imports the original XML unchanged, rather than hiding that limitation."
+note "Each card's Report line shows whether the imported document was complete."
 note "Import exit 0 means stored, not tests passed. Snapshot binding is not proof of execution."
 
 takeaway "a threshold edit" \
