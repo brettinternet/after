@@ -14,7 +14,10 @@ import (
 	"github.com/brettinternet/after/internal/browser"
 	"github.com/brettinternet/after/internal/config"
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/runner"
+	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
+	"github.com/brettinternet/after/internal/terminal"
 )
 
 func TestBareRunStoresExactPlanAndInspectSharesConsentDecoder(t *testing.T) {
@@ -113,6 +116,114 @@ func TestBareRunStoresExactPlanAndInspectSharesConsentDecoder(t *testing.T) {
 	s.Close()
 	if err != nil || len(receipts) != 0 {
 		t.Fatalf("refusal contacted execution path or persisted a receipt: %d %v", len(receipts), err)
+	}
+}
+
+func TestCommandConsentSummaryIsReviewableAndInspectionKeepsExactBytes(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "command-project")
+	base, candidate := fixtureCommits(t, project)
+	definition := runner.CommandDefinition{
+		Version: 1, Kind: "command", Name: "consent-fixture", Platform: "linux/arm64", Image: sandbox.Image,
+		BuildArgv: []string{"/usr/local/go/bin/go", "build", "-o", "/work/fixture", "/input/main.go"},
+		Cases: []runner.CommandCase{
+			{ID: "changed", Title: "Changed output", Argv: []string{"/work/fixture", "changed"}, Stdin: []byte("changed input\n"), Environment: []string{"FIXTURE_MODE=changed"}, InputFiles: []runner.CommandInputFile{{Path: "fixtures/changed.json", Content: []byte(`{"case":"changed"}`)}}},
+			{ID: "control", Title: "Unaffected control", Argv: []string{"/work/fixture", "control"}, Stdin: []byte("control input\n"), Environment: []string{"FIXTURE_MODE=control"}, InputFiles: []runner.CommandInputFile{{Path: "fixtures/control.json", Content: []byte(`{"case":"control"}`)}}},
+		},
+		Repetitions: 1, Limits: runner.DefinitionLimits{Seconds: 30, OutputBytes: 4096, PreparationSeconds: 90},
+		Comparison: runner.CommandComparison{Stdout: "text", Stderr: "json"},
+	}
+	definitionRaw, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitionPath := filepath.Join(project, "command.json")
+	if err := os.WriteFile(definitionPath, definitionRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, captureRaw, stderr := invoke([]string{"capture", "--base", base, "--target", candidate, "--project", project, "--json"}, false, "")
+	if code != ExitOK || stderr != "" {
+		t.Fatalf("capture: %d %q", code, stderr)
+	}
+	var captured struct {
+		Data struct {
+			Base      snapshotSummary `json:"base_snapshot"`
+			Candidate snapshotSummary `json:"candidate_snapshot"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(captureRaw), &captured); err != nil || captured.Data.Base.ID == "" || captured.Data.Candidate.ID == "" {
+		t.Fatalf("capture did not return a complete pair: %v %s", err, captureRaw)
+	}
+	code, previewRaw, stderr := invoke([]string{"run", string(captured.Data.Base.ID), string(captured.Data.Candidate.ID), "--definition", definitionPath, "--project", project, "--json"}, false, "")
+	if code != ExitDenied || stderr != "" {
+		t.Fatalf("command preview: %d %q %s", code, stderr, previewRaw)
+	}
+	var result struct {
+		Data executionPreview `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(previewRaw), &result); err != nil || result.Data.Authorization == "" || result.Data.Consent == "" {
+		t.Fatalf("command preview omitted authorization or consent: %v %s", err, previewRaw)
+	}
+	for _, required := range []string{"Case 1:", "changed", "Case 2:", "control", "argv[0]", "environment[0]", "fixtures/changed.json", "size=18 B", "stdin: size=", "--interactive", "after inspect PLAN"} {
+		if !strings.Contains(result.Data.Consent, required) {
+			t.Fatalf("CLI command consent summary missing %q: %s", required, result.Data.Consent)
+		}
+	}
+
+	var promptOutput bytes.Buffer
+	if !prompt(&invocation{stderr: &promptOutput, reader: strings.NewReader("yes\n"), columns: 80}, result.Data.Authorization, []byte(result.Data.Consent), nil, result.Data.PlanBytes, nil) {
+		t.Fatal("80-column command consent prompt did not accept the exact answer")
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(promptOutput.String(), "\n"), "\n") {
+		if terminal.Line(line, 80) != line {
+			t.Fatalf("prompt row exceeds 80 columns: %q", line)
+		}
+	}
+	if !strings.Contains(promptOutput.String(), "argv[1]") || !strings.Contains(promptOutput.String(), "after inspect PLAN --json") {
+		t.Fatalf("prompt omitted indexed argv or full inspection directions: %s", promptOutput.String())
+	}
+
+	previewRows := previewLines(&invocation{columns: 80}, result.Data)
+	for index, row := range previewRows {
+		if row.text != "Consent summary" {
+			continue
+		}
+		for _, summaryRow := range previewRows[index+1:] {
+			if strings.Contains(summaryRow.text, "Docker execution is not configured") {
+				break
+			}
+			if terminal.Line(summaryRow.text, 80) != summaryRow.text {
+				t.Fatalf("run preview command consent row exceeds 80 columns: %q", summaryRow.text)
+			}
+		}
+	}
+	inspectionRows := planInspectionLines(&invocation{columns: 80, stdoutTTY: true}, inspectPlan(evidence.Digest(result.Data.Authorization), result.Data.Plan))
+	for _, row := range inspectionRows {
+		if !strings.Contains(row.text, "Docker execution is not configured") && terminal.Line(row.text, 80) != row.text {
+			t.Fatalf("plan inspection command consent row exceeds 80 columns: %q", row.text)
+		}
+	}
+
+	code, inspectedRaw, stderr := invoke([]string{"inspect", result.Data.Authorization, "--project", project, "--json"}, false, "")
+	var inspected struct {
+		Data struct {
+			Base64 string `json:"base64"`
+		} `json:"data"`
+	}
+	decoded, decodeErr := base64.StdEncoding.DecodeString(func() string {
+		if json.Unmarshal([]byte(inspectedRaw), &inspected) != nil {
+			return ""
+		}
+		return inspected.Data.Base64
+	}())
+	planStore, storeErr := store.Open(project, false, nil)
+	var exactPlan []byte
+	if storeErr == nil {
+		exactPlan, storeErr = planStore.ReadPlan(evidence.Digest(result.Data.Authorization))
+		planStore.Close()
+	}
+	planDigest := sha256.Sum256(exactPlan)
+	if code != ExitOK || stderr != "" || decodeErr != nil || storeErr != nil || !bytes.Equal(decoded, exactPlan) || fmt.Sprintf("sha256:%x", planDigest) != result.Data.Authorization {
+		t.Fatalf("machine inspection did not return the exact authorized command plan: code=%d stderr=%q decode=%v store=%v inspected=%d stored=%d", code, stderr, decodeErr, storeErr, len(decoded), len(exactPlan))
 	}
 }
 

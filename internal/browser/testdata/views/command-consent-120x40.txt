@@ -1,0 +1,40 @@
+   AFTER   payment   original base aaaaaaaa (source loading)  →  candidate bbbbbbbb (source loading)
+  Run this exact plan?
+  [Summary]   Exact plan 16.4 KiB                                                                        1/2 · 4.6 KiB
+  ━━━━━━━━━───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ── Summary ──
+  │ Command consent · each case below is frozen for base and candidate
+  │ Plan ID (concatenate the next two lines without spaces):
+  │ sha256:8b4a6c75bedf69ea4363dcf045df9e86f12c1e54748464cbe193fa6a1
+  │ 32d5943
+  │ Inspect full plan: after inspect PLAN (use the joined Plan ID)
+  │ Inspect exact JSON bytes: after inspect PLAN --json
+  │ Replace PLAN with the two ID parts joined; JSON is untruncated.
+  │ Snapshots:
+  │   base: "sha256:aaaaaaaaaaaaaaaaaaaaaa…#9f447b1b"
+  │   candidate: "sha256:bbbbbbbbbbbbbbbbbbbbbb…#794d2c98"
+  │ Command definition: "synthetic-command"
+  │ Definition digest: "sha256:222ce154e99ed0a3923856…#39b4706f"
+  │ Definition source: "operator-selected-file"
+  │   selected path: "scenarios/command.json"
+  │ Image: docker.io/library/golang
+  │ Image SHA-256:
+  │   e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
+  │ Platform: linux/arm64
+  │ Build argv (direct; no shell):
+  │   argv[0]: "/usr/local/go/bin/go"
+  │   argv[1]: "build"
+  │   argv[2]: "-o"
+  │   argv[3]: "/work/fixture"
+  │   argv[4]: "/input/main.go"
+  │ Case 1:
+  │   id: "changed"
+  │   title: "Source-dependent output"
+  │   argv:
+  │   argv[0]: "/work/fixture"
+  │   argv[1]: "changed"
+  │   environment[0]: "FIXTURE_MODE=changed"
+  │   input[0]: path="fixtures/changed.json" · size=18 B
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Nothing has run. y runs this exact plan once · n denies                                                       ? help

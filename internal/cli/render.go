@@ -1246,7 +1246,7 @@ func previewLines(state *invocation, preview executionPreview) []readableLine {
 		lines = append(lines, textLine("Consent summary unavailable: "+message, terminal.Attention))
 	} else if preview.Consent != "" {
 		lines = append(lines, textLine("Consent summary", terminal.Strong))
-		for _, line := range strings.Split(preview.Consent, "\n") {
+		for _, line := range consentSummaryLines(preview.Consent, max(1, state.columns-2)) {
 			lines = append(lines, textLine("  "+terminal.Line(line, max(1, state.columns-2)), terminal.Plain))
 		}
 	}
@@ -1265,7 +1265,7 @@ func planInspectionLines(state *invocation, view planInspection) []readableLine 
 		lines = append(lines, textLine("Consent summary unavailable: "+message, terminal.Attention))
 	} else {
 		lines = append(lines, textLine("Consent summary", terminal.Strong))
-		for _, line := range strings.Split(view.Consent, "\n") {
+		for _, line := range consentSummaryLines(view.Consent, max(1, state.columns-2)) {
 			lines = append(lines, textLine("  "+terminal.Line(line, max(1, state.columns-2)), terminal.Plain))
 		}
 	}

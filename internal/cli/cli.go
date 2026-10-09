@@ -411,6 +411,20 @@ func startElapsedNoticeWith(state *invocation, action string, delay time.Duratio
 	}
 }
 
+func consentSummaryLines(summary string, width int) []string {
+	lines := strings.Split(strings.TrimSuffix(summary, "\n"), "\n")
+	command := strings.HasPrefix(summary, "Command consent ·")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if command {
+			out = append(out, terminal.Wrap(line, width)...)
+		} else {
+			out = append(out, terminal.Line(line, width))
+		}
+	}
+	return out
+}
+
 func prompt(state *invocation, digest string, summary []byte, summaryErr error, planBytes int, using *resolvedIDs) bool {
 	if _, err := fmt.Fprintf(state.stderr, "Nothing has run. Plan size %s.\nExact authorization digest:\n%s\n", formatPlanSize(planBytes), digest); err != nil {
 		return false
@@ -430,7 +444,7 @@ func prompt(state *invocation, digest string, summary []byte, summaryErr error, 
 		if _, err := io.WriteString(state.stderr, "Consent summary:\n"); err != nil {
 			return false
 		}
-		for _, line := range strings.Split(strings.TrimSuffix(string(summary), "\n"), "\n") {
+		for _, line := range consentSummaryLines(string(summary), max(1, state.columns-2)) {
 			message := terminal.Line(line, max(1, state.columns-2))
 			if _, err := fmt.Fprintf(state.stderr, "  %s\n", message); err != nil {
 				return false

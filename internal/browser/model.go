@@ -251,7 +251,7 @@ func (m *Model) sections() []Section {
 		if m.summaryUnavailable {
 			return []Section{{Name: "Exact plan", Content: m.preview}}
 		}
-		return []Section{{Name: "Summary", Content: m.summary}, {Name: "Exact plan", Content: m.preview}}
+		return []Section{{Name: "Summary", Content: m.summary, Wrap: commandPlanPreview(m.preview)}, {Name: "Exact plan", Content: m.preview}}
 	}
 	if m.data == nil {
 		return nil

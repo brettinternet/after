@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
+	"github.com/brettinternet/after/internal/terminal"
+	"github.com/rivo/uniseg"
 )
 
 const commandTopology = "one fresh offline command container; build then target via direct argv; no observer, mounts, host access or network"
@@ -58,6 +61,13 @@ func commandPlanPreview(raw []byte) bool {
 	return json.Unmarshal(root["definition"], &definition) == nil && definition.Kind == "command"
 }
 
+const (
+	commandConsentLineWidth       = 70
+	commandConsentValueWidth      = 42
+	commandConsentStdinPreviewMax = 12
+	commandConsentPlanIDPartWidth = 64
+)
+
 func commandConsentSummary(raw []byte) ([]byte, error) {
 	var preview commandConsentPreview
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -68,64 +78,382 @@ func commandConsentSummary(raw []byte) ([]byte, error) {
 	if err := preview.validate(); err != nil {
 		return nil, err
 	}
+
 	var summary strings.Builder
-	write := func(label string, value any) error {
-		encoded, err := encodeConsentValue(value)
-		if err != nil {
+	writeText := func(text string) error {
+		for _, line := range terminal.Wrap(text, commandConsentLineWidth) {
+			if summary.Len()+len(line)+1 > terminal.MaxTextBytes {
+				return errors.New("consent summary exceeds terminal document bounds")
+			}
+			summary.WriteString(line)
+			summary.WriteByte('\n')
+		}
+		return nil
+	}
+	writeQuoted := func(label, value string, width int) error {
+		return writeText(label + ": " + boundedCommandQuote(value, width))
+	}
+	writeDetail := func(label, value string, width int) error {
+		return writeQuoted("  "+label, value, width)
+	}
+	writeArgv := func(label string, argv []string) error {
+		if err := writeText(label + ":"); err != nil {
 			return err
 		}
-		return appendConsentLine(&summary, label, encoded)
+		if len(argv) == 0 {
+			return writeText("  (empty)")
+		}
+		for index, arg := range argv {
+			if err := writeDetail(fmt.Sprintf("argv[%d]", index), arg, commandConsentValueWidth); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	for _, field := range []struct {
-		label string
-		value any
-	}{
-		{"Snapshots", preview.Snapshots},
-		{"Command definition", preview.Definition},
-		{"Definition digest", preview.DefinitionDigest},
-		{"Definition source", preview.DefinitionSource},
-		{"Command image/platform", []string{preview.Definition.Image, preview.Definition.Platform}},
-		{"Build argv (optional; direct, no shell)", preview.Definition.BuildArgv},
-		{"Command cases (argv, base64 stdin bytes, fixed environment, additive input files)", preview.Definition.Cases},
-		{"Comparison policy", preview.Definition.Comparison},
-		{"Definition limits", preview.Definition.Limits},
-		{"Preparation recipe", preview.Preparation},
-		{"Preparation budget and transfer", preview.PreparationBudget},
-		{"Per-case launcher configuration", preview.CommandConfigs},
+
+	planID := commandPlanDigest(raw)
+	for _, line := range []string{
+		"Command consent · each case below is frozen for base and candidate",
+		"Plan ID (concatenate the next two lines without spaces):",
+		planID[:commandConsentPlanIDPartWidth],
+		planID[commandConsentPlanIDPartWidth:],
+		"Inspect full plan: after inspect PLAN (use the joined Plan ID)",
+		"Inspect exact JSON bytes: after inspect PLAN --json",
+		"Replace PLAN with the two ID parts joined; JSON is untruncated.",
 	} {
-		if err := write(field.label, field.value); err != nil {
+		if err := writeText(line); err != nil {
+			return nil, err
+		}
+	}
+	if err := writeText("Snapshots:"); err != nil {
+		return nil, err
+	}
+	if err := writeQuoted("  base", string(preview.Snapshots.Base), commandConsentValueWidth); err != nil {
+		return nil, err
+	}
+	if err := writeQuoted("  candidate", string(preview.Snapshots.Candidate), commandConsentValueWidth); err != nil {
+		return nil, err
+	}
+	if err := writeQuoted("Command definition", preview.Definition.Name, commandConsentValueWidth); err != nil {
+		return nil, err
+	}
+	if err := writeQuoted("Definition digest", string(preview.DefinitionDigest), commandConsentValueWidth); err != nil {
+		return nil, err
+	}
+	if err := writeQuoted("Definition source", preview.DefinitionSource.Kind, commandConsentValueWidth); err != nil {
+		return nil, err
+	}
+	if preview.DefinitionSource.RepositoryPath != "" {
+		if err := writeQuoted("  selected path", preview.DefinitionSource.RepositoryPath, commandConsentValueWidth); err != nil {
 			return nil, err
 		}
 	}
 	if preview.DefinitionSource.ChangedOracle {
-		if err := appendConsentLine(&summary, "Changed oracle", "the explicitly selected definition path differs between the captured base and candidate; no snapshot copy was discovered or substituted"); err != nil {
+		if err := writeText("Changed oracle: selected definition differs between snapshots; neither snapshot copy was substituted."); err != nil {
 			return nil, err
 		}
 	}
-	if err := appendConsentLine(&summary, "Runs", fmt.Sprintf("2 sides × %d cases × %d repetitions = %d fresh command containers · concurrency %d", len(preview.Definition.Cases), preview.Repetitions, 2*len(preview.Definition.Cases)*preview.Repetitions, preview.Concurrency)); err != nil {
+	imageRepository, imageDigest, _ := strings.Cut(preview.Definition.Image, "@sha256:")
+	if err := writeText("Image: " + imageRepository); err != nil {
 		return nil, err
 	}
-	for _, field := range []struct {
-		label string
-		value any
-	}{
-		{"Container snapshots", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Snapshot })},
-		{"Input archives", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Input })},
-		{"Frozen stdin digests", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.StdinDigest })},
-		{"Container argv", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Argv })},
-		{"Container environment", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Environment })},
-		{"Mounts", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Mounts })},
-		{"Docker policy", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Policy })},
-		{"Generated runtime slots", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.GeneratedSlots })},
-		{"Container limits", uniqueCommandPlanValues(preview.Experiments, func(plan consentSandboxPlan) any { return plan.Limits })},
-		{"Build output and helper diagnostics", "build stdout/stderr are discarded; helper diagnostics are limited by the container output budget and occur only on incomplete runs"},
-		{"Exit-status limitation", "container statuses 125–255 are incomplete (helper/build/exec failure or possible signal); intentional application exits in this range are unsupported"},
-	} {
-		if err := write(field.label, field.value); err != nil {
+	if err := writeText("Image SHA-256:"); err != nil {
+		return nil, err
+	}
+	if err := writeText("  " + imageDigest); err != nil {
+		return nil, err
+	}
+	if err := writeText("Platform: " + preview.Definition.Platform); err != nil {
+		return nil, err
+	}
+	if err := writeArgv("Build argv (direct; no shell)", preview.Definition.BuildArgv); err != nil {
+		return nil, err
+	}
+	for index, scenarioCase := range preview.Definition.Cases {
+		if err := writeText(fmt.Sprintf("Case %d:", index+1)); err != nil {
+			return nil, err
+		}
+		if err := writeDetail("id", scenarioCase.ID, commandConsentValueWidth); err != nil {
+			return nil, err
+		}
+		if err := writeDetail("title", scenarioCase.Title, commandConsentValueWidth); err != nil {
+			return nil, err
+		}
+		if err := writeArgv("  argv", scenarioCase.Argv); err != nil {
+			return nil, err
+		}
+		if len(scenarioCase.Environment) == 0 {
+			if err := writeText("  environment: (empty fixed environment)"); err != nil {
+				return nil, err
+			}
+		} else {
+			for envIndex, entry := range scenarioCase.Environment {
+				if err := writeDetail(fmt.Sprintf("environment[%d]", envIndex), entry, commandConsentValueWidth); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if len(scenarioCase.InputFiles) == 0 {
+			if err := writeText("  input files: (none)"); err != nil {
+				return nil, err
+			}
+		} else {
+			for fileIndex, input := range scenarioCase.InputFiles {
+				if err := writeText(fmt.Sprintf("  input[%d]: path=%s · size=%d B", fileIndex, boundedCommandQuote(input.Path, 30), len(input.Content))); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if err := writeText("  stdin: size=" + fmt.Sprintf("%d B", len(scenarioCase.Stdin)) + " · preview=" + commandStdinPreview(scenarioCase.Stdin)); err != nil {
 			return nil, err
 		}
 	}
+	if err := writeText(fmt.Sprintf("Comparison: stdout=%s · stderr=%s · exit status=exact", preview.Definition.Comparison.Stdout, preview.Definition.Comparison.Stderr)); err != nil {
+		return nil, err
+	}
+	if err := writeText(fmt.Sprintf("Definition limits: run %ds · output %d B · preparation %ds", preview.Definition.Limits.Seconds, preview.Definition.Limits.OutputBytes, preview.Definition.Limits.PreparationSeconds)); err != nil {
+		return nil, err
+	}
+	if err := writeText(fmt.Sprintf("Runs: 2 sides × %d cases × %d repetitions = %d fresh command containers · concurrency %d", len(preview.Definition.Cases), preview.Repetitions, 2*len(preview.Definition.Cases)*preview.Repetitions, preview.Concurrency)); err != nil {
+		return nil, err
+	}
+
+	if err := writeText("Launcher preparation:"); err != nil {
+		return nil, err
+	}
+	if err := writeText("  image/platform: " + strconv.Quote(preview.Preparation.Image+" / "+preview.Preparation.Platform)); err != nil {
+		return nil, err
+	}
+	if err := writeArgv("  argv", preview.Preparation.Argv); err != nil {
+		return nil, err
+	}
+	if err := writeText("  recipe: " + boundedCommandQuote(preview.Preparation.Preparation, 58)); err != nil {
+		return nil, err
+	}
+	if err := writeText("  mounts: " + boundedCommandQuote(preview.Preparation.Mounts, 58)); err != nil {
+		return nil, err
+	}
+	if err := writeText("  limits: " + formatSandboxLimits(preview.Preparation.Limits)); err != nil {
+		return nil, err
+	}
+	if err := writeText("  budget: " + strconv.Quote(preview.PreparationBudget)); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPlanGroups(&summary, "Launcher environment", preview.Experiments, func(plan consentSandboxPlan) []string { return plan.Environment }); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPolicies(&summary, "Launcher Docker policy", [][]consentSandboxPlan{{preview.Preparation}}); err != nil {
+		return nil, err
+	}
+	if err := writeText("Command containers: one fresh offline container per side/case/repetition; no observer, host access, mounts or network."); err != nil {
+		return nil, err
+	}
+	if err := writeText("  launcher argv: /input/after/launcher"); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPolicyGroups(&summary, "Docker policy (command containers)", preview.Experiments); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPlanGroups(&summary, "Container mounts", preview.Experiments, func(plan consentSandboxPlan) []string { return []string{plan.Mounts} }); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPlanGroups(&summary, "Generated runtime slots", preview.Experiments, func(plan consentSandboxPlan) []string {
+		slots := make([]string, len(plan.GeneratedSlots))
+		for index, slot := range plan.GeneratedSlots {
+			slots[index] = fmt.Sprintf("%s · mode=%04o · max=%d B · producer=%s", slot.Path, slot.Mode, slot.MaxBytes, slot.Producer)
+		}
+		return slots
+	}); err != nil {
+		return nil, err
+	}
+	if err := writeCommandPlanGroups(&summary, "Container limits", preview.Experiments, func(plan consentSandboxPlan) []string { return []string{formatSandboxLimits(plan.Limits)} }); err != nil {
+		return nil, err
+	}
+	if err := writeCommandInputArchives(&summary, preview); err != nil {
+		return nil, err
+	}
+	if err := writeText("Build stdout/stderr are discarded; helper diagnostics are bounded and occur only on incomplete runs."); err != nil {
+		return nil, err
+	}
+	if err := writeText("Exit statuses 125–255 are incomplete; intentional application exits in that range are unsupported."); err != nil {
+		return nil, err
+	}
 	return []byte(summary.String()), nil
+}
+
+func commandPlanDigest(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func boundedCommandQuote(raw string, width int) string {
+	quoted := terminal.Sanitize(strconv.Quote(raw))
+	if uniseg.StringWidth(quoted) <= width {
+		return quoted
+	}
+	sum := sha256.Sum256([]byte(raw))
+	marker := fmt.Sprintf("…#%x\"", sum[:4])
+	prefixWidth := max(1, width-uniseg.StringWidth(marker))
+	prefix := strings.TrimSuffix(terminal.Line(quoted, prefixWidth), "…")
+	return prefix + marker
+}
+
+func commandStdinPreview(stdin []byte) string {
+	previewBytes := stdin[:min(len(stdin), commandConsentStdinPreviewMax)]
+	preview := boundedCommandQuote(string(previewBytes), 30)
+	if len(stdin) > len(previewBytes) {
+		sum := sha256.Sum256(stdin)
+		preview += fmt.Sprintf("…#%x", sum[:4])
+	}
+	return preview
+}
+
+func formatSandboxLimits(limits sandbox.Limits) string {
+	return fmt.Sprintf("%d seconds · %d output bytes", limits.Seconds, limits.OutputBytes)
+}
+
+func writeCommandPlanGroups(summary *strings.Builder, label string, experiments [][]commandConsentExperiment, selectValue func(consentSandboxPlan) []string) error {
+	type group struct {
+		values []string
+		cases  []string
+	}
+	groups := []group{}
+	indexes := map[string]int{}
+	for sideIndex, side := range experiments {
+		sideName := "base"
+		if sideIndex == 1 {
+			sideName = "candidate"
+		}
+		for caseIndex, experiment := range side {
+			values := selectValue(experiment.App)
+			encoded, err := encodeConsentValue(values)
+			if err != nil {
+				return err
+			}
+			groupIndex, ok := indexes[encoded]
+			if !ok {
+				groupIndex = len(groups)
+				indexes[encoded] = groupIndex
+				groups = append(groups, group{values: values})
+			}
+			groups[groupIndex].cases = append(groups[groupIndex].cases, fmt.Sprintf("%s/%d", sideName, caseIndex+1))
+		}
+	}
+	for index, group := range groups {
+		if len(groups) == 1 {
+			if err := appendCommandConsentText(summary, label+" (all command cases):"); err != nil {
+				return err
+			}
+		} else if err := appendCommandConsentText(summary, fmt.Sprintf("%s group %d (%s):", label, index+1, strings.Join(group.cases, ", "))); err != nil {
+			return err
+		}
+		if len(group.values) == 0 {
+			if err := appendCommandConsentText(summary, "  (empty)"); err != nil {
+				return err
+			}
+		}
+		for valueIndex, value := range group.values {
+			if err := appendCommandConsentText(summary, fmt.Sprintf("  [%d] %s", valueIndex, boundedCommandQuote(value, 62))); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func writeCommandPolicies(summary *strings.Builder, label string, sides [][]consentSandboxPlan) error {
+	for sideIndex, plans := range sides {
+		for caseIndex, plan := range plans {
+			prefix := fmt.Sprintf("%s:", label)
+			if len(plans) > 1 || len(sides) > 1 {
+				sideName := "base"
+				if sideIndex == 1 {
+					sideName = "candidate"
+				}
+				prefix = fmt.Sprintf("%s (%s/%d):", label, sideName, caseIndex+1)
+			}
+			if err := appendCommandConsentText(summary, prefix); err != nil {
+				return err
+			}
+			for _, flag := range plan.Policy {
+				if err := appendCommandConsentText(summary, "  "+strconv.Quote(flag)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func writeCommandPolicyGroups(summary *strings.Builder, label string, experiments [][]commandConsentExperiment) error {
+	type group struct {
+		policy []string
+		cases  []string
+	}
+	groups := []group{}
+	indexes := map[string]int{}
+	for sideIndex, side := range experiments {
+		sideName := "base"
+		if sideIndex == 1 {
+			sideName = "candidate"
+		}
+		for caseIndex, experiment := range side {
+			policy := experiment.App.Policy
+			encoded, err := encodeConsentValue(policy)
+			if err != nil {
+				return err
+			}
+			groupIndex, ok := indexes[encoded]
+			if !ok {
+				groupIndex = len(groups)
+				indexes[encoded] = groupIndex
+				groups = append(groups, group{policy: policy})
+			}
+			groups[groupIndex].cases = append(groups[groupIndex].cases, fmt.Sprintf("%s/%d", sideName, caseIndex+1))
+		}
+	}
+	for index, group := range groups {
+		if len(groups) == 1 {
+			if err := appendCommandConsentText(summary, label+" (all command cases):"); err != nil {
+				return err
+			}
+		} else if err := appendCommandConsentText(summary, fmt.Sprintf("%s group %d (%s):", label, index+1, strings.Join(group.cases, ", "))); err != nil {
+			return err
+		}
+		for _, flag := range group.policy {
+			if err := appendCommandConsentText(summary, "  "+strconv.Quote(flag)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func writeCommandInputArchives(summary *strings.Builder, preview commandConsentPreview) error {
+	for sideIndex, side := range preview.Experiments {
+		sideName := "base"
+		if sideIndex == 1 {
+			sideName = "candidate"
+		}
+		for caseIndex, experiment := range side {
+			line := fmt.Sprintf("Input archive %s/case[%d]: %s", sideName, caseIndex+1, boundedCommandQuote(experiment.App.Input, commandConsentValueWidth))
+			if err := appendCommandConsentText(summary, line); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func appendCommandConsentText(summary *strings.Builder, text string) error {
+	for _, line := range terminal.Wrap(text, commandConsentLineWidth) {
+		if summary.Len()+len(line)+1 > terminal.MaxTextBytes {
+			return errors.New("consent summary exceeds terminal document bounds")
+		}
+		summary.WriteString(line)
+		summary.WriteByte('\n')
+	}
+	return nil
 }
 
 func (p commandConsentPreview) validate() error {
@@ -187,22 +515,6 @@ func (p commandConsentPreview) validate() error {
 func commandStdinDigest(input []byte) string {
 	sum := sha256.Sum256(input)
 	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-func uniqueCommandPlanValues(experiments [][]commandConsentExperiment, selectValue func(consentSandboxPlan) any) []any {
-	values := []any{}
-	seen := map[string]bool{}
-	for _, side := range experiments {
-		for _, experiment := range side {
-			value := selectValue(experiment.App)
-			encoded, _ := encodeConsentValue(value)
-			if !seen[encoded] {
-				seen[encoded] = true
-				values = append(values, value)
-			}
-		}
-	}
-	return values
 }
 
 func containsString(values []string, target string) bool {

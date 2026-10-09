@@ -10,6 +10,8 @@ The CLI's `after run BASE CANDIDATE --definition FILE` reads exactly the operato
 
 The CLI binds consent to exact preview bytes. A terminal shows the decoded summary and size, stores the immutable plan privately (0600), then asks for `yes`; non-TTY mode returns the full digest and exact `--approve` command. `--approve` reconstructs and checks the stored bytes; `--plan-file FILE --approve DIGEST` and `--plan-out FILE` are also supported. `after inspect PLAN` displays the strict consent summary and sanitized plan. A summary-decode problem is visible but does not alter the bytes covered by consent. Configuration cannot authorize a run. Docker settings are not probed or used until approval and explicit Docker configuration.
 
+Command consent is a bounded readable projection: it lists every case by ID/title, direct argv indexes, fixed case environment, input-file paths/byte sizes, and stdin byte size with a short escaped preview. It also shows image/platform, build argv, comparison modes, sandbox policy and limits, including Docker's `--interactive` flag. Summary lines fit 70 display columns; long argv, environment, title and input-path values are visibly shortened with a short SHA-256 fingerprint, while case order and indexes remain visible. The full Plan ID is printed as two adjacent parts; join them without whitespace before replacing `PLAN` in `after inspect PLAN`. `after inspect PLAN --json` provides untruncated machine-readable inspection including the exact stored plan bytes. The TUI summary can be scrolled; the underlying preview and exact-byte authorization are unchanged. HTTP-service consent summaries retain their existing projection.
+
 ```sh
 after run
 # Inspect the exact plan and approve only its full digest:

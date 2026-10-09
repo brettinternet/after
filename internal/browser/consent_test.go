@@ -103,6 +103,120 @@ func consentTestBytes(t *testing.T, preview consentPreview) []byte {
 	return raw
 }
 
+func commandConsentTestDefinition() runner.CommandDefinition {
+	return runner.CommandDefinition{
+		Version: 1, Kind: "command", Name: "synthetic-command", Platform: "linux/arm64", Image: sandbox.Image,
+		BuildArgv: []string{"/usr/local/go/bin/go", "build", "-o", "/work/fixture", "/input/main.go"},
+		Cases: []runner.CommandCase{
+			{ID: "changed", Title: "Source-dependent output", Argv: []string{"/work/fixture", "changed"}, Stdin: []byte("request=changed\n"), Environment: []string{"FIXTURE_MODE=changed"}, InputFiles: []runner.CommandInputFile{{Path: "fixtures/changed.json", Content: []byte(`{"case":"changed"}`)}}},
+			{ID: "control", Title: "Unaffected control", Argv: []string{"/work/fixture", "control"}, Stdin: []byte("request=control\n"), Environment: []string{"FIXTURE_MODE=control", "FEATURE=off"}, InputFiles: []runner.CommandInputFile{{Path: "fixtures/control.json", Content: []byte(`{"case":"control"}`)}}},
+		},
+		Repetitions: 1, Limits: runner.DefinitionLimits{Seconds: 60, OutputBytes: 65536, PreparationSeconds: 90},
+		Comparison: runner.CommandComparison{Stdout: "text", Stderr: "json"},
+	}
+}
+
+func commandConsentTestPlan() commandConsentPreview {
+	return commandConsentTestPlanFor(commandConsentTestDefinition())
+}
+
+func commandConsentTestPlanFor(definition runner.CommandDefinition) commandConsentPreview {
+	rawDefinition, err := json.Marshal(definition)
+	if err != nil {
+		panic(err)
+	}
+	definitionDigest := evidence.Digest(consentTestDigestOf(rawDefinition))
+	pair := evidence.SnapshotPair{Base: consentTestDigest('a'), Candidate: consentTestDigest('b')}
+	limits := sandbox.Limits{Seconds: definition.Limits.Seconds, OutputBytes: definition.Limits.OutputBytes}
+	preparationLimits := sandbox.Limits{Seconds: definition.Limits.PreparationSeconds, OutputBytes: definition.Limits.OutputBytes}
+	preparationPlan, err := sandbox.PrepareImage(string(definitionDigest), map[string][]byte{"preparer.go": []byte("trusted preparation source")}, []string{"/usr/local/go/bin/go", "run", "/input/preparer.go"}, preparationLimits, sandbox.Image, definition.Platform)
+	if err != nil {
+		panic(err)
+	}
+	preparationRaw, preparationID := preparationPlan.Preview()
+	var preparation consentSandboxPlan
+	if err := json.Unmarshal(preparationRaw, &preparation); err != nil {
+		panic(err)
+	}
+	configs := make([]json.RawMessage, len(definition.Cases))
+	for index, scenarioCase := range definition.Cases {
+		config, err := json.Marshal(commandLauncherConfig{Version: 1, BuildArgv: definition.BuildArgv, Argv: scenarioCase.Argv, Environment: scenarioCase.Environment})
+		if err != nil {
+			panic(err)
+		}
+		configs[index] = config
+	}
+	experiments := [][]commandConsentExperiment{make([]commandConsentExperiment, len(definition.Cases)), make([]commandConsentExperiment, len(definition.Cases))}
+	for side := range experiments {
+		snapshot := pair.Base
+		if side == 1 {
+			snapshot = pair.Candidate
+		}
+		for caseIndex, scenarioCase := range definition.Cases {
+			files := map[string][]byte{"main.go": []byte("synthetic command source")}
+			for _, input := range scenarioCase.InputFiles {
+				files[input.Path] = input.Content
+			}
+			template, err := sandbox.PrepareTemplate(string(snapshot), files, []string{"/input/after/launcher"}, limits, definition.Image, definition.Platform, []sandbox.GeneratedFile{
+				{Path: "after/launcher", Producer: preparationID, MaxBytes: 8 << 20, Mode: 0555},
+				{Path: "after/service.json", Producer: string(definitionDigest), MaxBytes: 64 << 10, Mode: 0444},
+			})
+			if err != nil {
+				panic(err)
+			}
+			commandPlan, err := template.WithCommandInput(scenarioCase.Stdin)
+			if err != nil {
+				panic(err)
+			}
+			appRaw, _ := commandPlan.Preview()
+			var app consentSandboxPlan
+			if err := json.Unmarshal(appRaw, &app); err != nil {
+				panic(err)
+			}
+			experiments[side][caseIndex] = commandConsentExperiment{App: app, Topology: commandTopology}
+		}
+	}
+	scenario := evidence.Scenario{
+		SchemaVersion: evidence.SchemaVersion, ID: consentTestDigest('c'), Input: definitionDigest,
+		Driver: consentTestDigest('d'), Observer: consentTestDigest('e'), Rules: consentTestDigest('f'),
+		Boundary: "Docker-inspected command status and attached streams", Author: "AFTER operator-selected command v1",
+		Limits: []string{"finite command cases"},
+	}
+	return commandConsentPreview{
+		Version: 1, Request: consentTestDigest('3'), Snapshots: pair, Scenario: scenario,
+		DefinitionDigest: definitionDigest, Definition: definition,
+		DefinitionSource: runner.DefinitionSource{Kind: "operator-selected-file", RepositoryPath: "scenarios/command.json"},
+		CommandConfigs:   configs, Repetitions: definition.Repetitions, Limits: limits,
+		Preparation:       preparation,
+		PreparationBudget: fmt.Sprintf("one in-approved-request launcher build; %d seconds; stdout ≤8 MiB binary, stderr ≤%d bytes diagnostics; no cache", definition.Limits.PreparationSeconds, definition.Limits.OutputBytes),
+		Concurrency:       1, Experiments: experiments,
+	}
+}
+
+func commandConsentTestBytes(t *testing.T, preview commandConsentPreview) []byte {
+	t.Helper()
+	raw, err := json.MarshalIndent(preview, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func commandConsentView(t *testing.T, raw []byte) *Model {
+	t.Helper()
+	var preview commandConsentPreview
+	if err := json.Unmarshal(raw, &preview); err != nil {
+		t.Fatal(err)
+	}
+	summary, summaryErr := ConsentSummary(raw)
+	m := New(t.Context(), Selection{Project: "payment", Pair: preview.Snapshots}, Jobs{})
+	t.Cleanup(m.Close)
+	m.theme.Color = false
+	_, cmd := m.Update(prepared{pair: preview.Snapshots, raw: raw, digest: consentTestDigestOf(raw), summary: summary, summaryErr: summaryErr})
+	drain(m, cmd)
+	return m
+}
+
 func consentTestDigestOf(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return fmt.Sprintf("sha256:%x", sum)
@@ -172,6 +286,59 @@ func TestConsentSummaryStrictDecodeDistinctValuesAndEscaping(t *testing.T) {
 	for _, line := range strings.Split(frame, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "Docker policy: forged") || strings.HasPrefix(strings.TrimSpace(line), "Image: forged") {
 			t.Fatalf("payload forged a summary label: %q", line)
+		}
+	}
+}
+
+func TestCommandConsentSummaryShowsBoundedCaseInputsAndExactInspection(t *testing.T) {
+	definition := commandConsentTestDefinition()
+	longPrefix := strings.Repeat("same-prefix-", 18)
+	definition.Cases[0].Argv[1] = longPrefix + "changed"
+	definition.Cases[1].Argv[1] = longPrefix + "control"
+	definition.Cases[0].Title = "Hostile \x1b]52;c;clipboard\a title"
+	definition.Cases[0].Environment[0] = "FIXTURE_MODE=changed\x1b]52;c;clipboard"
+	definition.Cases[0].InputFiles[0].Path = "fixtures/\x1b[2J.json"
+	definition.Cases[0].Stdin = []byte("\x1b]52;c;clipboard\a" + strings.Repeat("x", 20))
+	preview := commandConsentTestPlanFor(definition)
+	raw := commandConsentTestBytes(t, preview)
+	summary, err := ConsentSummary(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(summary)
+	for _, required := range []string{
+		"Command consent", "Case 1:", "Case 2:", `id: "changed"`, `id: "control"`, `title:`,
+		"argv[0]", "argv[1]", "environment[0]", "environment[1]", "input[0]", "size=18 B", "stdin: size=37 B",
+		"preview=", "Image: docker.io/library/golang", "Image SHA-256:", "linux/arm64", "Build argv (direct; no shell)",
+		"Comparison: stdout=text · stderr=json · exit status=exact", "Definition limits:",
+		"Docker policy (command containers)", `"--interactive"`, `"--read-only"`,
+		"Plan ID (concatenate the next two lines without spaces):\n" + consentTestDigestOf(raw)[:commandConsentPlanIDPartWidth] + "\n" + consentTestDigestOf(raw)[commandConsentPlanIDPartWidth:], "after inspect PLAN", "after inspect PLAN --json",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("command summary missing %q:\n%s", required, text)
+		}
+	}
+	for _, value := range []string{definition.Cases[0].Argv[1], definition.Cases[1].Argv[1], "\x1b]52;", "\a"} {
+		if strings.Contains(text, value) {
+			t.Fatalf("command summary exposed raw/long value %q", value)
+		}
+	}
+	for _, arg := range definition.Cases[:2] {
+		sum := sha256.Sum256([]byte(arg.Argv[1]))
+		if !strings.Contains(text, fmt.Sprintf("…#%x", sum[:4])) {
+			t.Fatalf("long argv value lacks its distinguishing fingerprint: %s", text)
+		}
+	}
+	stdinSum := sha256.Sum256(definition.Cases[0].Stdin)
+	if !strings.Contains(text, fmt.Sprintf("…#%x", stdinSum[:4])) || !strings.Contains(text, `\x1b`) {
+		t.Fatalf("stdin preview was not escaped or fingerprinted: %s", text)
+	}
+	if len(summary) > 64<<10 {
+		t.Fatalf("command summary exceeded its bounded projection: %d bytes", len(summary))
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if terminal.Line(line, commandConsentLineWidth) != line {
+			t.Fatalf("summary line exceeds %d display columns: %q", commandConsentLineWidth, line)
 		}
 	}
 }
@@ -252,6 +419,39 @@ func consentGoldenViews(t *testing.T) {
 			}
 			for _, line := range strings.Split(got, "\n") {
 				if terminalWidth := terminal.Line(line, size.Width); terminalWidth != line {
+					t.Fatalf("golden row exceeds %d columns: %q", size.Width, line)
+				}
+			}
+		})
+	}
+}
+
+func commandConsentGoldenViews(t *testing.T) {
+	raw := commandConsentTestBytes(t, commandConsentTestPlan())
+	for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 40}, {Width: 80, Height: 24}} {
+		name := fmt.Sprintf("command-consent-%dx%d", size.Width, size.Height)
+		t.Run(name, func(t *testing.T) {
+			m := commandConsentView(t, raw)
+			step(m, size)
+			got := m.View() + "\n"
+			path := filepath.Join("testdata", "views", name+".txt")
+			if *updateViews {
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(want) != got {
+				t.Fatalf("command consent view differs: %s; regenerate explicitly with -update\n%s", path, got)
+			}
+			for _, line := range strings.Split(got, "\n") {
+				if terminal.Line(line, size.Width) != line {
 					t.Fatalf("golden row exceeds %d columns: %q", size.Width, line)
 				}
 			}
