@@ -95,7 +95,7 @@ func TestPTYRestoration(t *testing.T) {
 			select {
 			case err := <-done:
 				if mode == "context-error" {
-					if !errors.Is(err, tea.ErrProgramKilled) {
+					if !errors.Is(err, tea.ErrProgramKilled) || !errors.Is(err, context.Canceled) {
 						t.Fatalf("expected cancellation error: %v", err)
 					}
 				} else if err != nil {

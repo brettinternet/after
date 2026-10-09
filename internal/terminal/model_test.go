@@ -118,6 +118,22 @@ func (m *busyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func TestRunCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	m := New(ctx, model(t, "diff").document, Binding{}, "cancelled")
+	done := make(chan error, 1)
+	go func() { done <- Run(m, nil, io.Discard) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, tea.ErrProgramKilled) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected program and context cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled startup did not return")
+	}
+}
+
 func TestAsyncQuit(t *testing.T) {
 	m := &busyModel{Model: model(t, strings.Repeat("diff line\n", 100000)), started: make(chan struct{}), stopped: make(chan struct{})}
 	p := tea.NewProgram(m, tea.WithInput(nil), tea.WithOutput(io.Discard), tea.WithoutSignalHandler())

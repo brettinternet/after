@@ -1160,6 +1160,5 @@ func (m *Model) idleHint() string {
 }
 func Run(m *Model, input io.Reader, output io.Writer) error {
 	defer m.Close()
-	_, err := tea.NewProgram(m, tea.WithInput(input), tea.WithOutput(output), tea.WithContext(m.parent), tea.WithAltScreen()).Run()
-	return err
+	return terminal.RunProgram(m.parent, m, input, output)
 }

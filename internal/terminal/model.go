@@ -118,6 +118,5 @@ func (m *Model) View() string {
 // context on every exit. It never prints an untrusted error after restoration.
 func Run(m *Model, input io.Reader, output io.Writer) error {
 	defer m.Close()
-	_, err := tea.NewProgram(m, tea.WithInput(input), tea.WithOutput(output), tea.WithContext(m.parent), tea.WithAltScreen()).Run()
-	return err
+	return RunProgram(m.parent, m, input, output)
 }
