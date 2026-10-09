@@ -1101,6 +1101,8 @@ func comparisonDetailLines(state *invocation, lines []readableLine, report compa
 		return append(lines, textLine("  Command witness summary unavailable; use --json for the stored report.", terminal.Attention))
 	}
 	if report.DefinitionName != "" && !report.BuiltInPayment {
+		detailCount := 0
+		more := false
 		for index, caseID := range report.Cases {
 			for _, channel := range report.Channels {
 				var outcomes []evidence.ComparisonOutcome
@@ -1124,7 +1126,34 @@ func comparisonDetailLines(state *invocation, lines []readableLine, report compa
 					title = report.CaseTitles[index]
 				}
 				lines = append(lines, textLine(fmt.Sprintf("  %-24s · %s [%s]", title, channel, strings.ToUpper(string(outcome))), badgeStyle(string(outcome))))
+				for _, witness := range report.Witnesses {
+					if witness.Relation != "paired" || witness.Before.CaseID != caseID || witness.Channel != channel {
+						continue
+					}
+					for _, change := range witness.Changes {
+						if detailCount == 24 {
+							more = true
+							break
+						}
+						path := change.Path
+						if path == "" {
+							path = "/ (root)"
+						}
+						before, after := "—", "—"
+						if len(change.Before) > 0 {
+							before = terminal.Line(string(change.Before), 18)
+						}
+						if len(change.After) > 0 {
+							after = terminal.Line(string(change.After), 18)
+						}
+						lines = append(lines, textLine(fmt.Sprintf("    rep %d: %s %s → %s", witness.Before.Repetition+1, terminal.Line(path, 24), before, after), terminal.Plain))
+						detailCount++
+					}
+				}
 			}
+		}
+		if more {
+			lines = append(lines, textLine("  More HTTP witnesses omitted; use --json for the complete report.", terminal.Muted))
 		}
 		return lines
 	}

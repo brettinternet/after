@@ -43,7 +43,6 @@ after 4 run "$(short "$base")" "$(short "$candidate")" --definition ../echo-case
 
 step "Read the independent observer's stored witnesses without rerunning"
 after 4 compare
-shell 4 "after compare --json | jq -c '.data.details.witnesses[] | select(.relation == \"paired\" and .before.repetition == 0) | {case: .before.case_id, channel, outcome, changes}'"
 
 takeaway "a one-line normalization" \
 	"equal HTTP responses in both cases; changed provider body for lowercase, equal for uppercase"

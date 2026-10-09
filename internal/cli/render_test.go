@@ -284,6 +284,39 @@ func TestLegacySnapshotCaptureTimeRemainsUnavailable(t *testing.T) {
 	}
 }
 
+func TestReadableHTTPWitnessDetails(t *testing.T) {
+	report := compare.Report{
+		DefinitionName: "echo-normalization", Cases: []string{"lowercase", "uppercase"},
+		Channels: []string{"provider_calls"}, Outcome: evidence.Different,
+		Witnesses: []compare.Witness{
+			{Relation: "paired", Channel: "provider_calls", Before: compare.SampleRef{CaseID: "lowercase"}, Outcome: evidence.Different,
+				Changes: []compare.Change{{Path: "/calls/0/body/text", Before: json.RawMessage(`"hello"`), After: json.RawMessage(`"HELLO"`)}}},
+			{Relation: "paired", Channel: "provider_calls", Before: compare.SampleRef{CaseID: "uppercase"}, Outcome: evidence.Equal},
+		},
+	}
+	render := func() string {
+		t.Helper()
+		state := goldenState()
+		if err := writeReadable(state, "comparison", comparisonResult{Comparison: evidence.Comparison{Outcome: report.Outcome}, Details: &report}); err != nil {
+			t.Fatal(err)
+		}
+		return state.stdout.(*bytes.Buffer).String()
+	}
+	output := render()
+	for _, want := range []string{`rep 1: /calls/0/body/text "hello" → "HELLO"`, "uppercase", "[EQUAL]"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("missing %q in %s", want, output)
+		}
+	}
+	for range 30 {
+		report.Witnesses[0].Changes = append(report.Witnesses[0].Changes, compare.Change{Path: "/\x1b]52;c;clipboard\a" + strings.Repeat("x", 100), After: json.RawMessage(`"` + strings.Repeat("y", 100) + `"`)})
+	}
+	output = render()
+	if strings.ContainsAny(output, "\x1b\a") || strings.Count(output, "rep 1:") != 24 || !strings.Contains(output, "More HTTP witnesses omitted; use --json for the complete report.") {
+		t.Fatalf("unsafe or unbounded HTTP details: %q", output)
+	}
+}
+
 func TestReadableCommandWitnessOverflowPointsToJSON(t *testing.T) {
 	definition, report := goldenCommandPresentation()
 	for index := 0; index < 100; index++ {
