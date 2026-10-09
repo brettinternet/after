@@ -24,6 +24,8 @@ func consentTestDigest(char byte) evidence.Digest {
 func consentTestPlan() consentPreview {
 	pair := evidence.SnapshotPair{Base: consentTestDigest('a'), Candidate: consentTestDigest('b')}
 	definition := runner.BuiltinPaymentDefinition(1, sandbox.Limits{Seconds: 180, OutputBytes: 65536})
+	// Keep synthetic plans and goldens independent of the host architecture.
+	definition.Platform = "linux/arm64"
 	definition.Environment = []string{}
 	scenario := evidence.Scenario{
 		SchemaVersion: evidence.SchemaVersion,

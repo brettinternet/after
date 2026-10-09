@@ -121,7 +121,8 @@ tasks:
 
   test:go:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
-    cmd: go test -race ./...
+    # Keep other package binaries from competing with terminal latency budgets.
+    cmd: go test -race -p=1 ./...
 
   test:poc:
     desc: Authorize the complete synthetic adversarial Docker/PTY gate and mutation controls (no skips)

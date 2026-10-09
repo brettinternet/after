@@ -527,7 +527,11 @@ func TestReviewConsentPTY(t *testing.T) {
 			p.send("r")
 			p.expect("Run this exact plan?")
 			p.expect("Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1")
-			p.send("G")
+			// The full summary already fits at 40 rows. A no-op scroll does
+			// not redraw it, so retain the unread part of that first frame.
+			if variant.height < 40 {
+				p.send("G")
+			}
 			p.expect("Container limits")
 			p.send("g")
 			p.send("\t")

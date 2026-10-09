@@ -18,6 +18,9 @@ jobs:
       - uses: jdx/mise-action@v3
         with:
           cache_key_prefix: mise-${{ runner.os }}-${{ hashFiles('mise.toml') }}
+      - name: Install completion test shell
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - run: mise exec -- task check:go
       - run: ./bin/after --help
       - run: ./bin/after --version
@@ -27,16 +30,27 @@ jobs:
       - name: Verify package checksums
         run: for package in dist/*; do (cd "$package" && shasum -a 256 -c SHA256SUMS); done
   poc:
-    runs-on: ubuntu-latest
+    # The Python proof pins an arm64 manifest; use a native matching host.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
         with:
           cache_key_prefix: mise-poc-${{ hashFiles('mise.toml') }}
+      - name: Install completion test shell
+        run: sudo apt-get update && sudo apt-get install -y zsh
       # Trusted CI setup, separate from AFTER execution. Runs never pull images.
-      - name: Provision the pinned offline toolchain
-        run: docker pull docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
+      - name: Provision the pinned offline images
+        timeout-minutes: 10
+        run: |
+          for image in \
+            docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 \
+            docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14; do
+            docker pull --platform linux/arm64 "$image" ||
+              docker pull --platform linux/arm64 "$image" ||
+              docker pull --platform linux/arm64 "$image" || exit 1
+          done
       - name: Execute every POC proof and negative control
         shell: bash
         run: |
@@ -63,6 +77,8 @@ jobs:
       - uses: jdx/mise-action@v3
         with:
           cache_key_prefix: mise-${{ hashFiles('mise.toml') }}
+      - name: Install completion test shell
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - run: mise exec -- bun install --frozen-lockfile
       - run: mise exec -- task check
       - run: mise exec -- bunx --no-install playwright install --with-deps chromium

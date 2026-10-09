@@ -389,9 +389,12 @@ func TestRejectUnsupportedRepositoryState(t *testing.T) {
 				command(t, d, "checkout", "-q", "main")
 				put(t, d, "file", []byte("main"))
 				commit(t, d)
-				c := exec.Command("git", "merge", "side")
+				c := exec.Command("git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "merge", "side")
 				c.Dir = d
-				c.Run()
+				out, err := c.CombinedOutput()
+				if err == nil || command(t, d, "ls-files", "--unmerged") == "" {
+					t.Fatalf("fixture did not create a merge conflict: %v: %s", err, out)
+				}
 			case "sparse":
 				command(t, d, "config", "core.sparseCheckout", "true")
 			case "skip":
