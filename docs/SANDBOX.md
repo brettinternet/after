@@ -12,11 +12,16 @@ The trusted compiler/observer runtime image is pinned:
 docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
 ```
 
-An `http-service` definition separately selects a digest-pinned service image and explicit Linux platform. The no-dependency cross-language proof uses:
+An `http-service` definition separately selects a digest-pinned service image and explicit Linux platform. Current proof provisioning is:
 
-```text
-docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14
-```
+| Platform      | Trusted Go compiler/observer image                                                                 | Python service image                                                                               |
+| ------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `linux/arm64` | `docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190` | `docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14` |
+| `linux/amd64` | Not provisioned or observed on an amd64 proof host                                                 | Not provisioned; the arm64 Python manifest above is not an amd64 image                             |
+
+These are provisioning observations, not a claim that an image index lacks other platforms. The Python fixture currently pins the arm64 manifest. Before consent or Docker access, the Python proof rejects a different native test-process architecture with a provisioning fix. After exact consent, Docker preflight independently checks Linux daemon isolation capabilities and the image's approved platform. This does not certify the daemon's CPU architecture; run the proof process on a matching native Docker host, not across architectures.
+
+To unblock amd64, supply a native amd64 machine with a local Docker Unix socket, separately authorize and provision matching digest-pinned Go and Python images, then update `internal/runner/testdata/python-service/http-service.json` platform and image together and record the provisioned digest here. Do not merely change the platform on the arm64 manifest. Run `task http-service:proof`, `task command:proof` and `task test:poc` on that host and record exact commands and host details in AFTER-55. Until then, amd64 execution remains unverified; an early provisioning error is not a passing execution proof.
 
 Provision every required image as a separate authorized network action. AFTER uses `--pull=never`; it does not build images or download service dependencies. The compiler, observer and service images must all support the frozen `linux/amd64` or `linux/arm64` platform; no emulation or automatic provisioning is added.
 
@@ -52,11 +57,11 @@ The trusted Go compiler/observer uses scratch caches, `GOPROXY=off`, `GOSUMDB=of
 
 ## Provision and prove
 
-Provisioning is a separate authorized network action. Do not pull merely because a repository asks. Provision the trusted toolchain image and, only for the Python proof, its explicitly selected service image:
+Provisioning is a separate authorized network action. Do not pull merely because a repository asks. For the provisioned `linux/arm64` proof host, provision the trusted toolchain image and, only for the Python proof, its explicitly selected service image:
 
 ```sh
-docker pull docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
-docker pull docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14
+docker pull --platform linux/arm64 docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190
+docker pull --platform linux/arm64 docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14
 ```
 
 On macOS, prepare a Linux Colima VM with at least 2 GiB RAM and Docker/cgroup v2. On Linux, use a local Docker Engine with the required capabilities. Example for Linux:

@@ -549,15 +549,42 @@ func pythonServiceSetup(t *testing.T) (*store.Store, evidence.SnapshotPair) {
 	return s, pair
 }
 
+// Validate the fixture before consent or Docker access. The sandbox separately
+// checks daemon isolation and the approved image platform after consent;
+// run this proof process on a matching native Docker host.
+func pythonProofDefinition(platform string) ([]byte, error) {
+	raw, err := os.ReadFile("../runner/testdata/python-service/http-service.json")
+	if err != nil {
+		return nil, err
+	}
+	definition, err := runner.ParseDefinition(raw)
+	if err != nil {
+		return nil, err
+	}
+	if definition.Platform != platform {
+		return nil, fmt.Errorf("Python proof fixture is provisioned for %s, not %s: separately authorize and provision a digest-pinned Python image for %s, then update internal/runner/testdata/python-service/http-service.json platform and image together and record the digest in docs/SANDBOX.md; rerun task http-service:proof and task test:poc on a matching native Docker host (no automatic pulls or emulation)", definition.Platform, platform, platform)
+	}
+	return raw, nil
+}
+
+func TestPythonProofPlatformProvisioning(t *testing.T) {
+	if _, err := pythonProofDefinition("linux/arm64"); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := pythonProofDefinition("linux/amd64"); err == nil || raw != nil || !strings.Contains(err.Error(), "separately authorize and provision") || !strings.Contains(err.Error(), "platform and image together") {
+		t.Fatalf("unprovisioned platform must fail with a provisioning fix before execution: %s %v", raw, err)
+	}
+}
+
 func TestPythonHTTPServiceProof(t *testing.T) {
 	if os.Getenv("AFTER_HTTP_PROOF") != "1" {
 		t.Skip("task http-service:proof authorizes the separate Python image")
 	}
-	s, pair := pythonServiceSetup(t)
-	definition, err := os.ReadFile("../runner/testdata/python-service/http-service.json")
+	definition, err := pythonProofDefinition("linux/" + runtime.GOARCH)
 	if err != nil {
 		t.Fatal(err)
 	}
+	s, pair := pythonServiceSetup(t)
 	plan, err := runner.PrepareDefinition(s, pair, definition, runner.DefinitionSource{Kind: "operator-selected-file"})
 	if err != nil {
 		t.Fatal(err)
