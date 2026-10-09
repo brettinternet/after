@@ -259,14 +259,6 @@ func BuiltinPaymentDefinition(repetitions int, limits sandbox.Limits) Definition
 
 func (d Definition) CanonicalBytes() ([]byte, error) { return json.Marshal(d) }
 
-func (d Definition) caseMap() map[string]Case {
-	out := make(map[string]Case, len(d.Cases))
-	for _, scenarioCase := range d.Cases {
-		out[scenarioCase.ID] = scenarioCase
-	}
-	return out
-}
-
 func (d Definition) routeKeys() []string {
 	seen := map[string]bool{}
 	keys := []string{}

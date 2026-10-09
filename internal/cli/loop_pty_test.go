@@ -100,9 +100,10 @@ func (p *loopPTY) send(keys string) {
 }
 func (p *loopPTY) expect(want string) {
 	p.t.Helper()
+	want = strings.Join(strings.Fields(want), " ")
 	deadline := time.After(4 * time.Minute)
 	for {
-		visible := stripThemeSGR(p.unread.String())
+		visible := strings.Join(strings.Fields(stripThemeSGR(p.unread.String())), " ")
 		if index := strings.Index(visible, want); index >= 0 {
 			remaining := visible[index+len(want):]
 			p.unread.Reset()
@@ -557,6 +558,16 @@ func TestReviewLoopPTYProof(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "payment")
 	base, _ := fixtureCommits(t, project)
 	gitRun(t, project, "checkout", "--detach", base)
+	// Keep the initial observations equal while providing a real captured diff
+	// for the inventory/raw-diff navigation proof below.
+	configPath := filepath.Join(project, "app", "config.go")
+	configSource, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, append(configSource, []byte("\n// Synthetic review candidate; behavior unchanged.\n")...), 0600); err != nil {
+		t.Fatal(err)
+	}
 	a := &browser.Actions{Project: project, Repetitions: 1, Limits: sandbox.Limits{Seconds: 180, OutputBytes: 65536}, Docker: sandbox.Docker{Binary: os.Getenv("AFTER_DOCKER_BINARY"), Host: os.Getenv("AFTER_DOCKER_HOST")}}
 	pair, err := a.Capture(t.Context())
 	if err != nil {

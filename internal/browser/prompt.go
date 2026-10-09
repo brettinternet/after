@@ -301,28 +301,29 @@ func (m *Model) promptLines() []string {
 	if m.prompt == nil {
 		return nil
 	}
+	width := m.inner()
 	lines := []string{}
 	for _, paragraph := range m.prompt.description {
-		lines = append(lines, terminal.Wrap(paragraph, m.width)...)
+		lines = append(lines, terminal.Wrap(paragraph, width)...)
 	}
 	if m.prompt.action == keyUseCapture {
-		lines = append(lines, terminal.Wrap("Before means (←/→ choose):", m.width)...)
+		lines = append(lines, terminal.Wrap("Before means (←/→ choose):", width)...)
 		original := fmt.Sprintf("original base %s → candidate %s", m.prompt.baseline, m.prompt.pair.Candidate)
 		followUp := fmt.Sprintf("last inspected %s → candidate %s", m.prompt.selection.Pair.Candidate, m.prompt.pair.Candidate)
 		if m.prompt.mode == evidence.OriginalBase {
-			lines = append(lines, terminal.Wrap("> "+original, m.width)...)
-			lines = append(lines, terminal.Wrap("  "+followUp, m.width)...)
+			lines = append(lines, terminal.Wrap("> "+original, width)...)
+			lines = append(lines, terminal.Wrap("  "+followUp, width)...)
 		} else {
-			lines = append(lines, terminal.Wrap("  "+original, m.width)...)
-			lines = append(lines, terminal.Wrap("> "+followUp, m.width)...)
+			lines = append(lines, terminal.Wrap("  "+original, width)...)
+			lines = append(lines, terminal.Wrap("> "+followUp, width)...)
 		}
 	}
 	lines = append(lines, "")
-	lines = append(lines, terminal.Wrap("Reason · stored in pin history", m.width)...)
-	fieldWidth := max(m.width-8, 1)
+	lines = append(lines, terminal.Wrap("Reason · stored in pin history", width)...)
+	fieldWidth := max(width-8, 1)
 	safe := terminal.Sanitize(m.prompt.reason)
 	left := max(uniseg.StringWidth(safe)-fieldWidth, 0)
-	lines = append(lines, terminal.Line("Reason  "+terminal.LineAt(safe, left, fieldWidth), m.width))
+	lines = append(lines, terminal.Line("Reason  "+terminal.LineAt(safe, left, fieldWidth), width))
 	lines = append(lines, fmt.Sprintf("%d/%d bytes", len(m.prompt.reason), maxPromptReasonBytes))
 	return lines
 }

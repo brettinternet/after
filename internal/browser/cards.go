@@ -117,11 +117,6 @@ func validCaseID(value string) bool {
 	return true
 }
 
-func mustSeconds(value string) int64 {
-	seconds, _ := strconv.ParseInt(value, 10, 64)
-	return seconds
-}
-
 func orderedArtifacts(artifacts []evidence.Artifact) ([]runnerArtifact, []evidence.Artifact) {
 	known, other := []runnerArtifact{}, []evidence.Artifact{}
 	for _, artifact := range artifacts {

@@ -83,8 +83,11 @@ func TestPinPromptReasonDuplicateAndCancellation(t *testing.T) {
 	model.positionOverviewEntry(entryIndex)
 
 	step(model, key("p"))
-	if model.prompt == nil || !strings.Contains(model.View(), string(receipt.ID)) || !strings.Contains(model.View(), string(selection.Pair.Candidate)) {
-		t.Fatal("pin confirmation did not name its exact targets", model.View())
+	for _, width := range []int{80, 120} {
+		step(model, tea.WindowSizeMsg{Width: width, Height: 24})
+		if model.prompt == nil || !strings.Contains(model.View(), string(receipt.ID)) || !strings.Contains(model.View(), string(selection.Pair.Base)) || !strings.Contains(model.View(), string(selection.Pair.Candidate)) {
+			t.Fatalf("pin confirmation at %d columns did not name its exact targets: %s", width, model.View())
+		}
 	}
 	if _, _, err := actions.FindDuplicatePin(*model.selectedOverviewEntry()); err != nil {
 		t.Fatal(err)

@@ -333,7 +333,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 		t.Helper()
 		deadline := time.After(10 * time.Second)
 		for {
-			view := unread.String()
+			view := strings.Join(strings.Fields(themeSGR.ReplaceAllString(unread.String(), "")), " ")
 			matched := len(wants) > 0
 			for _, want := range wants {
 				if !strings.Contains(view, want) {
@@ -380,7 +380,7 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	send("d")
 	expect("2 paths", "POTENTIAL ORACLES 1", "app/payment.expected.json", "app/config.go")
 	send("\t")
-	expect("captured raw diff")
+	expect("captured patch", "diff --git a/app/config.go b/app/config.go", "-const retentionSeconds int64 = 24 * 60 * 60", "+const retentionSeconds int64 = 5 * 60")
 	send("q")
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
