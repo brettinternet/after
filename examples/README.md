@@ -16,7 +16,7 @@ AFTER_EXAMPLES_STEP=0 examples/cli/03-moved-oracle.sh  # no pauses
    AFTER shows   the test edit is a potential oracle, and the original tests fail: behavior changed
 ```
 
-Needs Go and jq on `PATH`. Workspaces stay in `$TMPDIR/after-example-*` for
+Needs Go and jq on `PATH`; example 08 also needs the mise-pinned Bun. Workspaces stay in `$TMPDIR/after-example-*` for
 exploring. `task examples` smoke-tests everything that needs no Docker.
 
 ## CLI
@@ -40,6 +40,25 @@ retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
 | `refactor`            | `24 * 60 * 60` → `86400`       | identical      | 1→1 / 1→1                    | 0    |
 | `no-dedup`            | idempotency disabled           | identical      | 1→2 / 1→2                    | 4    |
 | `fake-log`            | app logs a false request count | identical      | 1→1 / 1→1                    | 0    |
+
+Example [08-junit-report](cli/08-junit-report.sh) runs Bun's built-in test runner
+on a synthetic JavaScript shipping change and imports its freshly generated JUnit
+XML. One unchanged test fails and one passes. `inspect` shows reported-only cards
+alongside `diff`; import success does not mean test success or observed behavior.
+Run with `mise exec -- examples/cli/08-junit-report.sh`. No packages are downloaded;
+Bun is example tooling, not an AFTER runtime dependency. Bun 1.4.2's suite-level
+`file` attribute is unsupported: the unmodified report is marked incomplete with
+`unsupported_attribute`, while both closed test cards remain visible.
+
+Example [09-http-service](cli/09-http-service.sh) 🐳 selects a non-payment Python
+stdlib echo proxy definition with `--definition`. Uppercasing a request body leaves
+the HTTP responses equal, but the independent observer records a changed lowercase
+payload and an equal uppercase payload. Each case runs twice per side. It requires
+a matching arm64 host and the separately provisioned pinned Python service **and**
+Go observer images in [SANDBOX.md](../docs/SANDBOX.md); it never pulls or installs.
+After the Docker exports below, run `mise exec -- examples/cli/09-http-service.sh`
+and review the exact consent prompt. These two cases do not establish general
+correctness. Workspaces and live reports remain private in the temporary directory.
 
 ## TUI
 
@@ -65,7 +84,7 @@ retries the same `Idempotency-Key` after 12 hours and after 30 seconds:
 
 ## 🐳 Docker
 
-The payment and command examples run code in the offline sandbox. Example 07
+The payment, command and HTTP-service examples run code in the offline sandbox. Example 07
 selects its own [command definition](../docs/RUNNER.md#direct-argv-command-scenarios)
 with `after run BASE CANDIDATE --definition FILE`. Provision the image once
 ([SANDBOX.md](../docs/SANDBOX.md)), then:

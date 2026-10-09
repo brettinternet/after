@@ -94,6 +94,7 @@ tasks:
       - examples/cli/02-staged-and-branches.sh
       - examples/cli/03-moved-oracle.sh
       - examples/cli/04-config.sh
+      - examples/cli/08-junit-report.sh
       - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/01-raw-review.sh
       - AFTER_EXAMPLES_PREPARE_ONLY=1 examples/tui/02-test-reports.sh
 

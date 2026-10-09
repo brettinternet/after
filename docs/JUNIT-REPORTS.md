@@ -12,6 +12,15 @@ after import report.xml --snapshot CANDIDATE_ID
 
 The TUI's explicit `i` action on `review --import-file FILE` uses auto selection too. For an unrecognized format, first use the CLI with `--format`. Both dialects are discoverable in review, history, status, completion and inspection.
 
+For a live, dependency-free walkthrough, run
+[`examples/cli/08-junit-report.sh`](../examples/cli/08-junit-report.sh) via `mise exec --`.
+It explicitly runs the mise-pinned Bun test runner on synthetic JavaScript tests,
+imports the generated XML, and displays reported-only cards beside the diff.
+It downloads no producer dependencies and does not replay a canned report.
+Bun 1.4.2 emits an unsupported suite-level `file` attribute, so the original XML
+imports as incomplete (`unsupported_attribute`) while retaining both closed test
+cards. The example does not strip the attribute or imply full dialect support.
+
 ## Evidence contract
 
 Every card is `importer` / `reported` / `unknown` / `not_run` / `not_compared`. Inputs, expected values and effects are explicitly `unavailable`. Producer, snapshot and capture-time metadata are unauthenticated caller claims; the import-time working-tree binding is not proof of where tests ran. Test names, assertion text, timing, properties and reported success do not establish behavior, freshness or trusted provenance.
