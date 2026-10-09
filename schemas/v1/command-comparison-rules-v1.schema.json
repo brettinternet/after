@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://after.invalid/schemas/v1/command-comparison-rules-v1.schema.json",
+  "title": "AFTER command comparison rules, version 1",
+  "description": "The single fixed command policy accepted by the current comparator. This is not a user-extensible rule language.",
+  "const": {
+    "version": 1,
+    "exit_status": "exact Docker container exit status; statuses >=125 are incomplete",
+    "stdout": "exact bytes or definition-declared structural JSON",
+    "stderr": "exact bytes or definition-declared structural JSON",
+    "text": "exact bytes including invalid UTF-8",
+    "json": "exact decimal values, object key order ignored, arrays ordered, null distinct from missing; reject duplicate keys and invalid Unicode",
+    "masks": [],
+    "normalization": [],
+    "scope": "finite definition-declared command cases only"
+  }
+}

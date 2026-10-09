@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://after.invalid/schemas/v1/http-service-definition-v1.schema.json",
+  "title": "AFTER HTTP-service definition, version 1",
+  "description": "Closed declarative input for the built-in offline HTTP-service runner. Go validation additionally enforces cross-field and execution-safety rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "name",
+    "platform",
+    "image",
+    "start_argv",
+    "readiness",
+    "epoch",
+    "upstreams",
+    "cases",
+    "channels",
+    "repetitions",
+    "limits"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "kind": { "const": "http-service" },
+    "name": { "$ref": "#/$defs/name" },
+    "platform": { "enum": ["linux/amd64", "linux/arm64"] },
+    "image": { "$ref": "#/$defs/pinned_image" },
+    "build_argv": {
+      "type": ["array", "null"],
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/argv_item" }
+    },
+    "start_argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/argv_item" }
+    },
+    "environment": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/environment_entry" }
+    },
+    "readiness": { "$ref": "#/$defs/readiness" },
+    "epoch": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
+    "upstreams": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/upstream" }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "contains": { "const": "responses" },
+      "items": { "enum": ["responses", "provider_calls"] }
+    },
+    "repetitions": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "limits": { "$ref": "#/$defs/limits" }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "pinned_image": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/:+-]+@sha256:[a-f0-9]{64}$"
+    },
+    "argv_item": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "not": { "pattern": "[\\x00\\r\\n]" }
+    },
+    "environment_entry": {
+      "type": "string",
+      "maxLength": 1024,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}=[^\\x00\\r\\n]+$"
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "timeout_seconds"],
+      "properties": {
+        "protocol": { "const": "fd3-http-url-v1" },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 120 }
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "port"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "kind": { "enum": ["clock", "recording"] },
+        "port": { "type": "integer", "minimum": 18081, "maximum": 18084 },
+        "response_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "response_body": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "requests"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "\\S" },
+        "requests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/request" }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path"],
+      "properties": {
+        "after_seconds": { "type": "integer", "minimum": 0, "maximum": 31536000 },
+        "method": { "type": "string", "minLength": 1, "maxLength": 16, "pattern": "^[A-Z]+$" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^/" },
+        "headers": {
+          "type": ["object", "null"],
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024,
+            "not": { "pattern": "[\\x00\\r\\n]" }
+          },
+          "maxProperties": 16
+        },
+        "body": { "type": "string", "maxLength": 4096, "not": { "pattern": "\\x00" } }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seconds", "output_bytes", "preparation_seconds"],
+      "properties": {
+        "seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "output_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "preparation_seconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://after.invalid/schemas/v1/http-comparison-rules-v1.schema.json",
+  "title": "AFTER HTTP-service comparison rules, version 1",
+  "description": "The single fixed HTTP-service policy accepted by the current comparator. This is not a user-extensible rule language.",
+  "const": {
+    "version": 1,
+    "responses": "ordered HTTP status and body; JSON bodies structural, otherwise exact text",
+    "provider_calls": "ordered observer-received timestamp, endpoint, method, path, idempotency key and body",
+    "json": "exact decimal values, object key order ignored, arrays ordered, null distinct from missing; reject duplicate keys and invalid Unicode",
+    "masks": [],
+    "normalization": [],
+    "scope": "finite controlled-clock definition-declared requests only"
+  }
+}

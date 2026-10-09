@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://after.invalid/schemas/v1/report-cards-v1.schema.json",
+  "title": "AFTER reported test cards, version 1",
+  "description": "Serialized importer report with reported-only cards. This describes shape, not producer authenticity or test applicability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dialect",
+    "metadata",
+    "original_digest",
+    "original_bytes",
+    "cards",
+    "completeness",
+    "diagnostics",
+    "suppressed_diagnostics"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "dialect": { "enum": ["go-test-json-v1", "junit-xml-v1"] },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imported_at"],
+      "properties": {
+        "producer": { "type": "string", "maxLength": 256 },
+        "snapshot": { "$ref": "#/$defs/digest" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "imported_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "original_digest": { "$ref": "#/$defs/digest" },
+    "original_bytes": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+    "cards": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/card" }
+    },
+    "completeness": { "enum": ["complete", "incomplete"] },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "suppressed_diagnostics": { "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer", "kind", "applicability", "execution", "comparison", "report"],
+      "properties": {
+        "producer": { "const": "importer" },
+        "kind": { "const": "reported" },
+        "applicability": { "const": "unknown" },
+        "execution": { "const": "not_run" },
+        "comparison": { "const": "not_compared" },
+        "report": { "enum": ["none", "pass", "fail", "skip"] }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "scope",
+        "attempt",
+        "state",
+        "output",
+        "output_truncated",
+        "inputs",
+        "expected_values",
+        "effects"
+      ],
+      "properties": {
+        "package": { "type": "string", "minLength": 1 },
+        "test": { "type": "string" },
+        "scope": { "enum": ["package", "test", "build"] },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "state": { "$ref": "#/$defs/state" },
+        "output": { "type": "string", "maxLength": 16384 },
+        "output_truncated": { "type": "boolean" },
+        "first_event_at": { "type": "string", "format": "date-time" },
+        "last_event_at": { "type": "string", "format": "date-time" },
+        "inputs": { "const": "unavailable" },
+        "expected_values": { "const": "unavailable" },
+        "effects": { "const": "unavailable" }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "code"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 0 },
+        "code": {
+          "enum": [
+            "line_limit",
+            "invalid_utf8",
+            "invalid_or_unsupported_json",
+            "trailing_json",
+            "unsupported_event",
+            "event_after_completion",
+            "card_limit",
+            "output_limit",
+            "no_cases",
+            "missing_completion",
+            "forbidden_directive",
+            "invalid_xml",
+            "unsupported_processing_instruction",
+            "xml_structure_limit",
+            "attribute_limit",
+            "multiple_roots",
+            "unsupported_element",
+            "duplicate_attribute",
+            "unsupported_attribute",
+            "identity_limit",
+            "missing_test_name",
+            "conflicting_outcomes",
+            "text_limit",
+            "text_outside_root",
+            "unsupported_text"
+          ]
+        }
+      }
+    }
+  }
+}

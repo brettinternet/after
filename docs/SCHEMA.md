@@ -2,6 +2,8 @@
 
 `internal/evidence` defines and validates AFTER's local record contracts. [Storage](STORAGE.md), [capture](CAPTURE.md), [Go report import](GO-REPORTS.md), [JUnit import](JUNIT-REPORTS.md), [runner](RUNNER.md), [comparison](COMPARISON.md), and [review](REVIEW.md) own persistence and behavior. The [schema example](schema-example.json) is synthetic; its digests are placeholders, not measurements.
 
+Separate Draft 2020-12 JSON Schemas under `../schemas/v1/` describe the AFTER-48–50 extension data surfaces (reported cards, HTTP/command definitions and observations, and fixed comparison rules). They are exercised against built-in outputs by the normal Go test check. They do not replace `internal/evidence` validation or runtime Go checks; see the [extension contract](EXTENSIONS.md#versioned-schemas-after-57) for exact coverage and semantic limits.
+
 ## Encoding and identity
 
 Every record has `schema_version: 1` and an ID of `sha256:` plus 64 lowercase hex digits. Content references use that form. Resolved Git commits are 40- or 64-character lowercase hex. An unborn snapshot has `unborn: true` and an empty `commit` (never in merge-base mode). Merge-base captures retain the resolved base tip, target commit, and merge-base—not branch names. A working-tree snapshot may bind an index snapshot with the same commit/unborn basis.

@@ -86,11 +86,33 @@ The POC contract rules out a plugin framework without a demonstrated requirement
 
 These are operator-selected follow-up tasks, not POC queue items. Each records its extension seams in task notes: what needed code rather than data, and what differed from the existing instance.
 
+## Versioned schemas (AFTER-57)
+
+Draft 2020-12 JSON Schema files under `../schemas/v1/` describe the built-in v1 data surfaces independently of how an integration might be loaded or run:
+
+| Schema                                                                               | Captures                                                                                                                          |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [report-cards-v1](../schemas/v1/report-cards-v1.schema.json)                         | Shared Go/JUnit importer report and reported-only card output.                                                                    |
+| [http-service-definition-v1](../schemas/v1/http-service-definition-v1.schema.json)   | Pinned platform/image, direct argv, readiness ABI, controlled epoch, fake upstreams, request cases, compared channels and bounds. |
+| [http-observation-v1](../schemas/v1/http-observation-v1.schema.json)                 | Observer response and fake-upstream call records.                                                                                 |
+| [http-comparison-rules-v1](../schemas/v1/http-comparison-rules-v1.schema.json)       | The sole fixed HTTP comparison policy.                                                                                            |
+| [command-definition-v1](../schemas/v1/command-definition-v1.schema.json)             | Pinned image, direct argv, canonical base64 stdin/files, fixed environment, limits and declared stream comparison modes.          |
+| [command-observation-v1](../schemas/v1/command-observation-v1.schema.json)           | Strict per-case command sample metadata and references to separate stdout/stderr byte artifacts.                                  |
+| [command-comparison-rules-v1](../schemas/v1/command-comparison-rules-v1.schema.json) | The sole fixed command comparison policy.                                                                                         |
+
+The `schemas` package compiles these schemas and checks built-in payment/Python/command definitions, HTTP and command observation shapes, fixed rules, and Go/JUnit importer outputs as part of the existing `task check` Go tests. The command CLI proof consumes the same checked-in command definition fixture. This is a data contract, not runtime discovery, a plugin API, or permission to load third-party code.
+
+The schemas capture what each AFTER-48–50 seam made data: AFTER-48's output cards and dialect-independent reported-only state; AFTER-49's bounded HTTP definition, observer output and fixed policy; and AFTER-50's command definition, sample metadata, separate stream artifacts and fixed policy. They do not replace the Go code those tasks required: bounded Go/JUnit parsing and diagnostics, strict decoding, base64 decoding, digest and receipt binding, cross-field uniqueness/collision checks, changed-oracle disclosure, exact consent, Docker execution, byte capture, and the comparator remain core behavior.
+
+Schema validation is intentionally structural, not semantic or authoritative. The schemas reject unknown fields, unsupported versions, wrong discriminants and many out-of-range values, but JSON Schema cannot establish that a report ran on the claimed snapshot or that an observation belongs to a receipt. Runtime validation also checks relationships such as case IDs, request/response counts, endpoint-to-port bindings, argv shell/path restrictions, unique environment keys and safe additive input paths. The JSON Schema `maxLength` applies to Unicode characters, while Go enforces byte budgets; command base64 patterns do not prove canonical decode or aggregate decoded-size limits. Duplicate JSON keys are not uniformly rejected by existing decoders: command definitions and command sample metadata reject them, while HTTP definitions and HTTP observations use Go's standard decoder behavior. These remain Go constraints rather than claims made by a schema. Report cards stay `reported`; schema validity does not authenticate producers or promote evidence. Command stdout/stderr payloads are raw byte artifacts, not JSON records, so their schemas cover only the metadata and references.
+
+No code plugin runtime or extensible comparison language is added. The rules schemas describe the exact fixed policies already stored and bound by digest; only Go code assigns evidence meaning and performs comparison.
+
 ## Next decisions
 
-After AFTER-48–50, decide in order. Stop at any step whose answer is "not needed."
+After AFTER-57, decide in order. Stop at any step whose answer is "not needed." AFTER-57 completes the schema step; it does not authorize plugin implementation.
 
-1. **Write the contract as versioned data schemas.** Cover importer output (cards), scenario definitions, observation artifacts and rules, independent of how plugins load or run. Built-ins conform internally first. The schemas are the plugin API; the runtime is a detail.
+1. **Write the contract as versioned data schemas (implemented by AFTER-57).** The schemas above cover importer output (cards), scenario definitions, observation artifacts and rules, independently of plugin loading or execution.
 2. **Decide whether code plugins are needed.** Count real integration requests that declarative definitions, JUnit import and `after-<name>` commands cannot express, from the AFTER-18 study and use on real repositories. If there are almost none, stop here.
 3. **Run one bake-off.** Implement the same importer, such as Vitest JSON, in Starlark and as WASM through [Extism](https://extism.org), whose PDKs let authors write TypeScript. Compare authoring steps, debugging, sandbox guarantees, speed on an 8 MiB report and binary size. Ship one runtime, not both.
 4. **Port the built-ins.** Move the Go test importer and payment runner onto the chosen interface as first-party plugins. If they cannot be expressed, the interface is insufficient.

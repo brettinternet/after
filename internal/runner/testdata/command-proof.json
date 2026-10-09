@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "kind": "command",
+  "name": "synthetic-command",
+  "platform": "linux/arm64",
+  "image": "docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190",
+  "build_argv": ["/usr/local/go/bin/go", "build", "-o", "/work/command-fixture", "/input/main.go"],
+  "cases": [
+    {
+      "id": "changed",
+      "title": "Source-dependent output changes",
+      "argv": ["/work/command-fixture", "changed"],
+      "stdin_base64": "",
+      "environment": []
+    },
+    {
+      "id": "control",
+      "title": "Unaffected control output",
+      "argv": ["/work/command-fixture", "control"],
+      "stdin_base64": "ZnJvemVuIHN0ZGluIGJ5dGVzCg==",
+      "environment": []
+    }
+  ],
+  "repetitions": 2,
+  "limits": {
+    "seconds": 60,
+    "output_bytes": 65536,
+    "preparation_seconds": 90
+  },
+  "comparison": {
+    "stdout": "text",
+    "stderr": "text"
+  }
+}

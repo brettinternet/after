@@ -13,7 +13,6 @@ import (
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/runner"
-	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/store"
 )
 
@@ -55,19 +54,20 @@ func TestCommandCLIProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeProjectFile(t, root, "main.go", commandFixtureSource)
-	definition := runner.CommandDefinition{
-		Version: 1, Kind: "command", Name: "synthetic-command", Platform: "linux/" + runtime.GOARCH, Image: sandbox.Image,
-		BuildArgv: []string{"/usr/local/go/bin/go", "build", "-o", "/work/command-fixture", "/input/main.go"},
-		Cases: []runner.CommandCase{
-			{ID: "changed", Title: "Source-dependent output changes", Argv: []string{"/work/command-fixture", "changed"}, Stdin: []byte{}, Environment: []string{}},
-			{ID: "control", Title: "Unaffected control output", Argv: []string{"/work/command-fixture", "control"}, Stdin: []byte(commandFixtureStdin), Environment: []string{}},
-		},
-		Repetitions: 2, Limits: runner.DefinitionLimits{Seconds: 60, OutputBytes: 65536, PreparationSeconds: 90},
-		Comparison: runner.CommandComparison{Stdout: "text", Stderr: "text"},
-	}
-	rawDefinition, err := json.Marshal(definition)
+	rawDefinition, err := os.ReadFile("../runner/testdata/command-proof.json")
 	if err != nil {
 		t.Fatal(err)
+	}
+	definition, err := runner.ParseCommandDefinition(rawDefinition)
+	if err != nil || string(definition.Cases[1].Stdin) != commandFixtureStdin {
+		t.Fatalf("invalid command proof definition: %v", err)
+	}
+	if definition.Platform != "linux/"+runtime.GOARCH {
+		definition.Platform = "linux/" + runtime.GOARCH
+		rawDefinition, err = json.Marshal(definition)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	writeProjectFile(t, root, "command.json", string(rawDefinition))
 	gitRun(t, root, "init", "-q", "--template=", "-b", "main")

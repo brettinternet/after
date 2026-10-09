@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://after.invalid/schemas/v1/command-observation-v1.schema.json",
+  "title": "AFTER command sample observation metadata, version 1",
+  "description": "Strict JSON metadata stored for one command case and repetition. Compared stdout/stderr are separate raw-byte artifacts described by the embedded artifact metadata; they are not JSON documents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "snapshots",
+    "side",
+    "case_id",
+    "repetition",
+    "started_at",
+    "finished_at",
+    "status",
+    "execution",
+    "artifacts"
+  ],
+  "properties": {
+    "request_id": { "$ref": "#/$defs/digest" },
+    "snapshots": { "$ref": "#/$defs/snapshot_pair" },
+    "side": { "enum": ["base", "candidate"] },
+    "case_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
+    "case_seconds": { "const": 0 },
+    "repetition": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "enum": [
+        "completed",
+        "permission_denied",
+        "timeout",
+        "output_truncated",
+        "cancelled",
+        "execution_failed",
+        "cleanup_failed",
+        "signal_or_reserved_exit",
+        "preparation_failed"
+      ]
+    },
+    "execution": { "$ref": "#/$defs/command_execution" },
+    "artifacts": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "snapshot_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "candidate"],
+      "properties": {
+        "base": { "$ref": "#/$defs/digest" },
+        "candidate": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan", "output", "truncated", "exit_code", "oom_killed", "cleaned"],
+      "properties": {
+        "plan": { "type": "string" },
+        "container": { "type": "string" },
+        "input_image": { "type": "string" },
+        "output": { "type": "string" },
+        "stdout": { "type": "string" },
+        "stderr": { "type": "string" },
+        "truncated": { "type": "boolean" },
+        "exit_code": { "type": "integer", "minimum": -1, "maximum": 255 },
+        "oom_killed": { "type": "boolean" },
+        "cleaned": { "type": "boolean" }
+      }
+    },
+    "command_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "observer"],
+      "properties": {
+        "app": { "$ref": "#/$defs/result" },
+        "observer": { "$ref": "#/$defs/result" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "content",
+        "channel",
+        "bytes",
+        "max_bytes",
+        "completeness",
+        "redacted",
+        "truncated"
+      ],
+      "properties": {
+        "content": { "$ref": "#/$defs/digest" },
+        "channel": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "max_bytes": { "type": "integer", "minimum": 1 },
+        "completeness": { "enum": ["complete", "incomplete"] },
+        "redacted": { "type": "boolean" },
+        "redaction_policy": { "const": "literal-v1" },
+        "truncated": { "type": "boolean" }
+      }
+    }
+  }
+}
