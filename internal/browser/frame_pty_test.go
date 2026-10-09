@@ -201,10 +201,13 @@ func TestResponsiveFramePTY(t *testing.T) {
 					t.Fatalf("NO_COLOR PTY did not visibly delimit its Diff match: %q", diffSearchPlain)
 				}
 				diffSearchExcerpt := ptyExcerpt(diffSearchPlain, "match 1 of")
+				clearStart := transcript.Len()
 				if _, err := master.Write([]byte("\x1b")); err != nil {
 					t.Fatal(err)
 				}
-				waitFor("Search cleared")
+				// The list search already emitted this message. Wait for this
+				// Escape to finish before sending a key it could consume as Alt.
+				waitForSince(clearStart, "Search cleared")
 				if _, err := master.Write([]byte("}")); err != nil {
 					t.Fatal(err)
 				}
