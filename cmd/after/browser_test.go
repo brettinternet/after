@@ -240,35 +240,63 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	if len(data.Entries) != 2 || data.Entries[0].State.Comparison != evidence.Different || data.Entries[1].State.Comparison != evidence.Equal {
 		t.Fatal("real evidence label", data.Entries)
 	}
-	observations := 0
-	input := false
-	for _, section := range data.Entries[0].Sections {
-		if section.Name != "exact frozen input" && !strings.HasSuffix(section.Name, "/observation") {
-			continue
+	var definition *runner.Definition
+	for _, entry := range data.Entries {
+		for _, section := range entry.Sections {
+			for _, part := range section.Parts {
+				if part.Title != "frozen input" {
+					continue
+				}
+				raw, err := browser.ReadSection(t.Context(), project, browser.Section{Parts: []browser.Part{part}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				parsed, err := runner.ParseDefinition(raw)
+				if err != nil {
+					t.Fatal("browser lost the frozen definition", err)
+				}
+				definition = &parsed
+			}
 		}
-		raw, err := browser.ReadSection(t.Context(), project, section)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if section.Name == "exact frozen input" {
-			input = strings.Contains(string(raw), `"seconds":[43200,30]`)
-			continue
-		}
-		var o runner.Observation
-		if err := json.Unmarshal(raw, &o); err != nil {
-			t.Fatal(err)
-		}
-		want := 1
-		if strings.Contains(section.Name, "candidate/43200/") {
-			want = 2
-		}
-		if len(o.Responses) != 2 || len(o.Calls) != want {
-			t.Fatal("browser lost exact measured response/effect", section.Name, o)
-		}
-		observations++
 	}
-	if !input || observations != 8 {
-		t.Fatal("missing frozen input/repetitions", input, observations)
+	if definition == nil || definition.Repetitions != 2 || len(definition.Cases) != 2 || definition.Cases[0].ID != "43200" || definition.Cases[1].ID != "30" {
+		t.Fatalf("browser lost the frozen definition/repetitions: %+v", definition)
+	}
+	observations := 0
+	for _, entry := range data.Entries {
+		for _, section := range entry.Sections {
+			for _, part := range section.Parts {
+				if !strings.HasSuffix(part.Title, "observation") {
+					continue
+				}
+				raw, err := browser.ReadSection(t.Context(), project, browser.Section{Parts: []browser.Part{part}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				var observation runner.Observation
+				if err := json.Unmarshal(raw, &observation); err != nil {
+					t.Fatal(err)
+				}
+				caseIndex := -1
+				for index, scenarioCase := range definition.Cases {
+					if scenarioCase.ID == observation.CaseID {
+						caseIndex = index
+						break
+					}
+				}
+				want := 1
+				if observation.CaseID == "43200" && strings.Contains(part.Title, "candidate") {
+					want = 2
+				}
+				if caseIndex < 0 || len(observation.Responses) != len(definition.Cases[caseIndex].Requests) || len(observation.Calls) != want {
+					t.Fatal("browser lost exact measured response/effect", part.Title, observation)
+				}
+				observations++
+			}
+		}
+	}
+	if observations != 8 {
+		t.Fatal("missing frozen observations/repetitions", observations)
 	}
 	args := []string{"review", string(r.Snapshots.Base), string(r.Snapshots.Candidate), string(c.ID), "--project", project, "--config", config}
 	encoded, _ := json.Marshal(args)
@@ -301,22 +329,30 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 		}
 	}()
 	var unread strings.Builder
-	expect := func(want string) {
+	expect := func(wants ...string) {
 		t.Helper()
 		deadline := time.After(10 * time.Second)
 		for {
-			if strings.Contains(unread.String(), want) {
+			view := unread.String()
+			matched := len(wants) > 0
+			for _, want := range wants {
+				if !strings.Contains(view, want) {
+					matched = false
+					break
+				}
+			}
+			if matched {
 				unread.Reset()
 				return
 			}
 			select {
 			case chunk, ok := <-chunks:
 				if !ok {
-					t.Fatal("PTY closed", want)
+					t.Fatal("PTY closed", wants)
 				}
 				unread.WriteString(chunk)
 			case <-deadline:
-				t.Fatalf("no %q in %q", want, unread.String())
+				t.Fatalf("no %q in %q", wants, unread.String())
 			}
 		}
 	}
@@ -328,20 +364,26 @@ func paymentBrowserProof(t *testing.T, exe, root, home, project, config string, 
 	}
 	expect("[DIFFERENT]")
 	send("\r")
-	expect("measured provider-request counts")
+	expect("Provider requests")
 	send("\t")
-	expect("receipt: producer, bindings")
+	expect("Receipt Card")
 	send("\t")
-	expect("frozen scenario")
+	expect("Witnesses")
 	send("\t")
-	expect("exact frozen input")
+	expect("Artifacts")
+	send("\t")
+	expect("Receipt")
+	send("\t")
+	expect("frozen input")
+	send("\x1b")
+	expect("Provider requests")
 	send("d")
-	expect("AFTER review | inventory")
+	expect("2 paths", "POTENTIAL ORACLES 1", "app/payment.expected.json", "app/config.go")
 	send("\t")
 	expect("captured raw diff")
 	send("q")
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	t.Log("Native CLI PTY: real observed/current/different receipt -> producer/bindings/timestamps -> frozen scenario/input -> complete inventory -> raw diff -> quit. Browser reads all 8 measured observations: same responses, 12h provider calls 1->2, 30s control 1->1.")
+	t.Log("Native CLI PTY: real observed/current/different receipt -> base/candidate provider requests and responses -> receipt/witness/artifact cards -> frozen scenario/input -> complete inventory -> raw diff -> quit. Browser reads all 8 definition-bound observations: same responses, 12h provider calls 1->2, 30s control 1->1.")
 }

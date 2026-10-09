@@ -18,6 +18,19 @@ func PrepareExperiment(app, observer *Plan) (*Experiment, error) {
 	}
 	return &Experiment{app, observer}, nil
 }
+
+// MaterializeApp fills only the app's predeclared trusted-runtime slots while
+// preserving the independently prepared observer plan.
+func (p *Experiment) MaterializeApp(files map[string][]byte) (*Experiment, error) {
+	if p == nil || p.app == nil || p.observer == nil {
+		return nil, errors.New("invalid paired plan")
+	}
+	app, err := p.app.Materialize(files)
+	if err != nil {
+		return nil, err
+	}
+	return &Experiment{app: app, observer: p.observer}, nil
+}
 func (p *Experiment) Preview() ([]byte, string) {
 	a, _ := p.app.Preview()
 	o, _ := p.observer.Preview()
@@ -45,9 +58,9 @@ func (d Docker) Observe(ctx context.Context, p *Experiment, approved string) (r 
 	_, oid := p.observer.Preview()
 	r.App, err = d.execute(ctx, p.app, aid, "", func(ctx context.Context, name string) error {
 		var e error
-		r.Observer, e = d.execute(ctx, p.observer, oid, name, nil)
+		r.Observer, e = d.execute(ctx, p.observer, oid, name, nil, false)
 		return e
-	})
+	}, false)
 	return r, err
 }
 

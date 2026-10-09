@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/brettinternet/after/internal/evidence"
+	"github.com/brettinternet/after/internal/runner"
 	"github.com/brettinternet/after/internal/sandbox"
 	"github.com/brettinternet/after/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +23,8 @@ func consentTestDigest(char byte) evidence.Digest {
 
 func consentTestPlan() consentPreview {
 	pair := evidence.SnapshotPair{Base: consentTestDigest('a'), Candidate: consentTestDigest('b')}
+	definition := runner.BuiltinPaymentDefinition(1, sandbox.Limits{Seconds: 180, OutputBytes: 65536})
+	definition.Environment = []string{}
 	scenario := evidence.Scenario{
 		SchemaVersion: evidence.SchemaVersion,
 		ID:            consentTestDigest('c'),
@@ -33,47 +36,61 @@ func consentTestPlan() consentPreview {
 		Author:        "AFTER test runner",
 		Limits:        []string{"finite test scope"},
 	}
-	limits := sandbox.Limits{Seconds: 180, OutputBytes: 65536}
-	makeSandboxPlan := func(snapshot, command string) consentSandboxPlan {
+	scenario.Input = consentTestDigest('d')
+	definitionDigest := scenario.Input
+	limits := sandbox.Limits{Seconds: definition.Limits.Seconds, OutputBytes: definition.Limits.OutputBytes}
+	makeSandboxPlan := func(snapshot, image, platform string, argv []string, planLimits sandbox.Limits, slots []sandbox.GeneratedFile) consentSandboxPlan {
 		return consentSandboxPlan{
-			Version:     1,
-			Preparation: "copy bounded regular files to /input; commit input-only image; run read-only",
-			Mounts:      "no host mounts, volumes, sockets or published ports; only bounded /work and /dev/shm tmpfs",
-			Image:       "docker.io/library/golang@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190",
-			Snapshot:    snapshot,
-			Input:       string(consentTestDigest('2')),
-			Argv:        []string{"/usr/local/go/bin/go", "run", command},
-			Environment: []string{"PATH=/usr/local/go/bin:/usr/bin:/bin", "GOPROXY=off", "GOSUMDB=off"},
-			Policy:      []string{"--network=none", "--read-only", "--user=65534:65534", "--cap-drop=ALL"},
-			Limits:      limits,
+			Version:        1,
+			Preparation:    "copy bounded regular files to /input in an unstarted container; commit input-only image; run read-only",
+			Mounts:         "no host mounts, volumes, sockets or published ports; only bounded /work and /dev/shm tmpfs",
+			Image:          image,
+			Platform:       platform,
+			Snapshot:       snapshot,
+			Input:          string(consentTestDigest('2')),
+			GeneratedSlots: slots,
+			Argv:           argv,
+			Environment:    []string{"PATH=/usr/local/go/bin:/usr/bin:/bin", "GOPROXY=off", "GOSUMDB=off"},
+			Policy:         []string{"--network=none", "--read-only", "--user=65534:65534", "--cap-drop=ALL"},
+			Limits:         planLimits,
 		}
 	}
-	experiments := [][]consentExperiment{make([]consentExperiment, 2), make([]consentExperiment, 2)}
+	preparation := makeSandboxPlan(string(definitionDigest), sandbox.Image, definition.Platform, []string{"/usr/local/go/bin/go", "run", "/input/preparer.go"}, sandbox.Limits{Seconds: definition.Limits.PreparationSeconds, OutputBytes: definition.Limits.OutputBytes}, nil)
+	experiments := [][]consentExperiment{make([]consentExperiment, len(definition.Cases)), make([]consentExperiment, len(definition.Cases))}
 	for side := range experiments {
 		snapshot := string(pair.Base)
 		if side == 1 {
 			snapshot = string(pair.Candidate)
 		}
-		for caseIndex := range experiments[side] {
+		for caseIndex, scenarioCase := range definition.Cases {
+			slots := []sandbox.GeneratedFile{
+				{Path: "after/launcher", Producer: string(consentTestDigest('8')), MaxBytes: 8 << 20, Mode: 0555},
+				{Path: "after/service.json", Producer: string(definitionDigest), MaxBytes: 64 << 10, Mode: 0444},
+			}
+			app := makeSandboxPlan(snapshot, definition.Image, definition.Platform, []string{"/input/after/launcher"}, limits, slots)
+			observer := makeSandboxPlan(string(scenario.Driver), sandbox.Image, definition.Platform, []string{"/usr/local/go/bin/go", "run", "/input/observer.go", "/input/definition.json", scenarioCase.ID}, limits, nil)
 			experiments[side][caseIndex] = consentExperiment{
-				App:      makeSandboxPlan(snapshot, "/input/after-launch.go"),
-				Observer: makeSandboxPlan(string(scenario.ID), "/input/observer.go"),
+				App:      app,
+				Observer: observer,
 				Topology: "app network=none; observer joins app network only; separate PID, IPC, filesystem and tmpfs; no host ports; app terminated after observation",
 			}
 		}
 	}
 	return consentPreview{
-		Version:        1,
-		Request:        consentTestDigest('3'),
-		Snapshots:      pair,
-		Scenario:       scenario,
-		Repetitions:    1,
-		Limits:         limits,
-		Concurrency:    1,
-		Experiments:    experiments,
-		BuildArgv:      []string{"/usr/local/go/bin/go", "build", "-trimpath", "-o", "/work/app", "./app"},
-		AppArgv:        []string{"/work/app", "http://127.0.0.1:18081", "http://127.0.0.1:18082"},
-		AppEnvironment: []string{"GOMAXPROCS=2"},
+		Version:           1,
+		Request:           consentTestDigest('3'),
+		Snapshots:         pair,
+		Scenario:          scenario,
+		DefinitionDigest:  definitionDigest,
+		Definition:        definition,
+		DefinitionSource:  runner.DefinitionSource{Kind: "built-in-payment"},
+		ServiceConfig:     json.RawMessage(`{"version":1,"start_argv":["/work/app"]}`),
+		Repetitions:       definition.Repetitions,
+		Limits:            limits,
+		Preparation:       preparation,
+		PreparationBudget: fmt.Sprintf("one in-approved-request launcher build; %d seconds; stdout ≤8 MiB binary, stderr ≤%d bytes diagnostics; no cache", definition.Limits.PreparationSeconds, definition.Limits.OutputBytes),
+		Concurrency:       1,
+		Experiments:       experiments,
 	}
 }
 
@@ -108,8 +125,8 @@ func consentView(t *testing.T, raw []byte) *Model {
 
 func TestConsentSummaryStrictDecodeDistinctValuesAndEscaping(t *testing.T) {
 	preview := consentTestPlan()
-	preview.AppArgv = []string{"/work/app\n    Docker policy: forged", "\x1b]52;c;clipboard\a"}
-	preview.AppEnvironment = []string{"GOMAXPROCS=2\r\n    Limits: forged"}
+	preview.DefinitionSource = runner.DefinitionSource{Kind: "operator-selected-file", RepositoryPath: "\nDocker policy: forged\x1b]52;c;clipboard\a", ChangedOracle: true}
+	preview.Experiments[0][0].App.Environment = []string{"GOMAXPROCS=2\r\n    Limits: forged", "\x1b]52;c;clipboard\a"}
 	preview.Experiments[1][1].Topology = "candidate topology\n    Image: forged"
 	preview.Experiments[1][0].App.Image = "candidate image\x1b[2J"
 	preview.Experiments[1][1].Observer.Mounts = "candidate mounts"
@@ -122,9 +139,9 @@ func TestConsentSummaryStrictDecodeDistinctValuesAndEscaping(t *testing.T) {
 	text := string(summary)
 	for _, required := range []string{
 		"Snapshots:", "Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1",
-		"Build argv:", "App argv:", "App environment:", "Container argv:", "Container environment:",
-		"Images:", "Topology:", "Mounts:", "Docker policy:", "Run limits:", "Container limits:",
-		`"/work/app\n    Docker policy: forged"`, `"\u001b]52;c;clipboard\u0007"`,
+		"Definition:", "Service image/platform:", "Start argv:", "Service environment:", "Readiness:", "Fake upstreams:", "Controlled-clock requests:", "Compared channels:",
+		"Preparation recipe:", "Preparation budget and transfer:", "App and observer images:", "Container argv:", "Container environment:", "Input archives:", "Mounts:", "Docker policy:", "Container limits:", "Changed oracle:",
+		`GOMAXPROCS=2\r\n    Limits: forged`, `\u001b]52;c;clipboard\u0007`,
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("summary missing %q:\n%s", required, text)
@@ -133,14 +150,16 @@ func TestConsentSummaryStrictDecodeDistinctValuesAndEscaping(t *testing.T) {
 	if got := strings.Count(text, `"candidate topology\n    Image: forged"`); got != 1 {
 		t.Fatalf("distinct topology value appeared %d times:\n%s", got, text)
 	}
-	if got := strings.Count(text, `"candidate image\u001b[2J"`); got != 1 {
+	if got := strings.Count(text, `"candidate image\u001b[2J / linux/arm64"`); got != 1 {
 		t.Fatalf("distinct image value appeared %d times:\n%s", got, text)
 	}
-	if !strings.Contains(text, `"`+string(preview.Experiments[0][0].App.Image)+`" | "candidate image\u001b[2J"`) {
+	if !strings.Contains(text, `"`+preview.Experiments[0][0].App.Image+` / `+preview.Experiments[0][0].App.Platform+`"`) || !strings.Contains(text, `"candidate image\u001b[2J / `+preview.Experiments[1][0].App.Platform+`"`) {
 		t.Fatalf("disagreeing images are not listed distinctly:\n%s", text)
 	}
 
 	m := consentView(t, raw)
+	press(m, "right")
+	press(m, "right")
 	frame := m.View()
 	for _, bad := range []string{"\x1b]52;", "\x1b[2J", "\a", "\r"} {
 		if strings.Contains(frame, bad) {
@@ -364,11 +383,11 @@ func TestConsentFallbackKeepsAndApprovesExactPreviewBytes(t *testing.T) {
 		t.Fatalf("approval did not dispatch the retained preview job: %#v", run)
 	}
 	result, ok := batch[0]().(ran)
-	if !ok || result.err == nil || !strings.Contains(result.err.Error(), "saved execution plan no longer matches stored inputs") {
+	if !ok || result.err == nil || !strings.Contains(result.err.Error(), "saved execution plan no longer matches frozen inputs") {
 		t.Fatalf("runner did not strictly decode the exact malformed preview: %#v", result)
 	}
 	m.Update(result)
-	if m.running || len(m.activity) == 0 || !strings.Contains(m.activity[len(m.activity)-1].Detail, "saved execution plan no longer matches stored inputs") {
+	if m.running || len(m.activity) == 0 || !strings.Contains(m.activity[len(m.activity)-1].Detail, "saved execution plan no longer matches frozen inputs") {
 		t.Fatal("malformed approved bytes did not fail closed or log the full error", m.status, m.activity)
 	}
 }

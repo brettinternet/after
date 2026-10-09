@@ -408,6 +408,7 @@ func paymentCommits(t *testing.T, root string) (string, string) {
 		}
 		writeFile(t, root, name, string(contents))
 	}
+	writeFile(t, root, "app/payment.expected.json", `{"retention_seconds":86400}`)
 	gitRun(t, root, "add", "go.mod", "app", "driver")
 	gitRun(t, root, "commit", "-qm", "synthetic base")
 	base := strings.TrimSpace(gitRun(t, root, "rev-parse", "HEAD"))
@@ -420,7 +421,8 @@ func paymentCommits(t *testing.T, root string) (string, string) {
 		t.Fatal("payment fixture mutation anchor changed")
 	}
 	writeFile(t, root, "app/config.go", strings.Replace(string(contents), "24 * 60 * 60", "5 * 60", 1))
-	gitRun(t, root, "add", "app/config.go")
+	writeFile(t, root, "app/payment.expected.json", `{"retention_seconds":300}`)
+	gitRun(t, root, "add", "app/config.go", "app/payment.expected.json")
 	gitRun(t, root, "commit", "-qm", "synthetic candidate")
 	candidate := strings.TrimSpace(gitRun(t, root, "rev-parse", "HEAD"))
 	return base, candidate

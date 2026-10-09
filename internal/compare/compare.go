@@ -16,18 +16,24 @@ import (
 // Report is a bounded artifact, not inline record values (which the record store
 // sanitizes through generic JSON). This preserves numeric precision end to end.
 type Report struct {
-	Version   int                        `json:"version"`
-	Receipt   evidence.Digest            `json:"receipt"`
-	Snapshots evidence.SnapshotPair      `json:"snapshots"`
-	Rules     evidence.Digest            `json:"rules,omitempty"`
-	Outcome   evidence.ComparisonOutcome `json:"outcome"`
-	Artifacts []evidence.Artifact        `json:"artifacts"`
-	Witnesses []Witness                  `json:"witnesses"`
-	Limits    []string                   `json:"limits"`
+	Version        int                        `json:"version"`
+	Receipt        evidence.Digest            `json:"receipt"`
+	Snapshots      evidence.SnapshotPair      `json:"snapshots"`
+	Rules          evidence.Digest            `json:"rules,omitempty"`
+	DefinitionName string                     `json:"definition_name,omitempty"`
+	BuiltInPayment bool                       `json:"built_in_payment,omitempty"`
+	Cases          []string                   `json:"cases"`
+	CaseTitles     []string                   `json:"case_titles"`
+	Channels       []string                   `json:"channels"`
+	Outcome        evidence.ComparisonOutcome `json:"outcome"`
+	Artifacts      []evidence.Artifact        `json:"artifacts"`
+	Witnesses      []Witness                  `json:"witnesses"`
+	Limits         []string                   `json:"limits"`
 }
 type SampleRef struct {
 	Side        string          `json:"side"`
-	Seconds     int64           `json:"seconds"`
+	CaseID      string          `json:"case_id"`
+	Seconds     int64           `json:"seconds,omitempty"`
 	Repetition  int             `json:"repetition"`
 	Metadata    evidence.Digest `json:"metadata"`
 	Observation evidence.Digest `json:"observation"`
@@ -47,8 +53,8 @@ type sample struct {
 }
 
 var scope = []string{
-	"Only the recorded two sequential same-key requests at 43200 and 30 seconds in this captured pair; equality is limited to the supported channels and samples, not universal safety, causation or performance.",
-	"Provider destination is the frozen observer at 127.0.0.1:18082 plus recorded path; operation, key, payload, timestamp, log length and order are compared. Query strings, other headers, other destinations and effects after the observation window are not recorded.",
+	"Only the finite requests and cases declared by this frozen http-service definition in this captured pair; equality is limited to its supported channels and samples, not universal safety, causation or performance.",
+	"Fake upstreams are the fixed offline endpoints owned and logged by the frozen observer; calls include declared endpoint, destination, operation, key, payload, timestamp, count and order.",
 	"JSON object order and decimal spelling are immaterial; arrays and Unicode code points are exact. No masking, field dropping, Unicode normalization or candidate-owned policies are accepted.",
 	"Receipt, snapshot inventories, raw diffs and every retained sample remain inspectable; digest binding does not authenticate a producer. Terminal consumers must escape all untrusted values.",
 }
@@ -111,6 +117,13 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 		return err
 	}
 	reps := basis.Repetitions
+	for _, scenarioCase := range basis.Cases {
+		report.Cases = append(report.Cases, scenarioCase.ID)
+		report.CaseTitles = append(report.CaseTitles, scenarioCase.Title)
+	}
+	report.DefinitionName = basis.DefinitionName
+	report.BuiltInPayment = basis.BuiltInPayment
+	report.Channels = append([]string(nil), basis.Channels...)
 	artifacts := map[string]evidence.Artifact{}
 	for _, a := range r.Artifacts {
 		if _, ok := artifacts[a.Channel]; ok {
@@ -129,12 +142,12 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 	if string(raw) != runner.ComparisonRules {
 		return errors.New("unsupported masks or normalization policy")
 	}
-	allowed := map[string]bool{"comparison-rules": true, "execution-plan": true}
+	allowed := map[string]bool{"comparison-rules": true, "execution-plan": true, "preparation-result": true, "preparation-diagnostics": true, "launcher-executable": true}
 	samples := map[string]sample{}
 	for rep := 0; rep < reps; rep++ {
 		for _, side := range []string{"base", "candidate"} {
-			for _, sec := range []int64{43200, 30} {
-				prefix := fmt.Sprintf("%s/%d/%d/", side, sec, rep)
+			for _, scenarioCase := range basis.Cases {
+				prefix := fmt.Sprintf("%s/%s/%d/", side, scenarioCase.ID, rep)
 				for _, suffix := range []string{"sample", "observation", "candidate-diagnostics", "observer-diagnostics"} {
 					allowed[prefix+suffix] = true
 				}
@@ -154,7 +167,7 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 				if err = strict(raw, &m); err != nil {
 					return errors.New("invalid sample metadata")
 				}
-				if m.RequestID != r.RequestID || m.Snapshots != r.Snapshots || m.Side != side || m.CaseSeconds != sec || m.Repetition != rep || m.Status != "completed" || m.StartedAt.Before(r.StartedAt) || m.FinishedAt.After(r.FinishedAt) || m.FinishedAt.Before(m.StartedAt) || !m.Execution.App.Cleaned || !m.Execution.Observer.Cleaned || m.Execution.App.Truncated || m.Execution.Observer.Truncated || m.Execution.Observer.ExitCode != 0 {
+				if m.RequestID != r.RequestID || m.Snapshots != r.Snapshots || m.Side != side || m.CaseID != scenarioCase.ID || m.CaseSeconds != runner.CaseDuration(scenarioCase) || m.Repetition != rep || m.Status != "completed" || m.StartedAt.Before(r.StartedAt) || m.FinishedAt.After(r.FinishedAt) || m.FinishedAt.Before(m.StartedAt) || !m.Execution.App.Cleaned || !m.Execution.Observer.Cleaned || m.Execution.App.Truncated || m.Execution.Observer.Truncated || m.Execution.Observer.ExitCode != 0 {
 					return errors.New("incompatible, incomplete or misbound sample")
 				}
 				if !basis.MatchesSample(m) {
@@ -180,14 +193,14 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 					return err
 				}
 				var o runner.Observation
-				if completeObservation(raw) != nil || strict(raw, &o) != nil || o.Version != 1 || o.Seconds != sec || len(o.Responses) != 2 || o.Calls == nil || len(o.Calls) > 128 {
+				if completeObservation(raw) != nil || strict(raw, &o) != nil || o.Version != 1 || o.CaseID != scenarioCase.ID || o.Seconds != 0 && o.Seconds != runner.CaseDuration(scenarioCase) || len(o.Responses) != len(scenarioCase.Requests) || o.Calls == nil || len(o.Calls) > 128 {
 					return errors.New("unsupported or missing observation channel")
 				}
 				responses, provider, err := channels(o)
 				if err != nil {
 					return err
 				}
-				samples[prefix] = sample{SampleRef{side, sec, rep, meta.Content, observation.Content}, responses, provider}
+				samples[prefix] = sample{SampleRef{Side: side, CaseID: scenarioCase.ID, Seconds: runner.CaseDuration(scenarioCase), Repetition: rep, Metadata: meta.Content, Observation: observation.Content}, responses, provider}
 			}
 		}
 	}
@@ -199,9 +212,9 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 	report.Outcome = evidence.Equal
 	total := 0
 	compare := func(a, b sample, relation string) error {
-		for i, channel := range []string{"responses", "provider"} {
+		for _, channel := range basis.Channels {
 			av, bv := a.responses, b.responses
-			if i == 1 {
+			if channel == "provider_calls" {
 				av, bv = a.provider, b.provider
 			}
 			changes := []Change{}
@@ -225,16 +238,16 @@ func compareReceipt(s *store.Store, r evidence.Receipt, report *Report) error {
 		}
 		return nil
 	}
-	for _, sec := range []int64{43200, 30} {
+	for _, scenarioCase := range basis.Cases {
 		for rep := 0; rep < reps; rep++ {
-			a := samples[fmt.Sprintf("base/%d/%d/", sec, rep)]
-			b := samples[fmt.Sprintf("candidate/%d/%d/", sec, rep)]
+			a := samples[fmt.Sprintf("base/%s/%d/", scenarioCase.ID, rep)]
+			b := samples[fmt.Sprintf("candidate/%s/%d/", scenarioCase.ID, rep)]
 			if err := compare(a, b, "paired"); err != nil {
 				return err
 			}
 			if rep > 0 {
 				for _, side := range []string{"base", "candidate"} {
-					if err := compare(samples[fmt.Sprintf("%s/%d/0/", side, sec)], samples[fmt.Sprintf("%s/%d/%d/", side, sec, rep)], "repetition"); err != nil {
+					if err := compare(samples[fmt.Sprintf("%s/%s/0/", side, scenarioCase.ID)], samples[fmt.Sprintf("%s/%s/%d/", side, scenarioCase.ID, rep)], "repetition"); err != nil {
 						return err
 					}
 				}
@@ -255,9 +268,12 @@ func completeObservation(raw []byte) error {
 	if !ok {
 		return errors.New("missing observation object")
 	}
+	if _, ok := root["case_id"].(string); !ok {
+		return errors.New("missing observation case binding")
+	}
 	for channel, fields := range map[string][]string{
 		"responses":      {"status", "body"},
-		"provider_calls": {"at", "method", "path", "key", "body"},
+		"provider_calls": {"at", "endpoint", "destination", "method", "path", "key", "body"},
 	} {
 		items, ok := root[channel].([]any)
 		if !ok {
@@ -315,14 +331,14 @@ func channels(o runner.Observation) (any, any, error) {
 	}
 	calls := []any{}
 	for _, c := range o.Calls {
-		if len(c.Body) > 4096 || len(c.Path) > 256 || len(c.Key) > 128 || c.Method == "" || !strings.HasPrefix(c.Path, "/") {
+		if len(c.Body) > 4096 || len(c.Path) > 256 || len(c.Key) > 128 || c.Method == "" || !strings.HasPrefix(c.Path, "/") || c.Endpoint == "" || c.Destination == "" {
 			return nil, nil, errors.New("invalid provider channel")
 		}
 		b, err := body(c.Body)
 		if err != nil {
 			return nil, nil, err
 		}
-		calls = append(calls, map[string]any{"at": json.Number(fmt.Sprint(c.At)), "method": c.Method, "destination": "127.0.0.1:18082", "path": c.Path, "key": c.Key, "body": b})
+		calls = append(calls, map[string]any{"at": json.Number(fmt.Sprint(c.At)), "endpoint": c.Endpoint, "destination": c.Destination, "method": c.Method, "path": c.Path, "key": c.Key, "body": b})
 	}
 	return responses, map[string]any{"count": json.Number(fmt.Sprint(len(calls))), "calls": calls}, nil
 }

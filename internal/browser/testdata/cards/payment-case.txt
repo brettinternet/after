@@ -1,6 +1,6 @@
    AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
   Overview  ›  12h same-key retry                                                                          [DIFFERENT]
-  [Card]   Receipt Card   Witnesses   Artifacts   Receipt   Scenario   Plan   IDs                        1/8 · 5.0 KiB
+  [Card]   Receipt Card   Witnesses   Artifacts   Receipt   Scenario   Plan   IDs                        1/8 · 5.1 KiB
   ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
   ── Payment case ──

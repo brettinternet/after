@@ -20,6 +20,7 @@ import (
 type runnerArtifact struct {
 	artifact evidence.Artifact
 	side     string
+	caseID   string
 	seconds  int64
 	rep      int
 	channel  string
@@ -84,19 +85,36 @@ func appendIDs(ids []evidence.Digest, values ...evidence.Digest) []evidence.Dige
 
 func runnerChannel(channel string) (runnerArtifact, bool) {
 	parts := strings.Split(channel, "/")
-	if len(parts) != 4 || (parts[0] != "base" && parts[0] != "candidate") || (parts[1] != "43200" && parts[1] != "30") {
+	if len(parts) != 4 || (parts[0] != "base" && parts[0] != "candidate") || !validCaseID(parts[1]) {
 		return runnerArtifact{}, false
 	}
 	repetition, err := strconv.Atoi(parts[2])
-	if err != nil || repetition < 0 || strconv.Itoa(repetition) != parts[2] {
+	if err != nil || repetition < 0 || repetition > 4 || strconv.Itoa(repetition) != parts[2] {
 		return runnerArtifact{}, false
 	}
 	switch parts[3] {
 	case "observation", "sample", "candidate-diagnostics", "observer-diagnostics":
-		return runnerArtifact{side: parts[0], seconds: mustSeconds(parts[1]), rep: repetition, channel: parts[3]}, true
+		seconds, _ := strconv.ParseInt(parts[1], 10, 64)
+		return runnerArtifact{side: parts[0], caseID: parts[1], seconds: seconds, rep: repetition, channel: parts[3]}, true
 	default:
 		return runnerArtifact{}, false
 	}
+}
+
+func validCaseID(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	first := value[0]
+	if !(first >= 'a' && first <= 'z' || first >= '0' && first <= '9') {
+		return false
+	}
+	for _, char := range value {
+		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func mustSeconds(value string) int64 {
@@ -122,8 +140,11 @@ func orderedArtifacts(artifacts []evidence.Artifact) ([]runnerArtifact, []eviden
 		if a.side != b.side {
 			return a.side == "base"
 		}
-		if a.seconds != b.seconds {
-			return secondsOrder[a.seconds] < secondsOrder[b.seconds]
+		if a.caseID != b.caseID {
+			if a.seconds != 0 && b.seconds != 0 {
+				return secondsOrder[a.seconds] < secondsOrder[b.seconds]
+			}
+			return a.caseID < b.caseID
 		}
 		if a.rep != b.rep {
 			return a.rep < b.rep
@@ -135,7 +156,11 @@ func orderedArtifacts(artifacts []evidence.Artifact) ([]runnerArtifact, []eviden
 }
 
 func artifactTitle(item runnerArtifact) string {
-	return fmt.Sprintf("%s · %s · repetition %d · %s", item.side, delayText(item.seconds), item.rep+1, item.channel)
+	caseTitle := item.caseID
+	if item.seconds > 0 {
+		caseTitle = delayText(item.seconds)
+	}
+	return fmt.Sprintf("%s · %s · repetition %d · %s", item.side, caseTitle, item.rep+1, item.channel)
 }
 
 func artifactsSection(s *store.Store, artifacts []evidence.Artifact, seconds *int64) (Section, []evidence.Digest) {
@@ -271,7 +296,8 @@ func sameArtifacts(a, b []evidence.Artifact) bool {
 }
 
 func validCompareRef(ref compare.SampleRef) bool {
-	return (ref.Side == "base" || ref.Side == "candidate") && (ref.Seconds == 30 || ref.Seconds == 43200) && ref.Repetition >= 0 && ref.Repetition < 5 && ref.Metadata != "" && ref.Observation != ""
+	caseValid := validCaseID(ref.CaseID) || ref.CaseID == "" && (ref.Seconds == 30 || ref.Seconds == 43200)
+	return (ref.Side == "base" || ref.Side == "candidate") && caseValid && ref.Repetition >= 0 && ref.Repetition < 5 && ref.Metadata != "" && ref.Observation != ""
 }
 
 func strictObservation(raw []byte, seconds int64) (runner.Observation, error) {
@@ -280,7 +306,7 @@ func strictObservation(raw []byte, seconds int64) (runner.Observation, error) {
 		return observation, err
 	}
 	var shape map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &shape); err != nil || !hasFields(shape, "version", "seconds", "responses", "provider_calls") || observation.Version != 1 || observation.Seconds != seconds || len(observation.Responses) != 2 || observation.Calls == nil || len(observation.Calls) > 128 {
+	if err := json.Unmarshal(raw, &shape); err != nil || !hasFields(shape, "version", "seconds", "responses", "provider_calls") || observation.Version != 1 || observation.Seconds != seconds || (observation.CaseID != "" && observation.CaseID != strconv.FormatInt(seconds, 10)) || len(observation.Responses) != 2 || observation.Calls == nil || len(observation.Calls) > 128 {
 		return observation, errors.New("unexpected observation shape")
 	}
 	for _, response := range observation.Responses {
@@ -310,7 +336,7 @@ func strictSample(raw []byte, receipt evidence.Receipt, item runnerArtifact) (ru
 	if err := decode(raw, &sample); err != nil {
 		return sample, err
 	}
-	if sample.RequestID != receipt.RequestID || sample.Snapshots != receipt.Snapshots || sample.Side != item.side || sample.CaseSeconds != item.seconds || sample.Repetition != item.rep || sample.StartedAt.IsZero() || sample.FinishedAt.Before(sample.StartedAt) || sample.StartedAt.Before(receipt.StartedAt) || sample.FinishedAt.After(receipt.FinishedAt) || sample.Status == "" || len(sample.Status) > 64 || len(sample.Artifacts) > 3 {
+	if sample.RequestID != receipt.RequestID || sample.Snapshots != receipt.Snapshots || sample.Side != item.side || (sample.CaseID != "" && sample.CaseID != item.caseID) || sample.CaseSeconds != item.seconds || sample.Repetition != item.rep || sample.StartedAt.IsZero() || sample.FinishedAt.Before(sample.StartedAt) || sample.StartedAt.Before(receipt.StartedAt) || sample.FinishedAt.After(receipt.FinishedAt) || sample.Status == "" || len(sample.Status) > 64 || len(sample.Artifacts) > 3 {
 		return sample, errors.New("unexpected sample shape")
 	}
 	return sample, nil
@@ -352,6 +378,10 @@ func paymentInputPart(s *store.Store, scenario evidence.Scenario) (Part, []evide
 	raw, err := s.ReadBlob(scenario.Input)
 	if err != nil {
 		return Part{}, nil, err
+	}
+	if definition, definitionErr := runner.ParseDefinition(raw); definitionErr == nil && definition.Name == "synthetic-payment" && len(definition.Cases) > 0 && len(definition.Cases[0].Requests) > 0 {
+		request := definition.Cases[0].Requests[0]
+		return textPart("Input", fmt.Sprintf("key %s · body %s · frozen request sequence", request.Headers["Idempotency-Key"], request.Body)), []evidence.Digest{scenario.Input}, nil
 	}
 	input, err := strictFrozenInput(raw)
 	if err != nil {

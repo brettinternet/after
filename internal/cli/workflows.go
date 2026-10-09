@@ -127,10 +127,11 @@ func commands(state *invocation) []*ucli.Command {
 			OnUsageError: usageError, Action: func(ctx *ucli.Context) error { return inspectCommand(state, ctx, true) },
 		},
 		{
-			Name: "run", Usage: "preview, explicitly authorize, and compare the frozen offline payment experiment",
+			Name: "run", Usage: "preview and explicitly authorize a frozen offline HTTP-service definition",
 			Before:    outputBefore(state),
 			ArgsUsage: "[<base-snapshot-id> <candidate-snapshot-id>] (or --approve DIGEST or --plan-file FILE)",
 			Flags: append(runFlags(),
+				&ucli.StringFlag{Name: "definition", Usage: "explicit operator-selected version-1 http-service JSON file; defaults to the built-in payment definition"},
 				&ucli.StringFlag{Name: "plan-file", Usage: "reconstruct an exact previously saved execution preview"},
 				&ucli.StringFlag{Name: "plan-out", Usage: "create a private file containing the exact preview for later approval"},
 				&ucli.StringFlag{Name: "approve", Usage: "approve only this exact preview digest; never a blanket consent"},
@@ -1038,12 +1039,20 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	state.project = cfg.Project
 	planPath := strings.TrimSpace(ctx.String("plan-file"))
 	planOut := strings.TrimSpace(ctx.String("plan-out"))
+	definitionPath := strings.TrimSpace(ctx.String("definition"))
+	definitionSet := ctx.IsSet("definition")
 	approvalSet := ctx.IsSet("approve") && strings.TrimSpace(ctx.String("approve")) != ""
 	if ctx.IsSet("approve") && !validDigest(ctx.String("approve")) {
 		return invalid("--approve requires the full digest: --approve sha256:<64 lowercase hex characters>; copy the authorization digest from the preview")
 	}
 	if planPath != "" && planOut != "" {
 		return invalid("--plan-file cannot be combined with --plan-out")
+	}
+	if definitionSet && definitionPath == "" {
+		return invalid("--definition requires an explicit JSON file path")
+	}
+	if definitionSet && (planPath != "" || approvalSet) {
+		return invalid("--definition is accepted only while preparing a new plan; saved plans reconstruct their frozen definition")
 	}
 	if planPath != "" && ctx.Args().Len() != 0 {
 		return invalidWithFix("saved-plan execution does not accept snapshot arguments", "use after run --plan-file FILE --approve FULL_DIGEST")
@@ -1107,7 +1116,19 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 			}
 			pair = evidence.SnapshotPair{Base: base, Candidate: candidate}
 		}
-		plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
+		if definitionSet {
+			rawDefinition, readErr := readBounded(definitionPath, runner.MaxDefinitionBytes)
+			if readErr != nil {
+				return invalid("cannot read the explicitly selected http-service definition")
+			}
+			if _, parseErr := runner.ParseDefinition(rawDefinition); parseErr != nil {
+				return invalid(parseErr.Error())
+			}
+			source := selectedDefinitionSource(cfg.Project, definitionPath)
+			plan, err = runner.PrepareDefinition(s, pair, rawDefinition, source)
+		} else {
+			plan, err = runner.Prepare(s, pair, cfg.Repetitions, sandbox.Limits{Seconds: cfg.RunSeconds, OutputBytes: cfg.OutputBytes})
+		}
 		if err != nil {
 			return preparationFailure(err)
 		}
@@ -1195,20 +1216,34 @@ func runCommand(state *invocation, ctx *ucli.Context) error {
 	return writeResult(state, "run", response)
 }
 
+func selectedDefinitionSource(project, selected string) runner.DefinitionSource {
+	source := runner.DefinitionSource{Kind: "operator-selected-file"}
+	absolute, err := filepath.Abs(selected)
+	if err != nil {
+		return source
+	}
+	relative, err := filepath.Rel(project, absolute)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return source
+	}
+	source.RepositoryPath = filepath.ToSlash(relative)
+	return source
+}
+
 // preparationFailure names the snapshot property that blocked a plan. Nothing
 // has run, so these are invalid inputs rather than operational failures.
 func preparationFailure(err error) error {
 	switch {
 	case errors.Is(err, runner.ErrUnsupportedProject):
-		return invalidWithFix("this capture has no go.mod and app/main.go; after run supports only the offline payment experiment", "use after review to inspect this change without running it")
+		return invalidWithFix("the captured pair has no complete regular-file source tree for the selected service", "capture a supported HTTP service or use after review to inspect without running it")
 	case errors.Is(err, runner.ErrReservedPath):
-		return invalidWithFix("the capture contains after-launch.go, a path the payment runner reserves", "rename after-launch.go, capture again, then retry after run")
+		return invalidWithFix("the capture contains a reserved AFTER runtime path", "rename the reserved path, capture again, then retry after run")
 	case errors.Is(err, runner.ErrIncompleteSnapshot):
 		return invalidWithFix("the capture is incomplete, so it cannot execute", "run after inspect to see unsupported paths, then capture a complete change")
 	case errors.Is(err, runner.ErrSnapshotBudget):
-		return invalidWithFix("the capture exceeds the sandbox budget of 255 files and 8 MiB", "run the payment experiment on a smaller checkout")
+		return invalidWithFix("the capture exceeds the sandbox budget of 255 files and 8 MiB", "select a smaller captured service tree or inspect the capture without running it")
 	}
-	return operational("cannot prepare the bounded payment execution plan")
+	return operational("cannot prepare the bounded HTTP-service execution plan")
 }
 
 func ensureReceipt(receipt evidence.Receipt) error {

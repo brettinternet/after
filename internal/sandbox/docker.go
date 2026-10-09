@@ -26,6 +26,8 @@ type Result struct {
 	Container  string `json:"container,omitempty"`
 	InputImage string `json:"input_image,omitempty"`
 	Output     string `json:"output"`
+	Stdout     string `json:"stdout,omitempty"`
+	Stderr     string `json:"stderr,omitempty"`
 	Truncated  bool   `json:"truncated"`
 	ExitCode   int    `json:"exit_code"`
 	OOMKilled  bool   `json:"oom_killed"`
@@ -56,12 +58,16 @@ func (b *output) Write(p []byte) (int, error) {
 }
 
 func (d Docker) command(ctx context.Context, config string, input []byte, out io.Writer, args ...string) error {
+	return d.commandStreams(ctx, config, input, out, out, args...)
+}
+
+func (d Docker) commandStreams(ctx context.Context, config string, input []byte, stdout, stderr io.Writer, args ...string) error {
 	cmd := exec.CommandContext(ctx, d.Binary, append([]string{"--config", config, "--host", d.Host}, args...)...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + config, "LANG=C"}
 	cmd.Dir = config
 	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stdout = out
-	cmd.Stderr = out
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	cmd.WaitDelay = time.Second
 	return cmd.Run()
 }
@@ -86,7 +92,7 @@ func (d Docker) query(ctx context.Context, config string, input []byte, args ...
 	return b.b.Bytes(), nil
 }
 
-func (d Docker) preflight(ctx context.Context, config, image string) error {
+func (d Docker) preflight(ctx context.Context, config, image, platform string) error {
 	b, err := d.query(ctx, config, nil, "info", "--format", "{{json .}}")
 	if err != nil {
 		return err
@@ -107,7 +113,9 @@ func (d Docker) preflight(ctx context.Context, config, image string) error {
 		return errors.New("pinned image missing; explicit separate provisioning required")
 	}
 	var images []struct {
-		Config struct {
+		Architecture string
+		Os           string
+		Config       struct {
 			Volumes map[string]json.RawMessage
 			OnBuild []string
 		}
@@ -115,7 +123,11 @@ func (d Docker) preflight(ctx context.Context, config, image string) error {
 	if err = json.Unmarshal(b, &images); err != nil {
 		return err
 	}
-	if len(images) != 1 || len(images[0].Config.Volumes) != 0 || len(images[0].Config.OnBuild) != 0 {
+	parts := strings.Split(platform, "/")
+	if len(images) != 1 || len(parts) != 2 || images[0].Os != parts[0] || images[0].Architecture != parts[1] {
+		return errors.New("pinned image does not match the approved platform")
+	}
+	if len(images[0].Config.Volumes) != 0 || len(images[0].Config.OnBuild) != 0 {
 		return errors.New("image has unsupported implicit volumes or build hooks")
 	}
 	return nil
@@ -125,10 +137,17 @@ func (d Docker) preflight(ctx context.Context, config, image string) error {
 // Callers must obtain approval from the operator, never a repository file/report.
 // Every error is incomplete execution, not an observation of equivalent behavior.
 func (d Docker) Execute(ctx context.Context, p *Plan, approved string) (Result, error) {
-	return d.execute(ctx, p, approved, "", nil)
+	return d.execute(ctx, p, approved, "", nil, false)
 }
 
-func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error) (result Result, err error) {
+// ExecuteBinary captures a bounded binary artifact on stdout and diagnostics on
+// stderr. Overflow of either stream cancels the approved workload.
+func (d Docker) ExecuteBinary(ctx context.Context, p *Plan, approved string) (Result, []byte, error) {
+	result, err := d.execute(ctx, p, approved, "", nil, true)
+	return result, []byte(result.Stdout), err
+}
+
+func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, observe func(context.Context, string) error, binaryOutput bool) (result Result, err error) {
 	result.ExitCode = -1
 	if p == nil {
 		return result, ErrConsent
@@ -148,7 +167,7 @@ func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, 
 	defer os.RemoveAll(config)
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
-	if err = d.preflight(ctx, config, p.spec.Image); err != nil {
+	if err = d.preflight(ctx, config, p.spec.Image, p.spec.Platform); err != nil {
 		return result, err
 	}
 	var random [16]byte
@@ -187,7 +206,7 @@ func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, 
 	// Docker cannot copy to a read-only rootfs. This staging container is NEVER
 	// started: only bounded regular input files are copied and its layer committed.
 	// No Dockerfile, RUN, build hook or repository executable is evaluated here.
-	if _, err = d.query(ctx, config, nil, "create", "--name", stage, "--label", "after.owner="+name, "--network=none", "--pull=never", p.spec.Image); err != nil {
+	if _, err = d.query(ctx, config, nil, "create", "--platform="+p.spec.Platform, "--name", stage, "--label", "after.owner="+name, "--network=none", "--pull=never", p.spec.Image); err != nil {
 		return result, err
 	}
 	if _, err = d.query(ctx, config, p.archive, "cp", "-", stage+":/"); err != nil {
@@ -201,7 +220,7 @@ func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, 
 	if !validDigest(result.InputImage) {
 		return result, errors.New("invalid committed image identity")
 	}
-	args := []string{"create", "--name", name, "--label", "after.owner=" + name}
+	args := []string{"create", "--platform=" + p.spec.Platform, "--name", name, "--label", "after.owner=" + name}
 	for _, flag := range p.spec.Policy {
 		if network != "" && flag == "--network=none" {
 			flag = "--network=container:" + network
@@ -216,6 +235,9 @@ func (d Docker) execute(ctx context.Context, p *Plan, approved, network string, 
 	}
 	if observe != nil {
 		return d.serve(ctx, config, name, p, result, observe)
+	}
+	if binaryOutput {
+		return d.runBinary(ctx, config, name, p, result)
 	}
 	return d.run(ctx, config, name, p, result)
 }
@@ -243,6 +265,40 @@ func (d Docker) removeContainer(ctx context.Context, config, name, owner string)
 		return errors.New("owned container remains")
 	}
 	return e
+}
+
+func (d Docker) runBinary(ctx context.Context, config, name string, p *Plan, result Result) (Result, error) {
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	stdout := &output{max: 8 << 20, cancel: stop}
+	stderr := &output{max: p.spec.Limits.OutputBytes, cancel: stop}
+	runErr := d.commandStreams(runCtx, config, nil, stdout, stderr, "start", "--attach", name)
+	result.Stdout, result.Stderr = stdout.b.String(), stderr.b.String()
+	result.Truncated = stdout.truncated || stderr.truncated
+	if result.Truncated {
+		return result, ErrOutput
+	}
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
+	b, err := d.query(ctx, config, nil, "inspect", "--format", "{{json .State}}", name)
+	if err != nil {
+		return result, err
+	}
+	var state struct {
+		ExitCode           int
+		OOMKilled, Running bool
+		Error              string
+	}
+	if err = json.Unmarshal(b, &state); err != nil {
+		return result, err
+	}
+	result.ExitCode = state.ExitCode
+	result.OOMKilled = state.OOMKilled
+	if state.Running || state.Error != "" || state.OOMKilled || state.ExitCode != 0 || runErr != nil {
+		return result, fmt.Errorf("sandbox binary preparation failed (exit=%d, oom=%t, attach=%v)", state.ExitCode, state.OOMKilled, runErr)
+	}
+	return result, nil
 }
 
 func (d Docker) run(ctx context.Context, config, name string, p *Plan, result Result) (Result, error) {

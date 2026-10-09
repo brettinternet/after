@@ -1024,12 +1024,35 @@ func buildLog(s *store.Store, history storedHistory, limit int) (logView, error)
 }
 
 func compactComparison(report compare.Report) string {
+	if report.DefinitionName != "" && !report.BuiltInPayment {
+		parts := []string{}
+		for index, caseID := range report.Cases {
+			outcome := evidence.ComparisonOutcome("")
+			for _, witness := range report.Witnesses {
+				if witness.Relation != "paired" || witness.Before.CaseID != caseID {
+					continue
+				}
+				if outcome == "" || witness.Outcome != evidence.Equal {
+					outcome = witness.Outcome
+				}
+			}
+			if outcome == "" {
+				continue
+			}
+			title := caseID
+			if index < len(report.CaseTitles) && report.CaseTitles[index] != "" {
+				title = report.CaseTitles[index]
+			}
+			parts = append(parts, fmt.Sprintf("%s [%s]", title, strings.ToUpper(string(outcome))))
+		}
+		return strings.Join(parts, " · ")
+	}
 	parts := []string{}
 	for _, seconds := range []int64{43200, 30} {
 		outcome := evidence.ComparisonOutcome("")
 		countChange := ""
 		for _, witness := range report.Witnesses {
-			if witness.Relation != "paired" || witness.Before.Seconds != seconds || witness.Channel != "provider" {
+			if witness.Relation != "paired" || witness.Before.Seconds != seconds || (witness.Channel != "provider" && witness.Channel != "provider_calls") {
 				continue
 			}
 			if outcome == "" || witness.Outcome != evidence.Equal {

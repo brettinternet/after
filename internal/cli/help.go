@@ -182,26 +182,32 @@ Options
   --artifact-size N        stored artifact page bytes (default: 65536)
 ` + global
 	case "run":
-		body = fmt.Sprintf(`Prepare the frozen offline experiment for the newest capture. Exact consent is
-required before it runs.
+		body = fmt.Sprintf(`Prepare an offline HTTP-service plan; default is the synthetic payment case.
+Select custom JSON with --definition FILE; repo snapshots are never searched.
+Approve exact plans before build or start; preview does not use Docker.
 
 Usage
   after run
   after run BASE CANDIDATE
+  after run BASE CANDIDATE --definition FILE
   after run --approve FULL_DIGEST
   after run BASE CANDIDATE --plan-out FILE
   after run --plan-file FILE --approve FULL_DIGEST
 
 Options
+  --definition FILE      explicit version-1 http-service JSON (optional)
   --plan-file FILE       reconstruct an exact saved execution preview
   --plan-out FILE        save a private preview file without overwriting it
   --approve DIGEST       exact full sha256 digest; stored plan needs no file
   --docker-binary PATH   trusted Docker CLI path (default: not configured)
   --docker-host SOCKET   local Unix socket (default: not configured)
-  --repetitions N        paired run repetitions (default: %d; range: 1–5)
-  --run-seconds N        sandbox time limit (default: %d; range: 1–300)
-  --output-bytes N       container output (default: %d; range: 1–1048576)
+  --repetitions N        built-in payment repetitions (default: %d; range: 1–5)
+  --run-seconds N        payment time (default: %d; range: 1–300)
+  --output-bytes N       payment output (default: %d; range: 1–1048576)
   --interactive BOOL     allow exact-plan terminal confirmation (default: %t)
+
+Definitions bind pinned images, direct argv, fd3 readiness, cases, and limits.
+No shell strings, image pulls, mounts, ports, downloads or host fallback.
 `, defaults.Repetitions, defaults.RunSeconds, defaults.OutputBytes, defaults.Interactive) + global
 	case "pin":
 		body = fmt.Sprintf(`Create or inspect a pin, or record one explicit decision. Pin actions never
@@ -300,7 +306,7 @@ Everyday
   after inspect                 inspect the newest capture or a stored record
 
 Evidence
-  after run                     prepare a consented offline payment run
+  after run                     prepare a consented offline http-service run
   after import                  read a go test -json file or pipe
   after compare                 compare the newest stored run
   after pin                     list pin heads or create an expectation

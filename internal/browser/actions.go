@@ -84,7 +84,7 @@ func (a *Actions) Prepare(pair evidence.SnapshotPair) ([]byte, string, error) {
 }
 func (a *Actions) FindDuplicatePin(entry Entry) (evidence.Pin, bool, error) {
 	if entry.Receipt == "" || entry.Expectation == "" {
-		return evidence.Pin{}, false, errors.New("select a complete current payment observation to pin")
+		return evidence.Pin{}, false, errors.New("select a complete current observation with an expectation to pin")
 	}
 	s, err := store.Open(a.Project, false, nil)
 	if err != nil {
@@ -104,7 +104,7 @@ func (a *Actions) FindDuplicatePin(entry Entry) (evidence.Pin, bool, error) {
 }
 func (a *Actions) Pin(entry Entry, pair evidence.SnapshotPair, reason string) (evidence.Digest, error) {
 	if entry.Receipt == "" || entry.Expectation == "" {
-		return "", errors.New("select a complete current payment observation to pin")
+		return "", errors.New("select a complete current observation with an expectation to pin")
 	}
 	s, err := a.Store()
 	if err != nil {

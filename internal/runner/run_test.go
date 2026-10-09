@@ -2,11 +2,13 @@ package runner
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -81,9 +83,44 @@ func prepared(t *testing.T, s *store.Store, pair evidence.SnapshotPair, reps int
 	}
 	return p
 }
-func success(sec int64, body string) sandbox.ExperimentResult {
-	b, _ := json.Marshal(Observation{Version: 1, Seconds: sec, Responses: []Response{{200, body}, {200, body}}, Calls: []Call{}})
+func success(scenarioCase Case, body string) sandbox.ExperimentResult {
+	b, _ := json.Marshal(Observation{Version: 1, CaseID: scenarioCase.ID, Seconds: CaseDuration(scenarioCase), Responses: []Response{{200, body}, {200, body}}, Calls: []Call{}})
 	return sandbox.ExperimentResult{App: sandbox.Result{Cleaned: true, Output: "synthetic-secret"}, Observer: sandbox.Result{Cleaned: true, ExitCode: 0, Output: string(b)}}
+}
+
+func testExecutor(observe func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error)) Executor {
+	return Executor{observe: observe, prepareLauncher: func(_ context.Context, plan *sandbox.Plan) (sandbox.Result, []byte, error) {
+		_, id := plan.Preview()
+		return sandbox.Result{Plan: id, ExitCode: 0, Cleaned: true}, syntheticStaticELF(), nil
+	}}
+}
+
+func syntheticStaticELF() []byte {
+	data := make([]byte, 120)
+	copy(data[:4], []byte{0x7f, 'E', 'L', 'F'})
+	data[4], data[5], data[6] = 2, 1, 1
+	binary.LittleEndian.PutUint16(data[16:18], 2)
+	machine := uint16(62)
+	if runtime.GOARCH == "arm64" {
+		machine = 183
+	}
+	binary.LittleEndian.PutUint16(data[18:20], machine)
+	binary.LittleEndian.PutUint32(data[20:24], 1)
+	binary.LittleEndian.PutUint64(data[32:40], 64)
+	binary.LittleEndian.PutUint16(data[52:54], 64)
+	binary.LittleEndian.PutUint16(data[54:56], 56)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	binary.LittleEndian.PutUint32(data[64:68], 1)
+	binary.LittleEndian.PutUint32(data[68:72], 5)
+	binary.LittleEndian.PutUint64(data[72:80], 0)
+	binary.LittleEndian.PutUint64(data[96:104], uint64(len(data)))
+	binary.LittleEndian.PutUint64(data[104:112], uint64(len(data)))
+	binary.LittleEndian.PutUint64(data[112:120], 4096)
+	return data
+}
+
+func testCase(index int) Case {
+	return BuiltinPaymentDefinition(1, sandbox.Limits{Seconds: 180, OutputBytes: 65536}).Cases[index%2]
 }
 func TestFrozenPlanAndDenial(t *testing.T) {
 	s, pair := captured(t, "")
@@ -139,22 +176,22 @@ func TestLateResultAndInstability(t *testing.T) {
 	p := prepared(t, s, pair, 2)
 	entered, release := make(chan struct{}), make(chan struct{})
 	n := 0
-	e := Executor{observe: func(ctx context.Context, _ *sandbox.Experiment, _ string) (sandbox.ExperimentResult, error) {
+	e := testExecutor(func(ctx context.Context, _ *sandbox.Experiment, _ string) (sandbox.ExperimentResult, error) {
 		if n == 0 {
 			close(entered)
 			<-release
 		}
 		index := n
 		n++
-		sec := seconds[index%2]
+		scenarioCase := testCase(index)
 		body := "same"
 		if index == 6 {
 			body = "changed"
 		}
-		r := success(sec, body)
+		r := success(scenarioCase, body)
 		r.App.Output = ""
 		return r, nil
-	}}
+	})
 	type finished struct {
 		r Result
 		e error
@@ -186,8 +223,8 @@ func TestFailuresAndRedaction(t *testing.T) {
 			s, pair := captured(t, "")
 			p := prepared(t, s, pair, 1)
 			n := 0
-			e := Executor{observe: func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error) {
-				r := success(seconds[n%2], "ok")
+			e := testExecutor(func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error) {
+				r := success(testCase(n), "ok")
 				n++
 				switch kind {
 				case "timeout":
@@ -208,7 +245,7 @@ func TestFailuresAndRedaction(t *testing.T) {
 					r.App.Cleaned = false
 				}
 				return r, nil
-			}}
+			})
 			_, id := p.Preview()
 			r, err := e.Run(t.Context(), s, p, id)
 			if r.Receipt.Completeness != evidence.Incomplete || r.Receipt.State.Comparison != evidence.Incomparable || r.Receipt.State.Kind == evidence.Observed {
@@ -234,16 +271,16 @@ func TestConcurrencyAndQueuedCancellation(t *testing.T) {
 	p := prepared(t, s, pair, 1)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	e := Executor{observe: func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error) {
+	e := testExecutor(func(context.Context, *sandbox.Experiment, string) (sandbox.ExperimentResult, error) {
 		n := int(calls.Add(1)) - 1
 		if n == 0 {
 			close(entered)
 			<-release
 		}
-		r := success(seconds[n%2], "ok")
+		r := success(testCase(n), "ok")
 		r.App.Output = ""
 		return r, nil
-	}}
+	})
 	done := make(chan error, 1)
 	_, id := p.Preview()
 	go func() { _, err := e.Run(t.Context(), s, p, id); done <- err }()

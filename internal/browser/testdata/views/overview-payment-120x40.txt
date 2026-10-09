@@ -7,7 +7,7 @@
     [DIFFERENT]   12h same-key retry · provider reque… │ words; AFTER does not evaluate them)
                                                        │ 
     ▾ AGREES  1                                        │ ── Scope ──
-    [EQUAL]       30s same-key retry · provider reque… │ finite_example · basis receipt e32608d9
+    [EQUAL]       30s same-key retry · provider reque… │ finite_example · basis receipt 2177cb59
                                                        │ 
     ▸ EARLIER SNAPSHOTS  2                             │ ── Reviewing ──
                                                        │ original base 2d13fdbf → 8e9eef34
@@ -17,7 +17,7 @@
                                                        │ establish reuse
                                                        │ 
                                                        │ ── Current ──
-                                                       │ receipt 9ff67f12 · completed · not_compared · complete
+                                                       │ receipt a8d610f8 · completed · not_compared · complete
                                                        │ 
                                                        │ 
                                                        │ 

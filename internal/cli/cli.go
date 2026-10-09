@@ -99,7 +99,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, reader io
 	app := &ucli.App{
 		Name:                      "after",
 		Usage:                     "local change evidence without implicit project execution",
-		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports only the frozen offline payment experiment with exact consent.\n   No general application adapter, GitHub sync, or universal behavior guarantee.\n   Stored IDs accept unique 4+ hex prefixes (optional sha256:, any case).\n   --approve requires the full lowercase sha256: digest; prefixes never authorize execution.",
+		Description:               "Capture local Git, import Go reports, inspect evidence and review pins in a TUI.\n   Execution supports the built-in payment case and explicitly selected bounded offline http-service definitions with exact consent.\n   No dependency preparation, external network, host access, plugin framework, or universal behavior guarantee.\n   Stored IDs accept unique 4+ hex prefixes (optional sha256:, any case).\n   --approve requires the full lowercase sha256: digest; prefixes never authorize execution.",
 		Version:                   Version,
 		Writer:                    stdout,
 		ErrWriter:                 stderr,

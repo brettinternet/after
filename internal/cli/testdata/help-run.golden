@@ -1,23 +1,29 @@
-Prepare the frozen offline experiment for the newest capture. Exact consent is
-required before it runs.
+Prepare an offline HTTP-service plan; default is the synthetic payment case.
+Select custom JSON with --definition FILE; repo snapshots are never searched.
+Approve exact plans before build or start; preview does not use Docker.
 
 Usage
   after run
   after run BASE CANDIDATE
+  after run BASE CANDIDATE --definition FILE
   after run --approve FULL_DIGEST
   after run BASE CANDIDATE --plan-out FILE
   after run --plan-file FILE --approve FULL_DIGEST
 
 Options
+  --definition FILE      explicit version-1 http-service JSON (optional)
   --plan-file FILE       reconstruct an exact saved execution preview
   --plan-out FILE        save a private preview file without overwriting it
   --approve DIGEST       exact full sha256 digest; stored plan needs no file
   --docker-binary PATH   trusted Docker CLI path (default: not configured)
   --docker-host SOCKET   local Unix socket (default: not configured)
-  --repetitions N        paired run repetitions (default: 1; range: 1–5)
-  --run-seconds N        sandbox time limit (default: 180; range: 1–300)
-  --output-bytes N       container output (default: 65536; range: 1–1048576)
+  --repetitions N        built-in payment repetitions (default: 1; range: 1–5)
+  --run-seconds N        payment time (default: 180; range: 1–300)
+  --output-bytes N       payment output (default: 65536; range: 1–1048576)
   --interactive BOOL     allow exact-plan terminal confirmation (default: true)
+
+Definitions bind pinned images, direct argv, fd3 readiness, cases, and limits.
+No shell strings, image pulls, mounts, ports, downloads or host fallback.
 
 Global
   --project DIR   checkout's Git root (default: nearest .git root)

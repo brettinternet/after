@@ -212,6 +212,12 @@ tasks:
       AFTER_COMPARISON_PROOF: "1"
     cmd: go test -v -count=1 -timeout=15m ./internal/compare -run TestComparisonProof
 
+  http-service:proof:
+    desc: Authorize the synthetic dependency-free Python HTTP-service scenario on its pinned image
+    env:
+      AFTER_HTTP_PROOF: "1"
+    cmd: go test -v -count=1 -timeout=15m ./internal/compare -run TestPythonHTTPServiceProof
+
   comparison:fuzz:
     desc: Exercise bounded exact JSON comparison properties
     cmd: go test ./internal/compare -run '^$' -fuzz FuzzJSON -fuzztime 5s

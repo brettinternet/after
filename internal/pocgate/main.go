@@ -20,6 +20,7 @@ const module = "github.com/brettinternet/after/"
 // Each design check has an executable anchor. All other tests also run.
 var required = []string{
 	"internal/compare/TestComparisonProof",
+	"internal/compare/TestPythonHTTPServiceProof",
 	"internal/runner/TestRunnerProof",
 	"internal/rawdiff/TestCapturedModesInventoryAndFrozenContext",
 	"internal/review/TestInvalidationMatrix",
@@ -153,7 +154,7 @@ func run() error {
 	if !filepath.IsAbs(os.Getenv("AFTER_DOCKER_BINARY")) || !strings.HasPrefix(os.Getenv("AFTER_DOCKER_HOST"), "unix:///") {
 		return errors.New("explicit AFTER_DOCKER_BINARY and local AFTER_DOCKER_HOST required; provision the pinned image separately (docs/SANDBOX.md)")
 	}
-	for _, flag := range []string{"SANDBOX", "PAYMENT", "RUNNER", "COMPARISON", "CLI", "TUI"} {
+	for _, flag := range []string{"SANDBOX", "PAYMENT", "RUNNER", "COMPARISON", "HTTP", "CLI", "TUI"} {
 		if err := os.Setenv("AFTER_"+flag+"_PROOF", "1"); err != nil {
 			return err
 		}
@@ -172,7 +173,7 @@ func run() error {
 	}
 	// Go overlays apply to embedded files too: mutate the actual frozen observer,
 	// not application stdout or the expected observation.
-	if err = mutation(ctx, "internal/runner/runtime/observer.go", "calls = append(calls, call{now, r.Method, r.URL.Path, r.Header.Get(\"Idempotency-Key\"), string(body)})", "if len(calls) == 0 { calls = append(calls, call{now, r.Method, r.URL.Path, r.Header.Get(\"Idempotency-Key\"), string(body)}) }", "internal/runner", "TestRunnerProof", "observer drops repeated provider requests", "calls want 2"); err != nil {
+	if err = mutation(ctx, "internal/runner/runtime/observer.go", "calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)})", "if len(calls) == 0 { calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)}) }", "internal/runner", "TestRunnerProof", "observer drops repeated provider requests", "calls want 2"); err != nil {
 		return err
 	}
 	fmt.Println("POC GATE PASSED: required proofs ran without skips; binding and observer negative controls failed as expected. Finite synthetic evidence only.")

@@ -371,7 +371,31 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		sections := receiptSections(s, r, comparison, report, scenario, ids)
 		e := Entry{State: state, Completeness: completeness, SourceReceipt: r.ID, HasComparison: comparison != nil, Candidate: r.Snapshots.Candidate, Name: string(r.ID), Sections: sections, IDs: ids}
 		rows := []Entry{}
-		if scenario != nil && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+		if scenario != nil && scenario.Author == "AFTER operator-selected http-service v1" && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
+			definitionRaw, readErr := s.ReadBlob(scenario.Input)
+			if readErr != nil {
+				return nil, readErr
+			}
+			definition, definitionErr := runner.ParseDefinition(definitionRaw)
+			if definitionErr != nil {
+				return nil, errors.New("stored http-service definition is invalid")
+			}
+			row := e
+			row.Name = definition.Name + " HTTP service"
+			caseTitles := make([]string, len(definition.Cases))
+			for index, scenarioCase := range definition.Cases {
+				caseTitles[index] = scenarioCase.Title
+			}
+			row.Summary = fmt.Sprintf("%d declared case(s) · channels %s · %s", len(definition.Cases), strings.Join(definition.Channels, ", "), state.Comparison)
+			row.Sections = sections
+			row.Receipt = r.ID
+			row.Expectation = fmt.Sprintf("For %s, preserve the declared finite responses and observer channels.", definition.Name)
+			if len(caseTitles) > 0 {
+				row.Summary += " · " + strings.Join(caseTitles, "; ")
+			}
+			rows = append(rows, row)
+		}
+		if scenario != nil && scenario.Author != "AFTER operator-selected http-service v1" && r.State.Kind == evidence.Observed && r.State.Execution == evidence.Completed && r.Completeness == evidence.Complete && !r.Redacted {
 			for _, sec := range []int64{43200, 30} {
 				observations, samples, err := caseObservations(s, r, sec)
 				if err != nil {
@@ -651,10 +675,7 @@ func renderCardColumns(columns cardColumns, width int) []byte {
 
 func artifactFormat(channel string) documentFormat {
 	parts := strings.Split(channel, "/")
-	if len(parts) != 4 || (parts[0] != "base" && parts[0] != "candidate") {
-		return formatVerbatim
-	}
-	if parts[1] != "43200" && parts[1] != "30" {
+	if len(parts) != 4 || (parts[0] != "base" && parts[0] != "candidate") || !validCaseID(parts[1]) {
 		return formatVerbatim
 	}
 	repetition, err := strconv.Atoi(parts[2])
@@ -683,7 +704,7 @@ func displayJSON(raw []byte, format documentFormat) []byte {
 	switch format {
 	case formatObservation:
 		observation := new(runner.Observation)
-		if err := decode(raw, observation); err != nil || observation.Version != 1 || (observation.Seconds != 30 && observation.Seconds != 43200) || len(observation.Responses) != 2 || observation.Calls == nil || len(observation.Calls) > 128 {
+		if err := decode(raw, observation); err != nil || observation.Version != 1 || (observation.CaseID == "" && observation.Seconds != 30 && observation.Seconds != 43200) || len(observation.Responses) < 1 || len(observation.Responses) > 16 || observation.Calls == nil || len(observation.Calls) > 128 {
 			return raw
 		}
 	case formatSample:

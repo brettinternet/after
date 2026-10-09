@@ -1056,12 +1056,40 @@ func comparisonLines(state *invocation, raw []byte) ([]readableLine, error) {
 }
 
 func comparisonDetailLines(lines []readableLine, report compare.Report) []readableLine {
+	if report.DefinitionName != "" && !report.BuiltInPayment {
+		for index, caseID := range report.Cases {
+			for _, channel := range report.Channels {
+				var outcomes []evidence.ComparisonOutcome
+				for _, witness := range report.Witnesses {
+					if witness.Relation == "paired" && witness.Before.CaseID == caseID && witness.Channel == channel {
+						outcomes = append(outcomes, witness.Outcome)
+					}
+				}
+				if len(outcomes) == 0 {
+					continue
+				}
+				outcome := evidence.Equal
+				for _, candidate := range outcomes {
+					if candidate != evidence.Equal {
+						outcome = candidate
+						break
+					}
+				}
+				title := caseID
+				if index < len(report.CaseTitles) && report.CaseTitles[index] != "" {
+					title = report.CaseTitles[index]
+				}
+				lines = append(lines, textLine(fmt.Sprintf("  %-24s · %s [%s]", title, channel, strings.ToUpper(string(outcome))), badgeStyle(string(outcome))))
+			}
+		}
+		return lines
+	}
 	for _, seconds := range []int64{43200, 30} {
-		for _, channel := range []string{"responses", "provider"} {
+		for _, channel := range []string{"responses", "provider_calls"} {
 			var outcomes []evidence.ComparisonOutcome
 			var countChange string
 			for _, witness := range report.Witnesses {
-				if witness.Relation != "paired" || witness.Before.Seconds != seconds || witness.Channel != channel {
+				if witness.Relation != "paired" || witness.Before.Seconds != seconds || witness.Channel != channel && !(channel == "provider_calls" && witness.Channel == "provider") {
 					continue
 				}
 				outcomes = append(outcomes, witness.Outcome)
@@ -1082,13 +1110,16 @@ func comparisonDetailLines(lines []readableLine, report compare.Report) []readab
 				}
 			}
 			label := "responses"
-			if channel == "provider" {
-				label = "provider requests"
+			if channel == "provider_calls" {
+				label = "fake upstream calls"
+				if report.BuiltInPayment || report.DefinitionName == "" {
+					label = "provider requests"
+				}
 			}
 			suffix := ""
 			if countChange != "" {
 				suffix = " · " + countChange
-			} else if channel == "provider" && outcome == evidence.Equal {
+			} else if channel == "provider_calls" && outcome == evidence.Equal {
 				suffix = " · count unchanged"
 			}
 			lines = append(lines, textLine(fmt.Sprintf("  %s %-18s [%s]%s", formatDelay(seconds), label, strings.ToUpper(string(outcome)), suffix), badgeStyle(string(outcome))))

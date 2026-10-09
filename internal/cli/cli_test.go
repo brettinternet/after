@@ -352,6 +352,10 @@ func TestBoundedJSONAndPages(t *testing.T) {
 }
 
 func TestRunPreviewReconstructionDoesNotExecuteWithoutExactApproval(t *testing.T) {
+	// The POC gate authorizes live proofs by exporting these settings; this unit
+	// test specifically proves approval cannot execute without local Docker setup.
+	t.Setenv("AFTER_DOCKER_BINARY", "")
+	t.Setenv("AFTER_DOCKER_HOST", "")
 	dir := t.TempDir()
 	project := filepath.Join(dir, "payment fixture with spaces")
 	configFile := filepath.Join(dir, "settings.yaml")

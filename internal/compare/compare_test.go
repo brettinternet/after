@@ -1,10 +1,13 @@
 package compare
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -78,7 +81,7 @@ func setupAt(t *testing.T, dir string) (*store.Store, evidence.SnapshotPair) {
 }
 
 // Synthetic protocol records exercise the comparator without claiming actual
-// execution. TestComparisonProof below separately uses actual Docker observations.
+// execution. They include complete preparation bindings and generated-plan identities.
 func receipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, change func(*runner.Observation, string, int), mutate func(*runner.Sample)) evidence.Receipt {
 	t.Helper()
 	p, err := runner.Prepare(s, pair, 2, sandbox.Limits{Seconds: 180, OutputBytes: 65536})
@@ -86,10 +89,17 @@ func receipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, change fu
 		t.Fatal(err)
 	}
 	preview, _ := p.Preview()
-	var plans struct {
-		Experiments [2][2]struct{ App, Observer json.RawMessage }
+	var frozen struct {
+		Definition       runner.Definition `json:"definition"`
+		DefinitionDigest evidence.Digest   `json:"definition_digest"`
+		Preparation      json.RawMessage   `json:"preparation"`
+		ServiceConfig    json.RawMessage   `json:"service_config"`
+		Experiments      [][]struct {
+			App      json.RawMessage `json:"App"`
+			Observer json.RawMessage `json:"Observer"`
+		} `json:"experiments"`
 	}
-	if err := json.Unmarshal(preview, &plans); err != nil {
+	if err := json.Unmarshal(preview, &frozen); err != nil {
 		t.Fatal(err)
 	}
 	planID := func(raw json.RawMessage) string {
@@ -99,6 +109,53 @@ func receipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, change fu
 		}
 		return fmt.Sprintf("sha256:%x", sha256.Sum256(b))
 	}
+	var serviceConfig bytes.Buffer
+	if err := json.Compact(&serviceConfig, frozen.ServiceConfig); err != nil {
+		t.Fatal(err)
+	}
+	launcher := syntheticStaticELF()
+	launcherArtifact, err := s.PutArtifact(launcher, "launcher-executable", 8<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diagnostics, err := s.PutArtifact(nil, "preparation-diagnostics", 64<<10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var preparation struct {
+		Version          int             `json:"version"`
+		Status           string          `json:"status"`
+		Plan             string          `json:"plan"`
+		DefinitionDigest evidence.Digest `json:"definition_digest"`
+		Platform         string          `json:"platform"`
+		Image            string          `json:"image"`
+		ExitCode         int             `json:"exit_code"`
+		Cleaned          bool            `json:"cleaned"`
+		Truncated        bool            `json:"truncated"`
+		Launcher         evidence.Digest `json:"launcher_digest"`
+		Bytes            int             `json:"launcher_bytes"`
+	}
+	var preparationTemplate struct {
+		Image    string `json:"image"`
+		Platform string `json:"platform"`
+	}
+	if err := json.Unmarshal(frozen.Preparation, &preparationTemplate); err != nil {
+		t.Fatal(err)
+	}
+	preparation = struct {
+		Version          int             `json:"version"`
+		Status           string          `json:"status"`
+		Plan             string          `json:"plan"`
+		DefinitionDigest evidence.Digest `json:"definition_digest"`
+		Platform         string          `json:"platform"`
+		Image            string          `json:"image"`
+		ExitCode         int             `json:"exit_code"`
+		Cleaned          bool            `json:"cleaned"`
+		Truncated        bool            `json:"truncated"`
+		Launcher         evidence.Digest `json:"launcher_digest"`
+		Bytes            int             `json:"launcher_bytes"`
+	}{1, "completed", planID(frozen.Preparation), frozen.DefinitionDigest, preparationTemplate.Platform, preparationTemplate.Image, 0, true, false, launcherArtifact.Content, len(launcher)}
+	preparationArtifact := artifact(t, s, preparation, "preparation-result")
 	denied, err := (runner.Executor{}).Run(t.Context(), s, p, "not approved")
 	if err == nil {
 		t.Fatal("expected denial")
@@ -107,24 +164,71 @@ func receipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, change fu
 	r.ID = ""
 	r.Completeness = evidence.Complete
 	r.State = evidence.EvidenceState{Producer: evidence.Runner, Kind: evidence.Observed, Execution: evidence.Completed, Applicability: evidence.Current, Comparison: evidence.NotCompared, Report: evidence.NoReport}
-	r.Artifacts = r.Artifacts[:2]
+	r.Artifacts = append(r.Artifacts[:2], diagnostics, launcherArtifact, preparationArtifact)
+	var appPlans [2][]string
+	var observerPlans [2][]string
+	for sideIndex, side := range []string{"base", "candidate"} {
+		snapshotID := pair.Base
+		if side == "candidate" {
+			snapshotID = pair.Candidate
+		}
+		snapshot, err := store.Get[evidence.Snapshot](s, snapshotID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := make(map[string][]byte, len(snapshot.Files))
+		for _, file := range snapshot.Files {
+			files[file.Path], err = s.ReadBlob(file.Content)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		for caseIndex := range frozen.Definition.Cases {
+			var appTemplate struct {
+				Argv           []string                `json:"argv"`
+				Image          string                  `json:"image"`
+				Platform       string                  `json:"platform"`
+				Limits         sandbox.Limits          `json:"limits"`
+				GeneratedSlots []sandbox.GeneratedFile `json:"generated_slots"`
+			}
+			if err := json.Unmarshal(frozen.Experiments[sideIndex][caseIndex].App, &appTemplate); err != nil {
+				t.Fatal(err)
+			}
+			plan, err := sandbox.PrepareTemplate(string(snapshotID), files, appTemplate.Argv, appTemplate.Limits, appTemplate.Image, appTemplate.Platform, appTemplate.GeneratedSlots)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, templateID := plan.Preview()
+			if templateID != planID(frozen.Experiments[sideIndex][caseIndex].App) {
+				t.Fatalf("reconstructed template mismatch: got %s want %s", templateID, planID(frozen.Experiments[sideIndex][caseIndex].App))
+			}
+			materialized, err := plan.Materialize(map[string][]byte{"after/launcher": launcher, "after/service.json": serviceConfig.Bytes()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, appPlanID := materialized.Preview()
+			appPlans[sideIndex] = append(appPlans[sideIndex], appPlanID)
+			observerPlans[sideIndex] = append(observerPlans[sideIndex], planID(frozen.Experiments[sideIndex][caseIndex].Observer))
+		}
+	}
 	for rep := 0; rep < 2; rep++ {
 		for sideIndex, side := range []string{"base", "candidate"} {
-			for caseIndex, sec := range []int64{43200, 30} {
-				prefix := fmt.Sprintf("%s/%d/%d/", side, sec, rep)
-				o := runner.Observation{Version: 1, Seconds: sec, Responses: []runner.Response{{Status: 200, Body: `{"payment":"synthetic-accepted"}`}, {Status: 200, Body: `{"payment":"synthetic-accepted"}`}}, Calls: []runner.Call{{At: 1735689600, Method: "POST", Path: "/charges", Key: "synthetic-key-a", Body: `{"amount_cents":1200,"currency":"USD"}`}}}
-				if side == "candidate" && sec == 43200 {
+			for caseIndex, scenarioCase := range frozen.Definition.Cases {
+				seconds := runner.CaseDuration(scenarioCase)
+				prefix := fmt.Sprintf("%s/%s/%d/", side, scenarioCase.ID, rep)
+				o := runner.Observation{Version: 1, CaseID: scenarioCase.ID, Seconds: seconds, Responses: []runner.Response{{Status: 200, Body: `{"payment":"synthetic-accepted"}`}, {Status: 200, Body: `{"payment":"synthetic-accepted"}`}}, Calls: []runner.Call{{At: 1735689600, Endpoint: "provider", Destination: "127.0.0.1:18082", Method: "POST", Path: "/charges", Key: "synthetic-key-a", Body: `{"amount_cents":1200,"currency":"USD"}`}}}
+				if side == "candidate" && scenarioCase.ID == "43200" {
 					call := o.Calls[0]
-					call.At += sec
+					call.At += seconds
 					o.Calls = append(o.Calls, call)
 				}
 				if change != nil {
 					change(&o, side, rep)
 				}
 				a := artifact(t, s, o, prefix+"observation")
-				m := runner.Sample{RequestID: r.RequestID, Snapshots: pair, Side: side, CaseSeconds: sec, Repetition: rep, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt, Status: "completed", Execution: sandbox.ExperimentResult{App: sandbox.Result{Cleaned: true}, Observer: sandbox.Result{Cleaned: true}}, Artifacts: []evidence.Artifact{a}}
-				m.Execution.App.Plan = planID(plans.Experiments[sideIndex][caseIndex].App)
-				m.Execution.Observer.Plan = planID(plans.Experiments[sideIndex][caseIndex].Observer)
+				m := runner.Sample{RequestID: r.RequestID, Snapshots: pair, Side: side, CaseID: scenarioCase.ID, CaseSeconds: seconds, Repetition: rep, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt, Status: "completed", Execution: sandbox.ExperimentResult{App: sandbox.Result{Cleaned: true}, Observer: sandbox.Result{Cleaned: true}}, Artifacts: []evidence.Artifact{a}}
+				m.Execution.App.Plan = appPlans[sideIndex][caseIndex]
+				m.Execution.Observer.Plan = observerPlans[sideIndex][caseIndex]
 				if mutate != nil {
 					mutate(&m)
 				}
@@ -133,6 +237,29 @@ func receipt(t *testing.T, s *store.Store, pair evidence.SnapshotPair, change fu
 		}
 	}
 	return r
+}
+
+func syntheticStaticELF() []byte {
+	data := make([]byte, 120)
+	copy(data[:4], []byte{0x7f, 'E', 'L', 'F'})
+	data[4], data[5], data[6] = 2, 1, 1
+	binary.LittleEndian.PutUint16(data[16:18], 2)
+	machine := uint16(62)
+	if runtime.GOARCH == "arm64" {
+		machine = 183
+	}
+	binary.LittleEndian.PutUint16(data[18:20], machine)
+	binary.LittleEndian.PutUint32(data[20:24], 1)
+	binary.LittleEndian.PutUint64(data[32:40], 64)
+	binary.LittleEndian.PutUint16(data[52:54], 64)
+	binary.LittleEndian.PutUint16(data[54:56], 56)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	binary.LittleEndian.PutUint32(data[64:68], 1)
+	binary.LittleEndian.PutUint32(data[68:72], 5)
+	binary.LittleEndian.PutUint64(data[96:104], uint64(len(data)))
+	binary.LittleEndian.PutUint64(data[104:112], uint64(len(data)))
+	binary.LittleEndian.PutUint64(data[112:120], 4096)
+	return data
 }
 func result(t *testing.T, s *store.Store, r evidence.Receipt) (evidence.Comparison, Report) {
 	t.Helper()
@@ -171,7 +298,7 @@ func checkPayment(t *testing.T, c evidence.Comparison, r Report) {
 		}
 		if w.Outcome == evidence.Different {
 			changed++
-			if w.Relation != "paired" || w.Channel != "provider" || w.Before.Seconds != 43200 {
+			if w.Relation != "paired" || w.Channel != "provider_calls" || w.Before.Seconds != 43200 {
 				t.Fatalf("wrong changed channel: %+v", w)
 			}
 			found := false
@@ -387,6 +514,72 @@ func TestIncomparable(t *testing.T) {
 		})
 	}
 }
+func pythonServiceSetup(t *testing.T) (*store.Store, evidence.SnapshotPair) {
+	t.Helper()
+	s, err := store.Open(t.TempDir(), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	diff, err := s.PutArtifact([]byte("synthetic Python service source change"), "raw-diff", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseSource, err := os.ReadFile("../runner/testdata/python-service/app.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair := evidence.SnapshotPair{}
+	for _, side := range []string{"base", "candidate"} {
+		source := append([]byte(nil), baseSource...)
+		if side == "candidate" {
+			source = append(source, []byte("\n# candidate snapshot\n")...)
+		}
+		blob, err := s.PutArtifact(source, "source", maxJSON)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot := put(t, s, evidence.Snapshot{SchemaVersion: 1, Source: evidence.WorkingTree, Unborn: true, Files: []evidence.File{{Path: "app.py", Content: blob.Content, Mode: "100644"}}, Completeness: evidence.Complete, Diff: diff.Content})
+		if side == "base" {
+			pair.Base = snapshot.ID
+		} else {
+			pair.Candidate = snapshot.ID
+		}
+	}
+	return s, pair
+}
+
+func TestPythonHTTPServiceProof(t *testing.T) {
+	if os.Getenv("AFTER_HTTP_PROOF") != "1" {
+		t.Skip("task http-service:proof authorizes the separate Python image")
+	}
+	s, pair := pythonServiceSetup(t)
+	definition, err := os.ReadFile("../runner/testdata/python-service/http-service.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := runner.PrepareDefinition(s, pair, definition, runner.DefinitionSource{Kind: "operator-selected-file"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, approval := plan.Preview()
+	t.Logf("Approved synthetic Python HTTP-service plan %s: %s", approval, preview)
+	run, err := (runner.Executor{Docker: sandbox.Docker{Binary: os.Getenv("AFTER_DOCKER_BINARY"), Host: os.Getenv("AFTER_DOCKER_HOST")}}).Run(t.Context(), s, plan, approval)
+	if err != nil || run.Receipt.Completeness != evidence.Complete || len(run.Samples) != 2 {
+		t.Fatalf("Python service run incomplete: %+v %v", run.Receipt, err)
+	}
+	comparison, report := result(t, s, run.Receipt)
+	if comparison.Outcome != evidence.Equal || comparison.Completeness != evidence.Complete || report.DefinitionName != "python-stdlib-echo" || report.BuiltInPayment || len(report.Cases) != 1 || report.Cases[0] != "echo" || len(report.Channels) != 2 || len(report.Witnesses) != 2 {
+		t.Fatalf("Python service comparison incorrect: %+v %+v", comparison, report)
+	}
+	for _, witness := range report.Witnesses {
+		if witness.Relation != "paired" || witness.Outcome != evidence.Equal || witness.Before.CaseID != "echo" || witness.Channel != "responses" && witness.Channel != "provider_calls" {
+			t.Fatalf("Python witness mismatch: %+v", witness)
+		}
+	}
+	t.Logf("real Python stdlib service on its pinned image: equal responses and one recorded fake-upstream call per side")
+}
+
 func TestComparisonProof(t *testing.T) {
 	if os.Getenv("AFTER_COMPARISON_PROOF") != "1" {
 		t.Skip("task comparison:proof authorizes synthetic Docker execution")

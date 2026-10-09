@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "kind": "http-service",
+  "name": "python-stdlib-echo",
+  "platform": "linux/arm64",
+  "image": "docker.io/library/python@sha256:cf97c3b79da1c706532c7042f851654d97d3b88c8ca6520acda9cf4479ea9b14",
+  "build_argv": [],
+  "start_argv": [
+    "/usr/local/bin/python3",
+    "/input/app.py",
+    "http://127.0.0.1:18081",
+    "http://127.0.0.1:18082"
+  ],
+  "environment": [],
+  "readiness": {
+    "protocol": "fd3-http-url-v1",
+    "timeout_seconds": 20
+  },
+  "epoch": 1735689600,
+  "upstreams": [
+    { "name": "clock", "kind": "clock", "port": 18081 },
+    {
+      "name": "provider",
+      "kind": "recording",
+      "port": 18082,
+      "response_status": 200,
+      "response_body": "{\"echo\":\"ok\"}"
+    }
+  ],
+  "cases": [
+    {
+      "id": "echo",
+      "title": "stdlib echo records one fake provider call",
+      "requests": [
+        {
+          "after_seconds": 0,
+          "method": "POST",
+          "path": "/echo",
+          "headers": { "Content-Type": "text/plain", "Idempotency-Key": "python-fixture-key" },
+          "body": "hello from Python stdlib"
+        }
+      ]
+    }
+  ],
+  "channels": ["responses", "provider_calls"],
+  "repetitions": 1,
+  "limits": {
+    "seconds": 180,
+    "output_bytes": 65536,
+    "preparation_seconds": 90
+  }
+}

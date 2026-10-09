@@ -35,7 +35,7 @@ func TestMissingCapabilities(t *testing.T) {
 				t.Fatal(err)
 			}
 			d := Docker{Binary: binary, Host: "unix:///synthetic.sock"}
-			if err := d.preflight(context.Background(), dir, Image); err == nil || !strings.Contains(err.Error(), "isolation unavailable") {
+			if err := d.preflight(context.Background(), dir, Image, "linux/arm64"); err == nil || !strings.Contains(err.Error(), "isolation unavailable") {
 				t.Fatalf("missing capability did not fail closed: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(dir, "unexpected")); !errors.Is(err, os.ErrNotExist) {
