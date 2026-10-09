@@ -2,6 +2,8 @@
 
 `internal/capture.Capture(ctx, repositoryRoot, store, options)` stores bounded Git snapshots and a normal diff. Capture reads source files; it never builds, tests, runs project commands, or creates an execution receipt.
 
+Snapshot IDs include the paired diff: changing the candidate can change the base snapshot ID without changing its Git commit. The `Base commit` row identifies that stable commit.
+
 ## Modes and paths
 
 | Mode                                       | Compared content                                                        | Notes                                                                                     |

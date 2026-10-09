@@ -30,6 +30,7 @@ type snapshotSummary struct {
 	Unsupported  int                   `json:"unsupported"`
 	Diff         evidence.Digest       `json:"diff"`
 	Limits       []string              `json:"limits"`
+	Commit       string                `json:"commit,omitempty"`
 }
 
 type inspectionCardReference struct {
@@ -324,6 +325,9 @@ func readableLines(state *invocation, kind string, raw []byte, original any) ([]
 		}
 		lines := []readableLine{textLine(fmt.Sprintf("Captured candidate %s (%s) against base %s (%s)", shortID(result.Candidate.ID), sourceName(result.Candidate.Source, ""), shortID(result.Base.ID), sourceName(result.Base.Source, "")), terminal.Strong)}
 		lines = appendSnapshotSummary(lines, "Base", result.Base)
+		if result.Base.Commit != "" {
+			lines = append(lines, fullLine(readableRow("Base commit", result.Base.Commit).text))
+		}
 		lines = appendSnapshotSummary(lines, "Candidate", result.Candidate)
 		lines = appendLimits(lines, result.Base.Limits)
 		lines = appendLimits(lines, result.Candidate.Limits)
@@ -1314,7 +1318,7 @@ func planInspectionLines(state *invocation, view planInspection) []readableLine 
 // (for example, both snapshots of a pair) carry the same limitation.
 func appendLimits(lines []readableLine, limits []string) []readableLine {
 	for _, limit := range limits {
-		row := readableRow("Limit", limit)
+		row := fullLine(readableRow("Limit", limit).text)
 		duplicate := false
 		for _, line := range lines {
 			if line.text == row.text {

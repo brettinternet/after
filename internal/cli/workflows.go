@@ -269,7 +269,7 @@ func captureCommand(state *invocation, ctx *ucli.Context) error {
 		return captureFailure(err)
 	}
 	summary := func(snapshot evidence.Snapshot) snapshotSummary {
-		return snapshotSummary{snapshot.ID, snapshot.Source, snapshot.Completeness, len(snapshot.Files), len(snapshot.Excluded), len(snapshot.Unsupported), snapshot.Diff, append([]string(nil), snapshot.Limits...)}
+		return snapshotSummary{snapshot.ID, snapshot.Source, snapshot.Completeness, len(snapshot.Files), len(snapshot.Excluded), len(snapshot.Unsupported), snapshot.Diff, append([]string(nil), snapshot.Limits...), snapshot.Commit}
 	}
 	var index *snapshotSummary
 	if result.Index != nil {

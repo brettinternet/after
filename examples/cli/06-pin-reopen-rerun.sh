@@ -40,6 +40,8 @@ candidate=$(short "$(after_json 0 status | jq -r .data.candidate_snapshot.id)")
 decide "$(pin_head)" --select "$candidate" --mode original_base --reason "Review the retention fix"
 note "Stale and missing: AFTER does not predict the fix's behavior from old receipts."
 
+note "Same base commit, new snapshot ID: snapshots include the paired diff. The pin keeps its original base."
+
 step "Rerun the pin's pair: its original base versus the fixed candidate"
 run_note
 after 0 run "$base" "$candidate"

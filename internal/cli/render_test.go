@@ -227,7 +227,7 @@ func readableGoldenCases() []readableGoldenCase {
 				Apply:       "export AFTER_DOCKER_BINARY=/usr/local/bin/docker AFTER_DOCKER_HOST=unix:///var/run/docker.sock",
 			}}},
 		{"capture", "capture", captureOutput{
-			Base:      snapshotSummary{ID: idA, Source: evidence.Commit, Completeness: evidence.Complete, Files: 3, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}},
+			Base:      snapshotSummary{ID: idA, Source: evidence.Commit, Commit: strings.Repeat("a", 40), Completeness: evidence.Complete, Files: 3, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}},
 			Candidate: snapshotSummary{ID: idB, Source: evidence.WorkingTree, Completeness: evidence.Complete, Files: 4, Excluded: 1, Limits: []string{"two matching reads; not an atomic filesystem snapshot"}},
 			Index:     &snapshotSummary{ID: idC, Source: evidence.Index, Completeness: evidence.Complete, Files: 3},
 			Next:      []nextCommand{next("after review", "open a review of this change"), next("after diff --stored", "print this captured patch")},
@@ -404,8 +404,8 @@ func TestReadableOutputGoldens(t *testing.T) {
 				t.Fatalf("readable output differs: %s; regenerate explicitly with -update\n%s", path, got)
 			}
 			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
-				// Copyable Next commands are never clipped.
-				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 && !strings.HasPrefix(line, "  after ") && !strings.HasPrefix(line, "  export ") {
+				// Copyable commands and evidence qualifications are never clipped.
+				if !strings.HasPrefix(line, "sha256:") && uniseg.StringWidth(line) > 80 && !strings.HasPrefix(line, "  after ") && !strings.HasPrefix(line, "  export ") && !strings.HasPrefix(line, "  Limit ") {
 					t.Errorf("golden exceeds 80 columns: %q", line)
 				}
 			}
@@ -570,13 +570,14 @@ func TestReadableHostileContentColorClippingAndInspectIDs(t *testing.T) {
 		t.Fatalf("full inspection ID was clipped: %q", wide.stdout.(*bytes.Buffer).String())
 	}
 
-	long := strings.Repeat("x", 300)
+	long := strings.Repeat("界x", 2000) + "\x1b[31m\nfinal qualification"
 	clipData := struct {
 		Base      snapshotSummary  `json:"base_snapshot"`
 		Candidate snapshotSummary  `json:"candidate_snapshot"`
 		Index     *snapshotSummary `json:"index_snapshot,omitempty"`
 	}{Base: snapshotSummary{ID: goldenDigest("a"), Source: evidence.Commit, Completeness: evidence.Complete, Limits: []string{}}, Candidate: snapshotSummary{ID: goldenDigest("b"), Source: evidence.WorkingTree, Completeness: evidence.Complete, Limits: []string{long}}}
 	clipped := goldenState()
+	clipped.columns = 30
 	if err := writeReadable(clipped, "capture", clipData); err != nil {
 		t.Fatal(err)
 	}
@@ -584,8 +585,10 @@ func TestReadableHostileContentColorClippingAndInspectIDs(t *testing.T) {
 	if err := writeReadable(pipe, "capture", clipData); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(clipped.stdout.(*bytes.Buffer).String(), long) || !strings.Contains(pipe.stdout.(*bytes.Buffer).String(), long) {
-		t.Fatal("readable output clipping did not depend on stdout terminal state")
+	for _, output := range []string{clipped.stdout.(*bytes.Buffer).String(), pipe.stdout.(*bytes.Buffer).String()} {
+		if !strings.Contains(output, terminal.Sanitize(long)) || strings.ContainsAny(output, "\x1b\a") {
+			t.Fatalf("limit text was lost or unsafe: %q", output)
+		}
 	}
 }
 
