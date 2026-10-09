@@ -41,25 +41,31 @@ func jsonPart(title string, value any) Part {
 	if err != nil {
 		return textPart(title, "Content unavailable; no conclusion is drawn.")
 	}
-	return Part{Title: title, Content: raw}
+	return Part{Title: title, Content: raw, detail: true}
 }
 
 func recordPart(s *store.Store, kind string, id evidence.Digest, title string) Part {
 	raw, err := store.ReadRawRecord(s, kind, id)
 	if err != nil {
-		return textPart(title, "Exact stored record bytes unavailable; ID remains reachable: "+string(id))
+		part := textPart(title, "Exact stored record bytes unavailable; ID remains reachable: "+string(id))
+		part.detail = true
+		return part
 	}
-	return Part{Title: title, Content: raw}
+	return Part{Title: title, Content: raw, detail: true}
 }
 
 func blobPart(s *store.Store, id evidence.Digest, title string, format documentFormat) Part {
 	if id == "" {
-		return textPart(title, "No content ID was recorded.")
+		part := textPart(title, "No content ID was recorded.")
+		part.detail = true
+		return part
 	}
 	if _, err := s.ReadBlob(id); err != nil {
-		return textPart(title, "Referenced content was not retained as a readable artifact; content ID: "+string(id))
+		part := textPart(title, "Referenced content was not retained as a readable artifact; content ID: "+string(id))
+		part.detail = true
+		return part
 	}
-	return Part{Title: title, Blob: id, format: format}
+	return Part{Title: title, Blob: id, format: format, detail: true}
 }
 
 func idsSection(ids []evidence.Digest) Section {
@@ -491,7 +497,12 @@ func redactText(redacted bool) string {
 }
 
 func receiptCard(receipt evidence.Receipt, scenario *evidence.Scenario, comparison *evidence.Comparison, report *compare.Report, commandSummary *commandview.Presentation) Section {
-	parts := []Part{textPart("Outcome", fmt.Sprintf("%s · %s · %s · %s", receipt.State.Kind, receipt.State.Execution, receipt.State.Comparison, receipt.Completeness))}
+	// A receipt records not_compared; its stored comparison carries the outcome.
+	outcome := receipt.State.Comparison
+	if comparison != nil {
+		outcome = comparison.Outcome
+	}
+	parts := []Part{textPart("Outcome", fmt.Sprintf("%s · %s · %s · %s", receipt.State.Kind, receipt.State.Execution, outcome, receipt.Completeness))}
 	if commandSummary != nil {
 		parts = append(parts, textPart("Command changes", strings.Join(commandSummary.Lines, "\n")))
 		if commandSummary.More {
@@ -619,6 +630,25 @@ func reportCardParts(card reportCardView) []Part {
 		textPart("Expected values", card.ExpectedValues),
 		textPart("Effects", card.Effects),
 	}
+}
+
+// reportStatus summarizes document completeness and diagnostic codes. A card's
+// own closed outcome does not make an incomplete report complete.
+func reportStatus(report gotestreport.Report) string {
+	text := string(report.Completeness)
+	if len(report.Diagnostics) == 0 && report.SuppressedDiagnostics == 0 {
+		return text + " · no diagnostics"
+	}
+	const shown = 3
+	codes := []string{}
+	for _, diagnostic := range report.Diagnostics[:min(shown, len(report.Diagnostics))] {
+		codes = append(codes, fmt.Sprintf("%s (line %d)", diagnostic.Code, diagnostic.Line))
+	}
+	text += " · " + strings.Join(codes, ", ")
+	if more := len(report.Diagnostics) - len(codes) + report.SuppressedDiagnostics; more > 0 {
+		text += fmt.Sprintf(" and %d more", more)
+	}
+	return text
 }
 
 type reportCardView struct {

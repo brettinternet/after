@@ -10,14 +10,14 @@ Card · sha256:b1e86b2c3b9d4413880f5b142b393d2a864ddecf3020d32d2f9f7bade4b4382a
   Scope
     synthetic; no project execution
   Scenario
-    sha256:26329bf9e617c0828cfcddc6e33ccdbb4215e58b929d4ccdc67da745c72d5e61 · 
-    input 
-    sha256:cb9a0724ed6afd76638656823191cd71cf499b454a088472b5dd3a4f707ff3f1 · 
-    driver 
-    sha256:5917e7ecdf6167b6f1c90151690dc434874d99b5580a55d2a3ce32c6ec703858 · 
-    observer 
-    sha256:65a43906b3c3a3e140ce95037101b2d13deef1dce7b7787dd189bae326784ded · 
-    rules 
+    sha256:26329bf9e617c0828cfcddc6e33ccdbb4215e58b929d4ccdc67da745c72d5e61 ·
+    input
+    sha256:cb9a0724ed6afd76638656823191cd71cf499b454a088472b5dd3a4f707ff3f1 ·
+    driver
+    sha256:5917e7ecdf6167b6f1c90151690dc434874d99b5580a55d2a3ce32c6ec703858 ·
+    observer
+    sha256:65a43906b3c3a3e140ce95037101b2d13deef1dce7b7787dd189bae326784ded ·
+    rules
     sha256:36bea88d66d213f528cef2db58027a618128d373b66feff585b409dc26de4d39
   Boundary
     synthetic offline fixture

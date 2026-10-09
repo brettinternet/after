@@ -8,8 +8,8 @@ Card · TestRetry
   Producer
     go test JSON fixture
   Bound to
-    candidate 
-    sha256:c79b5b8eb26e7c9fa980226a677c0e08e559c282ff678cdc1584a0e1f3259a2f 
+    candidate
+    sha256:c79b5b8eb26e7c9fa980226a677c0e08e559c282ff678cdc1584a0e1f3259a2f
     (caller-supplied; a digest is not a signature)
   Events
     2026-01-02T10:30:00Z–2026-01-02T10:30:02Z (2s)
@@ -19,37 +19,12 @@ Card · TestRetry
     unavailable
   Effects
     unavailable
+  Report
+    complete · no diagnostics
   Output
   reported output
     synthetic output
-    
-  Report
-  report metadata
-    {
-      "metadata": {
-        "producer": "go test JSON fixture",
-        "snapshot": 
-    "sha256:c79b5b8eb26e7c9fa980226a677c0e08e559c282ff678cdc1584a0e1f3259a2f",
-        "imported_at": "2026-01-02T10:30:00Z"
-      },
-      "completeness": "complete",
-      "diagnostics": [],
-      "suppressed_diagnostics": 0
-    }
-  complete imported report
-    {"schema_version":1,"dialect":"go-test-json-v1","metadata":{"producer":"go 
-    test JSON 
-    fixture","snapshot":"sha256:c79b5b8eb26e7c9fa980226a677c0e08e559c282ff678cdc
-    1584a0e1f3259a2f","imported_at":"2026-01-02T10:30:00Z"},"original_digest":"s
-    ha256:e58b5fee29ed7b42a5c73e5665e8b4c2413803645107b9ccbee1c7ab2d93155f","ori
-    ginal_bytes":331,"cards":[{"package":"example.invalid/cart","test":"TestRetr
-    y","scope":"test","attempt":1,"state":{"producer":"importer","kind":"reporte
-    d","applicability":"unknown","execution":"not_run","comparison":"not_compare
-    d","report":"pass"},"output":"synthetic 
-    output\n","output_truncated":false,"first_event_at":"2026-01-02T10:30:00Z","
-    last_event_at":"2026-01-02T10:30:02Z","inputs":"unavailable","expected_value
-    s":"unavailable","effects":"unavailable"}],"completeness":"complete","diagno
-    stics":[],"suppressed_diagnostics":0}
+Exact records and artifacts are omitted here; add --json, inspect an ID below, or open after review
 IDs
 sha256:3f76b06c014375d24e9b9ecb8c8ede0431a063a4c99a0fe916838b3152d0ca39
 sha256:e58b5fee29ed7b42a5c73e5665e8b4c2413803645107b9ccbee1c7ab2d93155f

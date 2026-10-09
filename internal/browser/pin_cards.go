@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/review"
@@ -24,7 +25,7 @@ func pinSections(s *store.Store, id evidence.Digest, pin evidence.Pin, view revi
 		textPart("Expectation", pin.Expectation+" (your words; AFTER does not evaluate them)"),
 		textPart("Scope", fmt.Sprintf("%s · basis receipt %s", pin.Scope, shortID(pin.BasisReceipt))),
 		textPart("Reviewing", fmt.Sprintf("%s %s → %s", reviewModeLabel(last.Review.Mode), shortID(target.Snapshots.Base), shortID(target.Snapshots.Candidate))),
-		textPart("Reopened", view.Reason),
+		textPart("Evidence", fmt.Sprintf("%s · %s", view.Applicability, view.Reason)),
 		textPart("Current", current),
 	)
 	sections := []Section{card}
@@ -37,7 +38,13 @@ func pinSections(s *store.Store, id evidence.Digest, pin evidence.Pin, view revi
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		historyParts = append(historyParts, Part{Title: fmt.Sprintf("history · event %d · %s", index+1, event.Decision), Content: eventRaw})
+		summary := event.At.Format(time.RFC3339) + " · " + event.Reason
+		if event.Review != nil && event.Review.Receipt != "" {
+			summary += " · receipt " + shortID(event.Review.Receipt)
+		}
+		historyParts = append(historyParts,
+			textPart(fmt.Sprintf("event %d · %s", index+1, event.Decision), summary),
+			Part{Title: fmt.Sprintf("history · event %d · %s", index+1, event.Decision), Content: eventRaw, detail: true})
 		if event.Review == nil {
 			continue
 		}

@@ -55,7 +55,14 @@ type Part struct {
 	Blob    evidence.Digest
 	format  documentFormat
 	columns *cardColumns
+	detail  bool
 }
+
+// Detail reports whether the part holds an exact stored record, artifact or
+// JSON document rather than card text. Readable CLI cards omit detail parts;
+// the TUI and --json output keep them.
+func (p Part) Detail() bool { return p.detail }
+
 type cardColumns struct {
 	leftLabel, left, rightLabel, right string
 }
@@ -503,7 +510,7 @@ func loadEvidence(s *store.Store, id evidence.Digest, pair evidence.SnapshotPair
 		}
 		ids := []evidence.Digest{id, report.OriginalDigest, report.Metadata.Snapshot}
 		sections := []Section{
-			cardSection(reportCardParts(cardView)...),
+			cardSection(append(reportCardParts(cardView), textPart("Report", reportStatus(report)))...),
 			{Name: "Output", Parts: []Part{{Title: "reported output", Content: []byte(card.Output)}}},
 			{Name: "Report", Parts: []Part{summary, blobPart(s, id, "complete imported report", formatVerbatim)}},
 			idsSection(ids),

@@ -89,6 +89,7 @@ func cardInspectionLines(state *invocation, id evidence.Digest) ([]readableLine,
 	columns := min(max(state.columns, 40), 240)
 	lines := make([]readableLine, 0, 24)
 	ids := []evidence.Digest{}
+	omitted := false
 	for _, entry := range entries {
 		if len(entry.Sections) == 0 || entry.Sections[0].Name != "Card" {
 			continue
@@ -99,10 +100,23 @@ func cardInspectionLines(state *invocation, id evidence.Digest) ([]readableLine,
 			if section.Name == "IDs" {
 				continue
 			}
+			// Readable cards summarize; exact records and artifacts stay
+			// available through --json, inspect ID and the TUI.
+			parts := make([]browser.Part, 0, len(section.Parts))
+			for _, part := range section.Parts {
+				if part.Detail() {
+					omitted = true
+				} else {
+					parts = append(parts, part)
+				}
+			}
+			if len(parts) == 0 {
+				continue
+			}
 			if section.Name != "Card" {
 				lines = append(lines, textLine("  "+section.Name, terminal.Strong))
 			}
-			for _, part := range section.Parts {
+			for _, part := range parts {
 				if part.Title != "" {
 					lines = append(lines, textLine("  "+part.Title, terminal.Strong))
 				}
@@ -111,9 +125,14 @@ func cardInspectionLines(state *invocation, id evidence.Digest) ([]readableLine,
 					lines = append(lines, textLine("    Card content unavailable", terminal.Attention))
 					continue
 				}
-				for _, paragraph := range strings.Split(string(content), "\n") {
+				text := strings.TrimRight(string(content), "\n")
+				if text == "" {
+					lines = append(lines, textLine("    (empty)", terminal.Muted))
+					continue
+				}
+				for _, paragraph := range strings.Split(text, "\n") {
 					for _, line := range terminal.Wrap(paragraph, columns-4) {
-						lines = append(lines, textLine("    "+line, terminal.Plain))
+						lines = append(lines, textLine(strings.TrimRight("    "+line, " "), terminal.Plain))
 					}
 				}
 			}
@@ -121,6 +140,9 @@ func cardInspectionLines(state *invocation, id evidence.Digest) ([]readableLine,
 	}
 	if len(lines) == 0 {
 		return nil, false
+	}
+	if omitted {
+		lines = append(lines, textLine("Exact records and artifacts are omitted here; add --json, inspect an ID below, or open after review", terminal.Muted))
 	}
 	return addIDs(lines, ids...), true
 }
@@ -662,6 +684,9 @@ func suggestedNext(state *invocation, kind string, raw []byte, original any) []n
 		}
 	case "comparison":
 		var result comparisonResult
+		if inspection, ok := original.(comparisonResult); ok && inspection.InspectCard && inspection.Comparison.Receipt != "" {
+			return []nextCommand{next("after pin "+string(inspection.Comparison.Receipt), "pin an expectation from this run")}
+		}
 		if json.Unmarshal(raw, &result) == nil && result.Comparison.ID != "" {
 			return []nextCommand{next("after inspect "+string(result.Comparison.ID), "inspect the stored comparison")}
 		}
@@ -700,7 +725,7 @@ func suggestedNext(state *invocation, kind string, raw []byte, original any) []n
 	case "review":
 		var data review.View
 		if json.Unmarshal(raw, &data) == nil && data.Pin.ID != "" {
-			return []nextCommand{next("after pin "+string(data.Pin.ID), "inspect this exact pin revision")}
+			return []nextCommand{next("after review "+string(data.Pin.ID), "browse this pin revision and its evidence")}
 		}
 	case "configuration":
 		return []nextCommand{next("after --help", "see available commands")}
@@ -768,7 +793,7 @@ func reportLines(state *invocation, report reportViewData) []readableLine {
 	producer := report.Metadata.Producer
 	if producer == "" {
 		lines = append(lines, readableRow("Producer", "not stated"))
-		lines = append(lines, textLine("             add --producer TEXT to record a caller claim", terminal.Muted))
+		lines = append(lines, textLine("               add --producer TEXT to record a caller claim", terminal.Muted))
 	} else {
 		lines = append(lines, readableRow("Producer", producer+" · caller claim, unverified"))
 	}
@@ -777,7 +802,7 @@ func reportLines(state *invocation, report reportViewData) []readableLine {
 		lines = append(lines, readableRow("Binding", "not supplied"))
 	} else {
 		lines = append(lines, readableRow("Binding", shortID(report.Metadata.Snapshot)+" · caller claim"))
-		lines = append(lines, textLine("             not proof of where tests ran", terminal.Muted))
+		lines = append(lines, textLine("               not proof of where tests ran", terminal.Muted))
 	}
 	if report.Metadata.CapturedAt != nil {
 		lines = append(lines, readableRow("Test time", state.formatTime(*report.Metadata.CapturedAt)+" · caller-supplied"))

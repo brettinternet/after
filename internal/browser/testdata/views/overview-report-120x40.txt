@@ -34,7 +34,7 @@
                                                        │ ── Effects ──
                                                        │ unavailable
                                                        │ 
-                                                       │ 
-                                                       │ 
+                                                       │ ── Report ──
+                                                       │ complete · no diagnostics
   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Enter opens the full record                                                                                   ? help

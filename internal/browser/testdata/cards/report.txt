@@ -1,6 +1,6 @@
    AFTER   003   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
   Overview  ›  TestFreeShippingThreshold                                                                    [REPORTED]
-  [Card]   Output   Report   IDs                                                                           1/4 · 393 B
+  [Card]   Output   Report   IDs                                                                           1/4 · 419 B
   ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
   ── Package ──
@@ -31,8 +31,8 @@
   ── Effects ──
   │ unavailable
 
-
-
+  ── Report ──
+  │ complete · no diagnostics
 
 
 

@@ -1,9 +1,9 @@
 Imported report cccccccc · 2 pass · 1 fail · 0 skip
   Producer     not stated
-             add --producer TEXT to record a caller claim
+               add --producer TEXT to record a caller claim
   Imported     12:31:00
   Binding      bbbbbbbb · caller claim
-             not proof of where tests ran
+               not proof of where tests ran
   Capture      working tree captured at import
   Untracked    1 path excluded; tests may have used them
 Reported in go test JSON; AFTER did not run or observe these tests

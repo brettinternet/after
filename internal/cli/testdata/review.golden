@@ -12,5 +12,5 @@ sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 Next
-  after pin sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-    inspect this exact pin revision
+  after review sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    browse this pin revision and its evidence

@@ -522,6 +522,9 @@ func inspectCommand(state *invocation, ctx *ucli.Context, exporting bool) error 
 	defer s.Close()
 	id, err := resolveID(s, ctx.Args().Get(0), inspectKinds...)
 	if err != nil {
+		if pin, pinErr := resolveID(s, ctx.Args().Get(0), "pin"); pinErr == nil {
+			return invalidWithFix(shortID(pin)+" is a pin revision", "try: after pin "+shortID(pin))
+		}
 		if fullID, ok := exactDigest(ctx.Args().Get(0)); ok {
 			entries, listErr := s.List("snapshot", "capture", "scenario", "receipt", "comparison", "pin", "blob")
 			if listErr == nil {

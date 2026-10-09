@@ -1,6 +1,6 @@
    AFTER   002   original base 2d13fdbf (commit 4117af3)  →  candidate 8e9eef34 (working tree)
   Overview  ›  Preserve the finite provider-request count                                                   [REOPENED]
-  [Card]   History   Current result   Basis receipt   IDs                                                  1/5 · 287 B
+  [Card]   History   Current result   Basis receipt   IDs                                                  1/5 · 298 B
   ━━━━━━──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
   ── Expectation ──
@@ -12,8 +12,8 @@
   ── Reviewing ──
   │ original base 2d13fdbf → 8e9eef34
 
-  ── Reopened ──
-  │ incomplete or excluded whole-project footprint; cannot establish reuse
+  ── Evidence ──
+  │ unknown · incomplete or excluded whole-project footprint; cannot establish reuse
 
   ── Current ──
   │ receipt a8d610f8 · completed · not_compared · complete

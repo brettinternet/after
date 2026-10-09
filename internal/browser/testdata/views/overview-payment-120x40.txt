@@ -12,9 +12,9 @@
     ▸ EARLIER SNAPSHOTS  2                             │ ── Reviewing ──
                                                        │ original base 2d13fdbf → 8e9eef34
     CHANGES  4 paths · 0 captured hunks · 0 potential… │ 
-    computed from captured sources — not Git's patch … │ ── Reopened ──
-                                                       │ incomplete or excluded whole-project footprint; cannot 
-                                                       │ establish reuse
+    computed from captured sources — not Git's patch … │ ── Evidence ──
+                                                       │ unknown · incomplete or excluded whole-project 
+                                                       │ footprint; cannot establish reuse
                                                        │ 
                                                        │ ── Current ──
                                                        │ receipt a8d610f8 · completed · not_compared · complete

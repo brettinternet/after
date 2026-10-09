@@ -1,10 +1,10 @@
    AFTER   001   original base 2d13fdbf (commit 4117af3)  →  candidate 8ae79385 (working tree)
   Overview  ›  12h same-key retry                                                                          [DIFFERENT]
-  Card   [Receipt Card]   Witnesses   Artifacts   Receipt   Scenario   Plan   IDs                          2/8 · 606 B
+  Card   [Receipt Card]   Witnesses   Artifacts   Receipt   Scenario   Plan   IDs                          2/8 · 603 B
   ───────━━━━━━━━━━━━━━───────────────────────────────────────────────────────────────────────────────────────────────
 
   ── Outcome ──
-  │ observed · completed · not_compared · complete
+  │ observed · completed · different · complete
 
   ── Producer ──
   │ runner
