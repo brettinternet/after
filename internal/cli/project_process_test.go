@@ -8,18 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/store"
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
 
 const cliProcessHelperEnv = "AFTER_CLI_PROCESS_HELPER"
@@ -35,6 +34,17 @@ func TestCLIProcessHelper(t *testing.T) {
 		}
 	}
 	os.Exit(125)
+}
+
+// Regress short-lived children losing output at PTY hangup on macOS.
+func TestCLIPTYFastExitOutput(t *testing.T) {
+	home := t.TempDir()
+	for i := range 32 {
+		code, output, stderr, err := runCLIPTY(home, home, i%2 == 0, []string{"version"})
+		if err != nil || code != ExitOK || stderr != "" || strings.TrimSpace(output) != "after "+Version {
+			t.Fatalf("exit %d: code=%d output=%q stderr=%q err=%v", i, code, output, stderr, err)
+		}
+	}
 }
 
 func TestProjectCommandProcessModes(t *testing.T) {
@@ -354,39 +364,8 @@ func runCLIPipe(dir, home string, noColor bool, args []string) (int, string, str
 }
 
 func runCLIPTY(dir, home string, noColor bool, args []string) (int, string, string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	master, slave, err := pty.Open()
-	if err != nil {
-		return -1, "", "", err
-	}
-	defer master.Close()
-	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		slave.Close()
-		return -1, "", "", err
-	}
-	cmd := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
-	cmd.Dir = dir
-	cmd.Env = cliProcessEnv(home, noColor)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
-	if err := cmd.Start(); err != nil {
-		slave.Close()
-		return -1, "", "", err
-	}
-	_ = slave.Close()
-	var output strings.Builder
-	readDone := make(chan error, 1)
-	go func() {
-		_, err := io.Copy(&output, master)
-		readDone <- err
-	}()
-	waitErr := cmd.Wait()
-	readErr := <-readDone
-	if readErr != nil && !errors.Is(readErr, os.ErrClosed) && !errors.Is(readErr, syscall.EIO) {
-		return -1, output.String(), "", readErr
-	}
-	code, err := processExitCode(waitErr)
-	return code, output.String(), "", err
+	code, output, err := runCLIPTYAnswer(dir, home, noColor, args, "", "")
+	return code, output, "", err
 }
 
 func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answer string) (int, string, error) {
@@ -397,8 +376,14 @@ func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answ
 		return -1, "", err
 	}
 	defer master.Close()
+	// On macOS, closing the last slave can discard unread master output.
+	// Retain our slave until the child has exited AND its output is drained.
+	defer slave.Close()
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		slave.Close()
+		return -1, "", err
+	}
+	fd := int(master.Fd())
+	if err := unix.SetNonblock(fd, true); err != nil {
 		return -1, "", err
 	}
 	cmd := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestCLIProcessHelper$", "--"}, args...)...)
@@ -406,54 +391,54 @@ func runCLIPTYAnswer(dir, home string, noColor bool, args []string, prompt, answ
 	cmd.Env = cliProcessEnv(home, noColor)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	if err := cmd.Start(); err != nil {
-		slave.Close()
 		return -1, "", err
 	}
-	_ = slave.Close()
-	chunks := make(chan []byte, 64)
-	go func() {
-		defer close(chunks)
-		buffer := make([]byte, 8192)
-		for {
-			n, err := master.Read(buffer)
-			if n > 0 {
-				chunks <- append([]byte(nil), buffer[:n]...)
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
 	wait := make(chan error, 1)
 	go func() { wait <- cmd.Wait() }()
+	defer func() {
+		if wait != nil {
+			_ = cmd.Process.Kill()
+			<-wait
+		}
+	}()
 	var output strings.Builder
 	var processErr error
 	sent := false
-	timer := time.NewTimer(45 * time.Second)
-	defer timer.Stop()
-	for chunks != nil || wait != nil {
+	buffer := make([]byte, 8192)
+	for {
+		if ctx.Err() != nil {
+			return -1, output.String(), fmt.Errorf("PTY command did not finish: %w", ctx.Err())
+		}
 		select {
-		case chunk, ok := <-chunks:
-			if !ok {
-				chunks = nil
-				continue
+		case processErr = <-wait:
+			wait = nil
+		default:
+		}
+		n, readErr := unix.Read(fd, buffer)
+		if n > 0 {
+			output.Write(buffer[:n])
+			if output.Len() > 16<<20 {
+				return -1, output.String(), fmt.Errorf("PTY output limit exceeded")
 			}
-			output.Write(chunk)
 			if !sent && prompt != "" && strings.Contains(stripThemeSGR(output.String()), prompt) {
-				if _, err := master.Write([]byte(answer)); err != nil {
-					_ = cmd.Process.Kill()
+				if _, err := unix.Write(fd, []byte(answer)); err != nil {
 					return -1, output.String(), err
 				}
 				sent = true
 			}
-		case processErr = <-wait:
-			wait = nil
-		case <-timer.C:
-			_ = cmd.Process.Kill()
-			if wait != nil {
-				<-wait
-			}
-			return -1, output.String(), fmt.Errorf("PTY command did not finish")
+			continue
+		}
+		if readErr != nil && !errors.Is(readErr, unix.EAGAIN) && !errors.Is(readErr, unix.EINTR) {
+			return -1, output.String(), readErr
+		}
+		if errors.Is(readErr, unix.EINTR) {
+			continue
+		}
+		if wait == nil {
+			break // Child exited; no bytes remain in the still-open PTY.
+		}
+		if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 10); err != nil && !errors.Is(err, unix.EINTR) {
+			return -1, output.String(), err
 		}
 	}
 	if prompt != "" && !sent {
