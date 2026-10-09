@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@pi'
 created_date: '2026-10-09 13:37'
-updated_date: '2026-10-09 14:38'
+updated_date: '2026-10-09 14:48'
 labels:
   - follow-up
   - extensibility
@@ -32,6 +32,13 @@ AFTER-50 command cases freeze `stdin_base64` into the consent-bound plan, but th
 - [x] #4 Inspecting a command comparison whose exit status changed renders its card (root-path "" witness changes are valid) instead of the strict-decoding raw fallback
 <!-- AC:END -->
 
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [x] #1 Focused checks and the opt-in Docker proofs pass; record exact commands and outcomes in task notes
+- [x] #2 Update affected docs/help and record limitations
+- [x] #3 Commit implementation and final task state using the repository delivery workflow; no private artifacts committed
+<!-- DOD:END -->
+
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -52,6 +59,8 @@ Operator selected: fix this AFTER-50 stdin defect as AFTER-51, then add the comm
 Fix verified: extended command:proof fails without the policy change (base/control/0/stdout lacked frozen stdin) and passes with it. Running the example exposed a second AFTER-50 defect: exit_status witnesses use JSON-pointer root path "" and browser strictReport rejects empty paths, so inspect/TUI fall back to raw for any changed exit status. Operator approved including the fix in AFTER-51.
 
 Validation (worktree after-51-stdin, Colima Linux arm64): task command:check passed; task command:proof passed with fix and failed without it (base/control/0/stdout = "stable control: " lacking frozen stdin); new TestComparisonCardAcceptsRootPathWitnessChange fails without the cards.go change and passes with it; task check:go passed (race tests, build, vet, staticcheck U1000, gofmt); task http-service:proof passed; task test:poc passed (all required proofs, both negative controls killed); task test and task check:staged passed; gopls clean on plan.go and cards.go. Example 07 ran end to end via a PTY: order case EQUAL on exit/stdout/stderr despite reordered JSON keys; typo case exit 2 -> 0, stdout error removed/total_cents 0 added, stderr changed; run exit 4. Stored plan contains --interactive once per command container (2 sides x 2 cases); WithCommandInput is called only from prepare_command.go, so HTTP-service and preparation plans are unchanged. Removed unused duplicate sandbox.PrepareCommandImage. Fast-forward integrated c5128b2 into main. No independent verifier: small change directly exercised by the failing-then-passing Docker proof and full POC gate.
+
+Completion hygiene: added and checked the repository DoD gate missing at creation (check-backlog requires it). Evidence is in the validation note above: Docker proofs/test:poc passed, docs/RUNNER.md and examples/README.md updated, c5128b2 and final state committed with no private artifacts.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
