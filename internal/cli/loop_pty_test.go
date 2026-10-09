@@ -101,7 +101,11 @@ func (p *loopPTY) send(keys string) {
 func (p *loopPTY) expect(want string) {
 	p.t.Helper()
 	want = strings.Join(strings.Fields(want), " ")
-	deadline := time.After(4 * time.Minute)
+	timeout := 30 * time.Second
+	if os.Getenv("AFTER_TUI_PROOF") == "1" {
+		timeout = 4 * time.Minute // Explicit live Docker runs can compile for minutes.
+	}
+	deadline := time.After(timeout)
 	for {
 		visible := strings.Join(strings.Fields(stripThemeSGR(p.unread.String())), " ")
 		if index := strings.Index(visible, want); index >= 0 {
@@ -524,6 +528,8 @@ func TestReviewConsentPTY(t *testing.T) {
 			}
 			p := startLoopPTYSize(t, args, variant.width, variant.height)
 			p.expect("AFTER   payment")
+			// The header renders before records load; actions are disabled then.
+			p.expect("Not checked — read the change")
 			p.send("r")
 			p.expect("Run this exact plan?")
 			p.expect("Runs: 2 sides × 2 cases × 1 repetition = 4 runs · concurrency 1")
