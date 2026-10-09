@@ -201,8 +201,6 @@ func TestDocumentAutoHexNULBoundary(t *testing.T) {
 	}
 }
 
-func bytesOf(n int) []byte { return make([]byte, n) }
-
 func FuzzLine(f *testing.F) {
 	for _, s := range []string{"\x1b]52;c;x\a", "界e\u0301\t", "\xff\u009b2J", strings.Repeat("\u0301", 100)} {
 		f.Add(s, uint8(40))

@@ -147,26 +147,3 @@ func hasOption(args []string, option string) bool {
 	}
 	return false
 }
-
-func positionalArgs(args []string) []string {
-	valueFlags := map[string]bool{
-		"--config": true, "--project": true, "--import-file": true, "--producer": true,
-		"--base": true, "--target": true, "--include-untracked": true, "--evidence": true, "--select": true, "--receipt": true,
-		"--mode": true, "--reason": true,
-	}
-	var positional []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if name, _, hasValue := strings.Cut(arg, "="); valueFlags[name] {
-			if !hasValue && i+1 < len(args) {
-				i++
-			}
-			continue
-		}
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		positional = append(positional, arg)
-	}
-	return positional
-}

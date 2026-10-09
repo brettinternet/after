@@ -227,11 +227,12 @@ tasks:
     cmd: gofmt -w cmd internal
 
   check:go:
-    desc: Build, race-test, vet and check Go formatting
+    desc: Build, race-test, vet, find unused code and check Go formatting
     cmds:
       - task: build
       - task: test:go
       - go vet ./...
+      - staticcheck -checks U1000 ./...
       - |
         unformatted="$(gofmt -l cmd internal)"
         if [ -n "$unformatted" ]; then

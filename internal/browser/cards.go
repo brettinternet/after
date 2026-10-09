@@ -539,22 +539,6 @@ func caseWitnessesSection(s *store.Store, receipt evidence.Receipt, comparison *
 	return Section{Name: "Witnesses", Parts: parts}
 }
 
-func comparisonWitnessesSection(s *store.Store, artifacts []evidence.Artifact, report *compare.Report) (Section, []evidence.Digest) {
-	parts := []Part{}
-	if report != nil {
-		for _, witness := range report.Witnesses {
-			body := fmt.Sprintf("before %s · %s · repetition %d\nafter %s · %s · repetition %d\noutcome %s", witness.Before.Side, delayText(witness.Before.Seconds), witness.Before.Repetition+1, witness.After.Side, delayText(witness.After.Seconds), witness.After.Repetition+1, witness.Outcome)
-			for _, change := range witness.Changes {
-				body += fmt.Sprintf("\n%s %s = before %s · after %s", change.Kind, change.Path, bytes.TrimSpace(change.Before), bytes.TrimSpace(change.After))
-			}
-			parts = append(parts, textPart("Witness · "+witness.Relation+" · "+strconv.Quote(witness.Channel)+" · "+string(witness.Outcome), body))
-		}
-	}
-	part, ids := rulesPart(s, artifacts, "")
-	parts = append(parts, part)
-	return Section{Name: "Witnesses", Parts: parts}, ids
-}
-
 func reportCardParts(card reportCardView) []Part {
 	outcome := card.State.Report
 	at := "unknown"

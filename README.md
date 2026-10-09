@@ -46,7 +46,7 @@ Only `after run` executes anything, and only after you approve the exact plan it
 
 ```sh
 task check:staged  # before each commit
-task check:go      # build, race tests, vet, gofmt
+task check:go      # build, race tests, vet, unused code, gofmt
 task test          # Go tests, links, backlog
 task docs:check    # presentation checks in Chromium
 task check         # everything

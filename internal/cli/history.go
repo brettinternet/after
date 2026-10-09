@@ -18,7 +18,6 @@ import (
 	"github.com/brettinternet/after/internal/rawdiff"
 	"github.com/brettinternet/after/internal/review"
 	"github.com/brettinternet/after/internal/store"
-	"github.com/brettinternet/after/internal/terminal"
 	"github.com/urfave/cli/v2"
 )
 
@@ -1089,15 +1088,4 @@ func reportCounts(report gotestreport.Report) (int, int, int) {
 		}
 	}
 	return pass, fail, skip
-}
-
-func formatLimitNotice(value string) readableLine {
-	return textLine("History unavailable: "+value, terminal.Attention)
-}
-
-func ensureHistoryStore(s *store.Store) error {
-	if s == nil {
-		return os.ErrNotExist
-	}
-	return nil
 }

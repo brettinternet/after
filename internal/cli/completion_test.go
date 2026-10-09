@@ -512,10 +512,13 @@ printf 'PIN\n'; complete_line pin ''
 		t.Errorf("Zsh receipt suggestions are not newest first: %s", zshOut)
 	}
 
-	fish, err := exec.LookPath("fish")
+	// Resolve the real binary from the repository so a version-manager shim
+	// does not depend on the temporary project directory it runs in.
+	fishPath, err := exec.Command("fish", "--no-config", "-c", "status fish-path").Output()
 	if err != nil {
 		t.Fatal("Fish is required for completion tests; install the pinned mise tool:", err)
 	}
+	fish := strings.TrimSpace(string(fishPath))
 	fishProgram := `source $argv[1]
 printf 'COMMANDS\n'
 complete -C 'after '

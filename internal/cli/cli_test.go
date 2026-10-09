@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,10 +14,6 @@ import (
 	"github.com/brettinternet/after/internal/evidence"
 	"github.com/brettinternet/after/internal/store"
 )
-
-type brokenWriter struct{}
-
-func (brokenWriter) Write([]byte) (int, error) { return 0, errors.New("broken") }
 
 func invoke(args []string, tty bool, input string) (int, string, string) {
 	var stdout, stderr bytes.Buffer

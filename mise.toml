@@ -12,6 +12,7 @@ lefthook = "2.1.16"
 task = "3.54.0"
 jq = "1.8.2"
 "aqua:fish-shell/fish-shell" = "4.9.3"
+staticcheck = "2026.2.1"
 worktrunk = "0.80.0"
 "github:MrLesk/Backlog.md" = { version = "1.53.0", bin = "backlog" }
 
