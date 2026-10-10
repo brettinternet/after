@@ -364,6 +364,13 @@ func init(){
 	if _, err := store.Get[evidence.Receipt](s, result.Receipt.ID); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestRunnerFailureProof(t *testing.T) {
+	if os.Getenv("AFTER_RUNNER_PROOF") != "1" {
+		t.Skip("task runner:proof authorizes synthetic paired experiments")
+	}
+	e := Executor{Docker: sandbox.Docker{Binary: os.Getenv("AFTER_DOCKER_BINARY"), Host: os.Getenv("AFTER_DOCKER_HOST")}}
 	for _, mode := range []string{"build-failure", "exited-parent", "refused-upstream", "real-502"} {
 		t.Run(mode, func(t *testing.T) {
 			source := `package main

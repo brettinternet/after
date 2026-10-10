@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -24,6 +26,7 @@ var required = []string{
 	"internal/compare/TestPythonHTTPServiceProof",
 	"internal/cli/TestCommandCLIProof",
 	"internal/runner/TestRunnerProof",
+	"internal/runner/TestRunnerFailureProof",
 	"internal/rawdiff/TestCapturedModesInventoryAndFrozenContext",
 	"internal/review/TestInvalidationMatrix",
 	"internal/browser/TestLoopConsentAndSnapshotBarrier",
@@ -151,7 +154,14 @@ func mutation(ctx context.Context, file, old, replacement, pkg, test, diagnostic
 
 // CI runs these package slices independently; the default still checks all
 // anchors together. Reject unknown slices rather than succeeding with no proof.
-func requiredForPackage(pkg string) ([]string, error) {
+func requiredForPackage(pkg, test string) ([]string, error) {
+	if test != "" {
+		name := pkg + "/" + test
+		if !slices.Contains(required, name) {
+			return nil, fmt.Errorf("not a required proof: %q", name)
+		}
+		return []string{name}, nil
+	}
 	if pkg == "" {
 		return required, nil
 	}
@@ -169,8 +179,9 @@ func requiredForPackage(pkg string) ([]string, error) {
 
 func run() error {
 	pkg := flag.String("package", "", "run one required proof package; empty runs the complete gate")
+	test := flag.String("test", "", "select one exact required proof in --package")
 	flag.Parse()
-	names, err := requiredForPackage(*pkg)
+	names, err := requiredForPackage(*pkg, *test)
 	if err != nil || flag.NArg() != 0 {
 		return errors.New("select a required proof package with --package; no positional arguments")
 	}
@@ -193,21 +204,25 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	r, err := tests(ctx, pattern)
+	args := []string{pattern}
+	if *test != "" {
+		args = append(args, "-run=^"+regexp.QuoteMeta(*test)+"$")
+	}
+	r, err := tests(ctx, args...)
 	if err != nil {
 		return err
 	}
 	if err = r.require(names); err != nil {
 		return err
 	}
-	if *pkg == "" || *pkg == "internal/review" {
+	if slices.Contains(names, "internal/review/TestInvalidationMatrix") {
 		if err = mutation(ctx, "internal/review/review.go", "case old.Snapshots != b.Snapshots:", "case false:", "internal/review", "TestInvalidationMatrix", "snapshot freshness binding", "bad reopening:"); err != nil {
 			return err
 		}
 	}
 	// Go overlays apply to embedded files too: mutate the actual frozen observer,
 	// not application stdout or the expected observation.
-	if *pkg == "" || *pkg == "internal/runner" {
+	if slices.Contains(names, "internal/runner/TestRunnerProof") {
 		if err = mutation(ctx, "internal/runner/runtime/observer.go", "calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)})", "if len(calls) == 0 { calls = append(calls, call{At: now, Endpoint: endpoint.Name, Destination: net.JoinHostPort(\"127.0.0.1\", strconv.Itoa(endpoint.Port)), Method: r.Method, Path: r.URL.Path, Key: r.Header.Get(\"Idempotency-Key\"), Body: string(body)}) }", "internal/runner", "TestRunnerProof", "observer drops repeated provider requests", "calls want 2"); err != nil {
 			return err
 		}

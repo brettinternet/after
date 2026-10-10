@@ -61,7 +61,11 @@ jobs:
           - name: review
             task: test:poc -- --package internal/review
           - name: runner
-            task: test:poc -- --package internal/runner
+            task: test:poc -- --package internal/runner --test TestRunnerProof
+          - name: runner-failures
+            task: test:poc -- --package internal/runner --test TestRunnerFailureProof
+          - name: runner-redaction
+            task: test:poc -- --package internal/runner --test TestFailuresAndRedaction
           - name: sandbox
             task: test:poc -- --package internal/sandbox
           - name: terminal

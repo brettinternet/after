@@ -214,7 +214,7 @@ tasks:
     env:
       AFTER_RUNNER_PROOF: "1"
     cmds:
-      - go test -v -count=1 -timeout=15m ./internal/runner -run TestRunnerProof
+      - go test -v -count=1 -timeout=15m ./internal/runner -run '^TestRunner(Failure)?Proof$'
       - go test -v -count=1 -timeout=5m ./internal/sandbox -run TestObservedProof
 
   comparison:proof:
