@@ -173,14 +173,13 @@ func TestResponsiveFramePTY(t *testing.T) {
 					t.Fatal(err)
 				}
 				waitFor("Use this captured candidate?", "paths differ from candidate", "Pins may reopen")
+				selectionStart := transcript.Len()
 				if _, err := master.Write([]byte("\r")); err != nil {
 					t.Fatal(err)
 				}
-				waitFor("Snapshot selected", "base "+shortID(evidence.Digest(sel.Pair.Base)), "computed from captured sources — not Git's patch")
-				if _, err := master.Write([]byte("2")); err != nil {
-					t.Fatal(err)
-				}
-				waitFor("CHANGED", "app/config.go", "computed from captured sources — not Git's patch")
+				// Confirmation returns to Changes. Sending a redundant '2'
+				// and matching its old output could batch it with the next '3'.
+				waitForSince(selectionStart, "Snapshot selected", "base "+shortID(evidence.Digest(sel.Pair.Base)), "CHANGED", "app/config.go", "computed from captured sources — not Git's patch")
 				changeExcerpt := stripCSI.ReplaceAllString(transcript.String(), "")
 				if _, err := master.Write([]byte("3")); err != nil {
 					t.Fatal(err)

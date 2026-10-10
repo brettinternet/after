@@ -155,7 +155,7 @@ tasks:
 
   test:computed:
     desc: Check bounded computed source diffs, browser integration and responsive PTY review
-    cmd: go test -race -v ./internal/rawdiff ./internal/browser -run '^(FuzzUnifiedDiffAppliesAndIsDeterministic|TestComputed.*|TestPairWithoutSharedPatchNeverUsesAnotherPatch|TestChangesDiffNavigationAndCapturedBytes|TestResponsiveFramePTY)$'
+    cmd: go test -race -v ./internal/rawdiff ./internal/browser -run '^(FuzzUnifiedDiffAppliesAndIsDeterministic|TestComputed.*|TestPairWithoutSharedPatchNeverUsesAnotherPatch|TestChangesDiffNavigationAndCapturedBytes|TestResponsiveFramePTY)$' {{.CLI_ARGS}}
 
   test:tui-mutations:
     desc: Check confirmed TUI pin, snapshot and acceptance prompt behavior
