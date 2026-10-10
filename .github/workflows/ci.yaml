@@ -14,9 +14,22 @@ jobs:
   go:
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        phase: [all]
+        include:
+          - os: macos-15-intel
+            phase: browser
+          - os: macos-15-intel
+            phase: cli
+          - os: macos-15-intel
+            phase: other
+          - os: macos-15-intel
+            phase: smoke
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    env:
+      # Bound nested builds and race-test concurrency on the slower Intel host.
+      GOFLAGS: ${{ matrix.os == 'macos-15-intel' && '-p=1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -26,15 +39,26 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: mise exec -- task check:go
-        env:
-          # Intel macOS cannot sustain concurrent race-test packages plus their builds.
-          GOFLAGS: ${{ runner.os == 'macOS' && runner.arch == 'X64' && '-p=1' || '' }}
+        if: matrix.phase == 'all'
+      - run: mise exec -- task test:go:packages PACKAGES=./internal/${{ matrix.phase }}
+        if: matrix.phase == 'browser' || matrix.phase == 'cli'
+      - name: Race-test remaining Intel packages
+        if: matrix.phase == 'other'
+        run: mise exec -- task test:go:packages PACKAGES="$(mise exec -- go list ./... | grep -vE '/internal/(browser|cli)$' | tr '\n' ' ')"
+      - run: mise exec -- task check:go:static test:budgets
+        if: matrix.phase == 'smoke'
       - run: ./bin/after --help
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
       - run: ./bin/after --version
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
       - run: mise exec -- task demo:inspect
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
       - run: mise exec -- task examples
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
       - run: mise exec -- task package
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
       - name: Verify package checksums
+        if: matrix.phase == 'all' || matrix.phase == 'smoke'
         run: for package in dist/*; do (cd "$package" && shasum -a 256 -c SHA256SUMS); done
   poc:
     # The Python proof pins an arm64 manifest; use a native matching host.

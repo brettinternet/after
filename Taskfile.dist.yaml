@@ -122,8 +122,12 @@ tasks:
   test:go:
     desc: Run Go tests with race detection (macOS/Linux amd64/arm64; requires C compiler)
     cmds:
-      - go test -race -failfast -timeout=5m ./... -skip "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
+      - task: test:go:packages
       - task: test:budgets
+
+  test:go:packages:
+    desc: Race-test selected packages (all by default), excluding separately measured budgets
+    cmd: go test -race -failfast -timeout=5m {{.PACKAGES | default "./..."}} -skip "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
 
   test:budgets:
     desc: Measure production-speed latency and allocations without race instrumentation
@@ -256,8 +260,13 @@ tasks:
   check:go:
     desc: Build, race-test, vet, find unused code and check Go formatting
     cmds:
-      - task: build
+      - task: check:go:static
       - task: test:go
+
+  check:go:static:
+    desc: Build, vet, find unused code and check Go formatting
+    cmds:
+      - task: build
       - go vet ./...
       - staticcheck -checks U1000 ./...
       - |
