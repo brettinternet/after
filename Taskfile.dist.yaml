@@ -126,8 +126,8 @@ tasks:
       - task: test:budgets
 
   test:budgets:
-    desc: Run latency and allocation gates without competing package test binaries
-    cmd: go test -race -failfast -timeout=5m -p=1 ./internal/browser ./internal/terminal -run "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
+    desc: Measure production-speed latency and allocations without race instrumentation
+    cmd: go test -failfast -timeout=5m -p=1 ./internal/browser ./internal/terminal -run "^Test(CapturedBrowserDiffEventBudget|ComputedBrowserDiffEventBudget|CapturedDiffBudget)$"
 
   test:poc:
     desc: Authorize the complete synthetic adversarial Docker/PTY gate and mutation controls (no skips)

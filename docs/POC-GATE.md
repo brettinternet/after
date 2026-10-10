@@ -30,6 +30,8 @@ These named tests run through the gate along with the full suite. Synthetic faul
 
 ## Performance reproduction
 
+`task test:budgets` measures the unchanged latency and allocation limits without race instrumentation or competing package test binaries. `task test:go` runs the functional suite with the race detector, then this production-speed budget gate. Race-instrumented latency is not treated as product latency.
+
 `task terminal:bench` creates fresh Git repos with medium (10 files, 20,000 changed lines) and large (50 files, 100,000 changed lines) inputs. It records capture, first and warm raw view, cached inventory, document preparation, allocations, input/resize rendering, and quit latency; it asserts all expected paths and unclassified hunks. The OS cache is warm from capture, not a cold-disk benchmark. `BenchmarkCapturedViewport` separately measures the large warm viewport.
 
 | Author measurement      |      Medium |        Large |
