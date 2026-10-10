@@ -26,6 +26,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: mise exec -- task check:go
+        env:
+          # Intel macOS cannot sustain concurrent race-test packages plus their builds.
+          GOFLAGS: ${{ runner.os == 'macOS' && runner.arch == 'X64' && '-p=1' || '' }}
       - run: ./bin/after --help
       - run: ./bin/after --version
       - run: mise exec -- task demo:inspect
